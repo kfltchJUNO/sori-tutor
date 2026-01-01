@@ -291,8 +291,23 @@ export default function Home() {
     } catch (e) { alert("설명 로드 실패"); }
   };
 
-  // --- Helper Functions ---
-  const getMailtoLink = (plan: string, price: string) => `mailto:ot.helper7@gmail.com?subject=[Sori-Tutor] ${plan} 신청&body=이메일: ${currentUser?.email || ""}`;
+  // --- Helper Functions (메일 링크 수정됨 🔥) ---
+  const getMailtoLink = (planName: string, price: string) => {
+    const email = "ot.helper7@gmail.com";
+    const subject = `[Sori-Tutor] ${planName} 결제 문의드립니다`;
+    
+    // 줄바꿈을 위해 \n을 사용하고, 전체를 encodeURIComponent로 감쌉니다.
+    const bodyText = `소리 튜터 이용중 결제 문의드립니다.
+
+1. 직업: 
+2. 사용 목적: 
+3. 결제 희망 금액: (${price})
+4. 기타 문의: 
+
+(이곳에 내용을 적어주세요)`;
+
+    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+  };
   
   const selectCourse = async (type: any) => { 
     setCourseType(type); 
@@ -360,7 +375,7 @@ export default function Home() {
              {hasNewMail && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white"></span>}
            </button>
            
-           {/* 🏆 [수정됨] 랭킹 버튼: 트로피 아이콘 & '랭킹' 텍스트 */}
+           {/* 🏆 랭킹 버튼 (트로피) */}
            <button onClick={fetchRanking} className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold border border-yellow-300 transition flex items-center gap-1 shadow-sm">
              🏆 랭킹
            </button>
@@ -381,7 +396,7 @@ export default function Home() {
         {viewMode === "home" && (
           <div className="space-y-4 animate-fade-in-up">
             <div className="bg-blue-50 p-5 rounded-xl border border-blue-200 mb-4 shadow-sm">
-               {/* 👋 [수정됨] 닉네임 + 변경 버튼 (이름 바로 옆에 배치) */}
+               {/* 👋 닉네임 + 변경 버튼 */}
                <div className="flex items-center gap-2 mb-2">
                   <h3 className="font-bold text-blue-900 text-base">👋 {userAlias || currentUser.displayName}님!</h3>
                   <button onClick={() => setShowNicknameModal(true)} className="text-xs text-gray-400 underline hover:text-blue-600 flex items-center gap-1">
