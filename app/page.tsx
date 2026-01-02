@@ -8,13 +8,12 @@ import { signOut } from "firebase/auth";
 import { 
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
-// 아이콘 라이브러리
+// 아이콘 라이브러리 (Mail 아이콘 추가)
 import { 
-  Mic, MessageSquare, Trophy, Bell, LogOut, AlertTriangle, 
-  X, ChevronLeft, Star, Heart, Coins 
+  Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, Volume2
 } from 'lucide-react';
 
-// --- 환영 메시지 데이터 (이모티콘 적용됨) ---
+// --- 환영 메시지 데이터 ---
 const WELCOME_MESSAGE = {
   id: 'welcome-guide',
   from: '소리튜터 운영진',
@@ -33,11 +32,10 @@ const WELCOME_MESSAGE = {
 
 💡 **왜 소리튜터인가요?**
 * **Expert-Led Content:** 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
-* **High-End AI:** 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.)
+* **High-End AI:** 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다.
 
 📢 **충전 및 이용 안내 (Pre-Launch)** 정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
 다소 번거로우시더라도, 수수료 절감분을 더 높은 퀄리티의 AI 모델 유지에 재투자하기 위함이니 양해 부탁드립니다.
-초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.
 
 🎁 **7일 연속 학습 챌린지!**
 작심삼일은 이제 그만! 확실한 동기부여를 드립니다.
@@ -162,6 +160,7 @@ export default function Home() {
   };
 
   const checkNewMail = async (email: string) => {
+    // 웰컴 메시지는 로컬 상태이므로 제외하고, 실제 DB 메시지 중 안 읽은 것이 있는지 확인
     const q = query(collection(db, "sori_users", email, "inbox"), where("read", "==", false));
     const snap = await getDocs(q);
     setHasNewMail(!snap.empty); 
@@ -179,12 +178,14 @@ export default function Home() {
     setInboxList(combinedMsgs);
     setShowInboxModal(true);
     
+    // 메시지함을 열면 안 읽은 메시지(DB)들을 읽음 처리하고 알림(빨간점) 끄기
     const unread = dbMsgs.filter((m: any) => !m.read);
     if (unread.length > 0) {
       const batch = writeBatch(db);
       unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
-      await batch.commit(); setHasNewMail(false);
+      await batch.commit(); 
     }
+    setHasNewMail(false); // UI 상 빨간 점 즉시 제거
   };
 
   const saveNickname = async (newAlias: string) => {
@@ -322,15 +323,20 @@ export default function Home() {
   const startRecording = async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorderRef.current = new MediaRecorder(s); mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); }; mediaRecorderRef.current.onstop = () => { const b = new Blob(chunksRef.current, { type: "audio/webm" }); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current = []; }; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch (err) { alert("마이크 권한 필요"); } };
   const stopRecording = () => { if (mediaRecorderRef.current && recording) { mediaRecorderRef.current.stop(); setRecording(false); mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop()); } };
 
-  // 🔥 [수정됨] Google TTS API 연동 함수 (route.ts 사용)
+  // Google TTS API 연동 함수
   const handleGoogleTTS = async (textToRead: string | undefined) => {
+    // 1. 텍스트가 없거나, URL 형태인 경우(오류 방지) TTS 실행 차단
     if (!textToRead) return alert("읽을 텍스트가 없습니다.");
+    if (textToRead.startsWith("http") || textToRead.includes(".com")) {
+        console.error("TTS 오류: 텍스트가 아닌 URL이 감지되었습니다.", textToRead);
+        return alert("오디오 링크가 텍스트로 잘못 입력되어 읽을 수 없습니다.");
+    }
+
     if (ttsLoading) return; // 중복 요청 방지
 
     try {
       setTtsLoading(true);
       
-      // 첨부해주신 route.ts 로 요청 전송
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -347,7 +353,6 @@ export default function Home() {
       }
 
       if (data.audioContent) {
-        // Base64 오디오 재생
         const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
         audio.play();
       }
@@ -362,7 +367,6 @@ export default function Home() {
 
   const isDialogueFinished = courseType === 'dialogue' && parsedScript.length > 0 && completedLines.length === parsedScript.length;
 
-  // --- 로그인 전 화면 ---
   if (!currentUser) return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
       <div className="text-center bg-white p-10 rounded-3xl shadow-2xl max-w-sm w-full border border-slate-100">
@@ -375,28 +379,37 @@ export default function Home() {
   );
 
   return (
-    <main className="flex min-h-screen flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
+    // [레이아웃 수정] h-screen을 사용하여 전체 높이를 고정하고 내부 스크롤을 활용
+    <main className="flex h-[100dvh] flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
       
-      <header className="bg-white px-5 py-3 flex justify-between items-center sticky top-0 z-40 border-b border-slate-100 shadow-sm">
+      {/* 1. 상단 헤더 */}
+      <header className="bg-white px-5 py-3 flex justify-between items-center flex-none z-40 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode("home")}>
            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">S</div>
            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
         </div>
         <div className="flex items-center gap-3">
-           <button onClick={handleBugReport} className="text-slate-400 hover:text-red-500 transition" title="오류 제보">
-             <AlertTriangle size={20} />
+           {/* 🚨 오류 제보 아이콘 변경 */}
+           <button onClick={handleBugReport} className="text-xl hover:scale-110 transition" title="오류 제보">
+             🚨
            </button>
+           
+           {/* ✉️ 편지함 아이콘 변경 (Mail) */}
            <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition">
-             <Bell size={20} />
+             <Mail size={22} />
+             {/* 읽지 않은 편지가 있을 때만 빨간 점 표시 */}
              {hasNewMail && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
            </button>
-           <button onClick={handleLogout} className="text-slate-400 hover:text-slate-700 transition" title="로그아웃">
-             <LogOut size={20} />
+           
+           {/* 👋 로그아웃 아이콘 변경 */}
+           <button onClick={handleLogout} className="text-xl hover:scale-110 transition ml-1" title="로그아웃">
+             👋
            </button>
         </div>
       </header>
 
-      <div className="bg-white px-5 py-2 flex justify-between items-center border-b border-slate-50 text-sm">
+      {/* 서브 헤더 (상태 표시줄) */}
+      <div className="bg-white px-5 py-2 flex justify-between items-center border-b border-slate-50 text-sm flex-none">
          <div className="flex gap-2">
             <button onClick={fetchRanking} className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full font-bold hover:bg-yellow-100 transition">
               <Trophy size={14} /> 랭킹
@@ -417,8 +430,8 @@ export default function Home() {
          </div>
       </div>
       
-      {/* --- 메인 컨텐츠 --- */}
-      <div className="p-5 flex-1 overflow-y-auto pb-32 scrollbar-hide">
+      {/* --- 메인 컨텐츠 영역 (스크롤 가능) --- */}
+      <div className="flex-1 overflow-y-auto p-5 scrollbar-hide pb-24">
         {viewMode === "home" && (
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
@@ -437,7 +450,6 @@ export default function Home() {
                </div>
             </div>
 
-            {/* 학습 메뉴 이름 수정됨 */}
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -500,7 +512,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* 연습 모드 */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
@@ -514,7 +525,7 @@ export default function Home() {
             </div>
             
             {courseType === "dialogue" ? (
-              <div className="space-y-4">
+              <div className="space-y-4 pb-20"> {/* 하단 고정바 공간 확보 */}
                 <div className="bg-purple-50 p-5 rounded-2xl border border-purple-100">
                   <span className="text-xs text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded mb-2 inline-block">Role Play</span>
                   <h1 className="font-bold text-xl text-purple-900 mb-2">{currentProblem.title}</h1>
@@ -537,13 +548,12 @@ export default function Home() {
                           <div className="flex justify-between items-center mb-1">
                              <div className="text-xs font-bold flex items-center gap-1 opacity-70">
                                 {line.role}
-                                {/* 🔥 [수정됨] 링크 대신 텍스트를 읽도록 TTS 함수 호출 */}
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleGoogleTTS(line.text); }} 
                                   className="ml-1 bg-slate-200 p-1 rounded-full hover:bg-blue-500 hover:text-white transition disabled:opacity-50"
                                   disabled={ttsLoading}
                                 >
-                                  <Mic size={10}/>
+                                  <Volume2 size={12}/>
                                 </button>
                              </div>
                              {isMyRole && isDone && <span className="text-green-600 text-[10px] font-bold bg-green-100 px-1.5 rounded">완료</span>}
@@ -560,17 +570,23 @@ export default function Home() {
                  <h1 className="text-3xl font-black text-slate-800 mb-4 break-keep leading-tight">{currentProblem.text}</h1>
                  <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
                  
-                 {/* 🔥 [수정됨] 단어/문장 듣기 버튼 추가 */}
                  <button 
                     onClick={() => handleGoogleTTS(currentProblem.text)} 
                     disabled={ttsLoading}
                     className="mb-6 flex items-center gap-2 mx-auto bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-bold hover:bg-blue-100 transition"
                  >
-                    {ttsLoading ? "로딩 중..." : <><Mic size={18}/> 들어보기</>}
+                    {ttsLoading ? "로딩 중..." : <><Volume2 size={18}/> 들어보기</>}
                  </button>
 
                  <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">
                     💡 {courseType==="word" ? currentProblem.tip : currentProblem.translation}
+                    {/* 문장 설명도 읽어주기 버튼 추가 (순수 텍스트만) */}
+                     <button 
+                      onClick={() => handleGoogleTTS(courseType==="word" ? currentProblem.tip : currentProblem.translation)} 
+                      className="ml-2 inline-flex align-middle bg-slate-200 rounded-full p-1 hover:bg-blue-500 hover:text-white transition"
+                    >
+                      <Volume2 size={10} />
+                    </button>
                  </div>
               </div>
             )}
@@ -578,9 +594,9 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 컨트롤 바 */}
+      {/* [레이아웃 수정] 하단 컨트롤 바 (Fixed Position으로 변경하여 항상 하단 고정) */}
       {viewMode === "practice" && (
-        <div className="bg-white border-t border-slate-100 p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] sticky bottom-0 z-50 rounded-t-3xl">
+        <div className="flex-none bg-white border-t border-slate-100 p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-50 rounded-t-3xl">
           {result ? (
             <div className="animate-in slide-in-from-bottom duration-300">
               <div className="flex items-center gap-4 mb-4">
@@ -624,9 +640,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- 모달 모음 --- */}
+      {/* --- 모달 모음 (기존과 동일) --- */}
 
-      {/* 닉네임 모달 */}
       {showNicknameModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl">
@@ -641,7 +656,6 @@ export default function Home() {
           </div>
       )}
 
-      {/* 메시지함 모달 */}
       {showInboxModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm">
               <div className="bg-white w-full h-full sm:h-[600px] sm:max-w-md sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
@@ -668,12 +682,13 @@ export default function Home() {
                   ) : (
                       <div className="flex flex-col h-full bg-slate-50">
                           <div className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10">
-                              <h3 className="font-bold text-lg flex items-center gap-2"><Bell size={18}/> 메시지함</h3>
+                              <h3 className="font-bold text-lg flex items-center gap-2"><Mail size={18}/> 메시지함</h3>
                               <button onClick={() => setShowInboxModal(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={18}/></button>
                           </div>
                           <div className="p-4 overflow-y-auto flex-1 space-y-3">
                               {inboxList.map((msg) => (
                                   <div key={msg.id} onClick={() => setSelectedMessage(msg)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-98 transition cursor-pointer relative">
+                                      {/* 여기서도 읽지 않은 메시지만 빨간 점 */}
                                       {!msg.read && <span className="absolute top-4 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
                                       <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mb-2 inline-block">{msg.from || "관리자"}</span>
                                       <h4 className="font-bold text-slate-800 text-sm truncate pr-4">{msg.title}</h4>
@@ -688,7 +703,6 @@ export default function Home() {
           </div>
       )}
 
-      {/* 랭킹 모달 */}
       {showRankingModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm">
               <div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300">
@@ -721,7 +735,6 @@ export default function Home() {
           </div>
       )}
 
-      {/* 결제 모달 */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
