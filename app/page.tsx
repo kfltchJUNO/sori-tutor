@@ -2,9 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Login from "./components/Login";
-// HistoryItem 불러오기 (경로 주의: app/components/HistoryItem.tsx)
 import HistoryItem from "./components/HistoryItem"; 
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { 
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
@@ -34,7 +33,6 @@ export default function Home() {
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   
-  // 문제 및 내비게이션 상태
   const [problemList, setProblemList] = useState<any[]>([]); 
   const [currentProblem, setCurrentProblem] = useState<any>(null);
   const [historyStack, setHistoryStack] = useState<any[]>([]); 
@@ -132,7 +130,6 @@ export default function Home() {
     const formData = new FormData(); 
     formData.append("audio", audioBlob); 
     formData.append("targetText", targetText); 
-    formData.append("type", courseType || "sentence"); 
     formData.append("context", contextInfo);
 
     try {
@@ -141,45 +138,17 @@ export default function Home() {
       if (data.error) { alert("오류: " + data.error); await updateDoc(doc(db, "sori_users", currentUser.email), { error_count: increment(1) }); }
       else {
         setResult(data);
-        
         if (courseType === "dialogue" && targetLineIndex !== null) {
-          if (!completedLines.includes(targetLineIndex)) {
-            setCompletedLines(prev => [...prev, targetLineIndex]);
-          }
+          if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]);
         }
-
         const userRef = doc(db, "sori_users", currentUser.email);
-        const userSnap = await getDoc(userRef);
-        const userData = userSnap.data();
-        const todayStr = new Date().toDateString();
-        const lastDate = userData?.last_access_date || "";
-        let newTodayCount = userData?.today_count || 0; let newStreak = userData?.streak || 0;
-
-        if (lastDate !== todayStr) {
-           newTodayCount = 1;
-           const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-           if (lastDate === yesterday.toDateString() && userData?.today_count >= 5) { /* 유지 */ } 
-           else { newStreak = 0; }
-        } else newTodayCount += 1;
-
-        let rewardMsg = "";
-        if (newTodayCount === 5) {
-          newStreak += 1; 
-          if (newStreak > 0 && newStreak % 7 === 0) {
-             rewardMsg = `🔥 ${newStreak}일 연속! 보상 15토큰! 🎁`;
-             if (userRole === 'student') { await updateDoc(userRef, { tokens: increment(15) }); setTokens(prev => prev + 15); }
-          } else rewardMsg = `🔥 목표 달성! (${newStreak}일 연속)`;
-        }
-        setTodayCount(newTodayCount); setStreak(newStreak); if(rewardMsg) alert(rewardMsg);
-
-        const updates: any = { analysis_count: increment(1), last_access_date: todayStr, today_count: newTodayCount, streak: newStreak };
+        const updates: any = { analysis_count: increment(1), last_access_date: new Date().toDateString() };
         if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = hearts - 1; } else { setTokens(p=>p-1); updates.tokens = tokens - 1; }
         await updateDoc(userRef, updates);
         
-        // 🔥 [중요] History 저장 시 'recognizedText'를 반드시 포함
         await addDoc(collection(db, "sori_users", currentUser.email, "history"), { 
             text: targetText, 
-            recognizedText: data.recognizedText || "", // API가 인식된 텍스트를 돌려준다고 가정
+            recognizedText: data.recognizedText || "", // 비교용 텍스트 저장
             category: courseType==="word" ? currentProblem.category : selectedCategory, 
             score: data.score, 
             feedback: data.feedback, 
@@ -190,11 +159,22 @@ export default function Home() {
     } catch (error) { alert("서버 오류"); } finally { setLoading(false); }
   };
 
+  // 결제 문의 메일 링크 생성
   const getMailtoLink = (planName: string, price: string) => {
+    return `mailto:ot.helper7@gmail.com?subject=${encodeURIComponent("[Sori-Tutor] "+planName+" 결제 문의")}`;
+  };
+
+  // 🔥 [NEW] 오류 제보 메일 링크 생성
+  const getFeedbackLink = () => {
     const email = "ot.helper7@gmail.com";
-    const subject = `[Sori-Tutor] ${planName} 결제 문의드립니다`;
-    const bodyText = `소리 튜터 이용중 결제 문의드립니다.\n\n1. 직업: \n2. 사용 목적: \n3. 결제 희망 금액: (${price})\n4. 기타 문의: \n\n(이곳에 내용을 적어주세요)`;
-    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+    const subject = "소리튜터 오류 제보합니다.";
+    const body = `[소리튜터 피드백]
+1. 사용 기기: (예: 아이폰 15 / 갤럭시 S24 / PC 크롬 등)
+2. 발견한 오류: (예: 실전 회화에서 녹음 버튼이 안 눌림)
+3. 좋았던 점: 
+4. 아쉬운 점/제안: (예: 글씨가 좀 더 컸으면 좋겠음, 다크 모드 있었으면 함)`;
+    
+    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
   
   const selectCourse = async (type: any) => { 
@@ -231,34 +211,29 @@ export default function Home() {
   const initPractice = (list: any[]) => {
     if (list.length === 0) return;
     const r = Math.floor(Math.random() * list.length);
-    const firstProb = list[r];
-    updateCurrentProblem(firstProb);
-    setHistoryStack([firstProb]); 
-    setHistoryIndex(0);
+    updateCurrentProblem(list[r]);
+    setHistoryStack([list[r]]); setHistoryIndex(0);
   };
 
   const handleNextProblem = () => {
     if (!problemList || problemList.length === 0) return;
     const r = Math.floor(Math.random() * problemList.length);
     const nextProb = problemList[r];
-    const newStack = [...historyStack.slice(0, historyIndex + 1), nextProb];
-    setHistoryStack(newStack);
-    setHistoryIndex(newStack.length - 1);
+    setHistoryStack(prev => [...prev, nextProb]);
+    setHistoryIndex(prev => prev + 1);
     updateCurrentProblem(nextProb);
   };
 
   const handlePrevProblem = () => {
     if (historyIndex > 0) {
-      const prevIndex = historyIndex - 1;
-      setHistoryIndex(prevIndex);
-      updateCurrentProblem(historyStack[prevIndex]);
+      setHistoryIndex(prev => prev - 1);
+      updateCurrentProblem(historyStack[historyIndex - 1]);
     }
   };
 
   const updateCurrentProblem = (prob: any) => {
     setCurrentProblem(prob);
-    setResult(null); setAudioUrl(null); setAudioBlob(null);
-    setCompletedLines([]);
+    setResult(null); setAudioUrl(null); setAudioBlob(null); setCompletedLines([]);
     if ((prob as any).script) parseDialogue((prob as any).script);
   };
 
@@ -277,10 +252,14 @@ export default function Home() {
   const startRecording = async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorderRef.current = new MediaRecorder(s); mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); }; mediaRecorderRef.current.onstop = () => { const b = new Blob(chunksRef.current, { type: "audio/webm" }); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current = []; }; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch (err) { alert("마이크 권한 필요"); } };
   const stopRecording = () => { if (mediaRecorderRef.current && recording) { mediaRecorderRef.current.stop(); setRecording(false); mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop()); } };
 
-  const playTTS = (url: string | undefined) => {
-    if (!url) return alert("생성된 음성이 없어요.");
-    const audio = new Audio(url);
-    audio.play().catch(e => alert("재생 오류: " + e.message));
+  const playTTS = (text: string | undefined) => {
+    if (!text) return alert("읽을 텍스트가 없습니다.");
+    const synth = window.speechSynthesis;
+    if (synth.speaking) synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ko-KR";
+    utterance.rate = 1.0;
+    synth.speak(utterance);
   };
 
   const isDialogueFinished = courseType === 'dialogue' && parsedScript.length > 0 && completedLines.length === parsedScript.length;
@@ -295,14 +274,20 @@ export default function Home() {
     <main className="flex min-h-screen flex-col bg-gray-50 max-w-lg mx-auto shadow-2xl relative">
       <header className="bg-white px-5 py-4 flex justify-between items-center sticky top-0 z-40 border-b border-gray-200">
         <div className="font-bold text-xl text-blue-700 cursor-pointer" onClick={() => setViewMode("home")}>Sori-Tutor</div>
-        <div className="flex items-center gap-3">
-           <button onClick={fetchInbox} className="relative text-2xl mr-2">📩{hasNewMail && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white"></span>}</button>
+        <div className="flex items-center gap-2">
+           {/* 🔥 [NEW] 오류 제보 버튼 */}
+           <a href={getFeedbackLink()} className="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-bold border border-red-200 hover:bg-red-100 transition mr-1">
+             🐛 오류 제보
+           </a>
+           <button onClick={fetchInbox} className="relative text-2xl mr-1">📩{hasNewMail && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white"></span>}</button>
            <button onClick={fetchRanking} className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold border border-yellow-300 transition flex items-center gap-1 shadow-sm">🏆</button>
            <div className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full text-sm font-bold cursor-pointer border border-gray-300 hover:bg-gray-200" onClick={() => setShowPaymentModal(true)}>{userRole === 'guest' ? (<><span className="text-red-500">❤️</span><span className="text-gray-900">{hearts}</span></>) : (<><span className="">🪙</span><span className="text-gray-900">{tokens}</span></>)}<span className="text-xs text-gray-600 ml-1 font-normal">충전</span></div>
-           <button onClick={fetchHistory} className="text-2xl" title="내 기록">📂</button>
+           <button onClick={fetchHistory} className="text-2xl ml-1" title="내 기록">📂</button>
            <Login onUserChange={handleUserChange} />
         </div>
       </header>
+      
+      {/* ... (이하 내용은 기존과 동일) ... */}
 
       <div className="p-6 flex-1 overflow-y-auto pb-32">
         {viewMode === "home" && (
@@ -310,7 +295,7 @@ export default function Home() {
             <div className="bg-blue-50 p-5 rounded-xl border border-blue-200 mb-4 shadow-sm">
                <div className="flex items-center gap-2 mb-2"><h3 className="font-bold text-blue-900 text-base">👋 {userAlias || currentUser.displayName}님!</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-gray-400 underline hover:text-blue-600 flex items-center gap-1">✏️ 변경</button></div>
                <div className="bg-white p-3 rounded-lg border border-blue-100 flex items-center justify-between shadow-sm">
-                  <div><p className="text-xs text-gray-500 font-bold mb-1">오늘의 목표 (5회)</p><div className="flex gap-1">{[1,2,3,4,5].map(i => (<div key={i} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${todayCount >= i ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>{todayCount >= i ? '✓' : i}</div>))}</div></div>
+                  <div><p className="text-xs text-gray-500 font-bold mb-1">오늘의 목표</p><div className="flex gap-1">{[1,2,3,4,5].map(i => (<div key={i} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${todayCount >= i ? 'bg-green-50 text-white' : 'bg-gray-200 text-gray-400'}`}>{todayCount >= i ? '✓' : i}</div>))}</div></div>
                   <div className="text-right"><p className="text-2xl font-black text-orange-500">🔥 {streak}일</p><p className="text-xs text-orange-800 font-bold">연속 학습 중!</p></div>
                </div>
             </div>
@@ -336,7 +321,6 @@ export default function Home() {
             <button onClick={() => setViewMode("home")} className="mb-4 text-gray-700 font-bold">← 홈으로</button>
             <h2 className="text-2xl font-black text-gray-900 mb-4">나의 학습 기록</h2>
             
-            {/* 탭 필터 */}
             <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
                 {['all', 'word', 'sentence', 'dialogue'].map(tab => (
                     <button key={tab} onClick={() => setHistoryTab(tab as any)} 
@@ -347,7 +331,6 @@ export default function Home() {
                 ))}
             </div>
 
-            {/* 학습 기록 렌더링 - HistoryItem 컴포넌트 사용 */}
             <div className="space-y-4">
               {historyList
                 .filter(h => historyTab === 'all' || h.type === historyTab)
