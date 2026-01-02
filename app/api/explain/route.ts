@@ -5,11 +5,10 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
 
-// 🔥 "무료 버전" 느낌으로 쓸 수 있는 가장 싼 모델 (1.5 Flash-8b) 적용
+// 🔥 "무료 버전" 느낌으로 쓸 수 있는 가장 싼 모델 (2.5 Flash) 적용
 const modelCandidates = [
-  "gemini-1.5-flash-8b", // 1순위: 초경량/초저가
-  "gemini-1.5-flash",    // 2순위
-  "gemini-1.5-pro"       // 3순위
+  "gemini-2.5-flash", // 1순위: 초경량/초저가
+  "gemini-2.5-flash-lite",    // 2순위
 ];
 
 export async function POST(req: Request) {
