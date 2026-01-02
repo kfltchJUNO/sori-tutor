@@ -1,27 +1,55 @@
-// app/api/explain/route.ts (새로 생성)
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { db } from "@/lib/firebase"; 
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-const apiKey = process.env.GEMINI_API_KEY_FREE || ""; 
-const genAI = new GoogleGenerativeAI(apiKey);
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
+
+// 🔥 "무료 버전" 느낌으로 쓸 수 있는 가장 싼 모델 (1.5 Flash-8b) 적용
+const modelCandidates = [
+  "gemini-1.5-flash-8b", // 1순위: 초경량/초저가
+  "gemini-1.5-flash",    // 2순위
+  "gemini-1.5-pro"       // 3순위
+];
 
 export async function POST(req: Request) {
   try {
     const { text, type } = await req.json();
 
-    // 무료 모델 사용 (실패해도 부담 없음)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
-    
-    const prompt = `
-      한국어 학습자가 "${text}" 라는 ${type === 'word' ? '단어' : '문장'}을 공부하고 있습니다.
-      이 내용에 포함된 핵심 문법이나 발음 규칙을 초급 수준에서 아주 간단히(3줄 이내) 설명해줘.
-      전문 용어보다는 예시 위주로 설명해줘.
-    `;
+    // 1. [서버 캐싱]
+    const cacheRef = doc(db, "grammar_cache", text.trim());
+    const cacheSnap = await getDoc(cacheRef);
 
-    const result = await model.generateContent(prompt);
-    return NextResponse.json({ explanation: result.response.text() });
+    if (cacheSnap.exists()) {
+      return NextResponse.json({ explanation: cacheSnap.data().explanation });
+    }
+
+    // 2. [이어달리기] AI 호출
+    let explanation = "";
+    let errorLog = "";
+    
+    for (const modelName of modelCandidates) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const prompt = `Explain Korean pronunciation rule for "${text}". Simple English(max 100 chars).`;
+        
+        const result = await model.generateContent(prompt);
+        explanation = result.response.text();
+        break; 
+      } catch (e: any) {
+        console.error(`${modelName} failed, trying next...`);
+        errorLog += `[${modelName} failed] `;
+      }
+    }
+
+    if (!explanation) throw new Error(`All models failed. ${errorLog}`);
+
+    // 3. 결과 저장
+    await setDoc(cacheRef, { explanation });
+
+    return NextResponse.json({ explanation });
 
   } catch (error) {
-    return NextResponse.json({ error: "설명을 불러오지 못했습니다." }, { status: 500 });
+    return NextResponse.json({ error: "Explanation failed" });
   }
 }

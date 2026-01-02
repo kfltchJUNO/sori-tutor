@@ -1,7 +1,7 @@
-// lib/firebase.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth"; // GoogleAuthProvider 추가
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // 🔥 이 줄이 빠졌을 수 있음
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,6 +17,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider(); // 🔥 이 줄이 꼭 있어야 합니다!
+const storage = getStorage(app); // 🔥 이 부분 확인
+const googleProvider = new GoogleAuthProvider();
 
-export { auth, db, googleProvider }; // 🔥 여기서 내보내야 다른 파일에서 쓸 수 있습니다.
+export { auth, db, googleProvider, storage }; // 🔥 export에 storage가 있는지 확인
