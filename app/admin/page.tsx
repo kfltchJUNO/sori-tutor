@@ -46,9 +46,10 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
-  // 🎭 기본 캐스팅 (처음 선택된 값)
-  const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); // Kore (아나운서)
-  const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); // Puck (밝음)
+  // 🎭 캐스팅 상태
+  const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); // Dialogue A
+  const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); // Dialogue B
+  const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore"); // 🔥 단어/문장용 단독 성우
 
   const [mailContent, setMailContent] = useState("");
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -64,6 +65,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // 본인 이메일 확인
       if (user && user.email === "ot.helper7@gmail.com") { 
         setIsAdmin(true);
         await fetchAllData();
@@ -94,15 +96,59 @@ export default function AdminPage() {
     setFunc(s.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
-  // --- 🔥 [음성 생성] 지정된 성우로 생성 ---
-  const handleGenerateTTS = async (dialogue: any) => {
+  // --- 🔥 [음성 생성 1] 단어/문장용 (Single Voice) ---
+  const handleGenerateSingleTTS = async (item: any, type: "word" | "sentence") => {
+    if (!item.text) return alert("텍스트가 없습니다.");
+    
+    const voiceLabel = VOICE_OPTIONS.find(v => v.value === castSingle)?.label;
+    if (!confirm(`'${item.text}'의 음성을 생성하시겠습니까?\n\n🎙️ 선택된 성우: ${voiceLabel}`)) return;
+
+    setGeneratingId(item.id);
+    try {
+        // 1. TTS 생성 요청
+        const res = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: item.text, voiceName: castSingle }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        // 2. Storage 업로드 (경로: curriculum/word/{id}.mp3)
+        const storagePath = `curriculum/${type}/${item.id}.mp3`;
+        const storageRef = ref(storage, storagePath);
+        await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
+        const url = await getDownloadURL(storageRef);
+
+        // 3. Firestore 업데이트
+        const colName = type === "word" ? "sori_curriculum_word" : "sori_curriculum_sentence";
+        await updateDoc(doc(db, colName, item.id), {
+            audio_path: url, // 단일 파일 URL
+            has_audio: true,
+            voice: castSingle // 나중에 어떤 성우 썼는지 확인용
+        });
+
+        alert("✅ 생성 및 업로드 완료!");
+        // 리스트 새로고침
+        if (type === "word") fetchData("sori_curriculum_word", setProblems);
+        else fetchData("sori_curriculum_sentence", setSentences);
+
+    } catch (e: any) {
+        alert("실패: " + e.message);
+        console.error(e);
+    } finally {
+        setGeneratingId(null);
+    }
+  };
+
+  // --- 🔥 [음성 생성 2] 다이얼로그용 (Dual Voice) ---
+  const handleGenerateDialogueTTS = async (dialogue: any) => {
     if (!dialogue.script) return alert("스크립트가 없습니다.");
     
-    // 현재 선택된 캐스팅 정보 확인
     const voiceALabel = VOICE_OPTIONS.find(v => v.value === castA)?.label;
     const voiceBLabel = VOICE_OPTIONS.find(v => v.value === castB)?.label;
 
-    if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n\n🎙️ 캐스팅 정보\nA 역할: ${voiceALabel}\nB 역할: ${voiceBLabel}`)) return;
+    if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n\n🎙️ A: ${voiceALabel}\n🎙️ B: ${voiceBLabel}`)) return;
 
     setGeneratingId(dialogue.id);
     try {
@@ -119,8 +165,6 @@ export default function AdminPage() {
           audioUrls.push(""); 
           continue;
         }
-
-        // 역할에 맞는 성우 선택
         const selectedVoice = role === "A" ? castA : castB;
 
         const res = await fetch("/api/tts", {
@@ -129,7 +173,6 @@ export default function AdminPage() {
           body: JSON.stringify({ text, voiceName: selectedVoice }),
         });
         const data = await res.json();
-        
         if (data.error) throw new Error(data.error);
 
         const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
@@ -141,10 +184,10 @@ export default function AdminPage() {
       await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), {
         audio_paths: audioUrls,
         has_audio: true,
-        voices: { A: castA, B: castB } // 기록용
+        voices: { A: castA, B: castB }
       });
 
-      alert("✅ 캐스팅된 목소리로 생성 완료!");
+      alert("✅ 다이얼로그 생성 완료!");
       fetchData("sori_curriculum_dialogue", setDialogues);
 
     } catch (e: any) {
@@ -231,26 +274,39 @@ export default function AdminPage() {
                </form>
              </div>
              
-             {/* 🔥 보이스 캐스팅 패널 (리스트 반영됨) */}
-             {activeTab === "dialogue" && (
-                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 shadow-sm animate-fade-in-up">
-                  <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">🎙️ 보이스 캐스팅 (Chirp 3 HD)</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs font-bold text-gray-500 mb-1 block">A 역할 목소리</label>
-                      <select value={castA} onChange={e => setCastA(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
-                        {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-500 mb-1 block">B 역할 목소리</label>
-                      <select value={castB} onChange={e => setCastB(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
-                        {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
+             {/* 🔥 보이스 캐스팅 패널 (단어/문장 및 다이얼로그 통합) */}
+             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 shadow-sm animate-fade-in-up">
+                <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">🎙️ 보이스 캐스팅 (Chirp 3 HD)</h3>
+                <div className="space-y-3">
+                  {/* 단어/문장용 단일 선택 */}
+                  {(activeTab === "word" || activeTab === "sentence") && (
+                     <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">생성할 목소리 선택</label>
+                        <select value={castSingle} onChange={e => setCastSingle(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
+                          {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
+                        </select>
+                     </div>
+                  )}
+
+                  {/* 다이얼로그용 A/B 선택 */}
+                  {activeTab === "dialogue" && (
+                    <>
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">A 역할 목소리</label>
+                        <select value={castA} onChange={e => setCastA(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
+                          {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">B 역할 목소리</label>
+                        <select value={castB} onChange={e => setCastB(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
+                          {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
                 </div>
-             )}
+             </div>
 
              {/* CSV 업로드 UI */}
              <div 
@@ -278,15 +334,18 @@ export default function AdminPage() {
                    <span className="font-bold align-middle truncate">{item.text||item.title}</span>
                  </div>
                  <div className="flex gap-2 items-center shrink-0 ml-2">
-                    {activeTab === "dialogue" && (
-                      <button 
-                        onClick={() => handleGenerateTTS(item)} 
-                        disabled={generatingId === item.id}
-                        className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
-                      >
-                        {generatingId === item.id ? "⏳" : item.has_audio ? "🔊 재생성" : "🔊 생성"}
-                      </button>
-                    )}
+                    {/* 🔥 [수정됨] 타입 오류 해결: 조건을 명확히 하여 함수 호출 */}
+                    <button 
+                      onClick={() => activeTab === "dialogue" 
+                        ? handleGenerateDialogueTTS(item) 
+                        : handleGenerateSingleTTS(item, activeTab as "word" | "sentence")
+                      } 
+                      disabled={generatingId === item.id}
+                      className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
+                    >
+                      {generatingId === item.id ? "⏳" : item.has_audio ? "🔊 재생성" : "🔊 생성"}
+                    </button>
+                    
                     <button onClick={()=>startEdit(item,activeTab)} className="text-blue-600 text-xs border px-2 py-1 rounded hover:bg-blue-50">수정</button>
                     <button onClick={()=>handleDelete(item.id,activeTab)} className="text-red-500 text-xs border px-2 py-1 rounded hover:bg-red-50">삭제</button>
                  </div>

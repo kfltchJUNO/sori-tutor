@@ -8,7 +8,6 @@ import { signOut } from "firebase/auth";
 import { 
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
-// 아이콘 라이브러리 (Mail 아이콘 추가)
 import { 
   Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, Volume2
 } from 'lucide-react';
@@ -61,7 +60,7 @@ export default function Home() {
   const [userAlias, setUserAlias] = useState<string>(""); 
   
   const [streak, setStreak] = useState(0);
-  const [todayCount, setTodayCount] = useState(0);
+  const [todayCount, setTodayCount] = useState(0); // 🔥 오늘 학습 횟수
 
   const [inboxList, setInboxList] = useState<any[]>([]);
   const [showInboxModal, setShowInboxModal] = useState(false);
@@ -117,8 +116,15 @@ export default function Home() {
         setTokens(data.tokens || 0);
         setUserAlias(data.alias || "");
         setStreak(data.streak || 0);
-        if (data.last_access_date === today) setTodayCount(data.today_count || 0);
-        else setTodayCount(0);
+        // 오늘 날짜와 마지막 접속일 비교
+        if (data.last_access_date === today) {
+             setTodayCount(data.today_count || 0);
+        } else {
+             // 날짜가 바뀌었으면 카운트 리셋
+             setTodayCount(0);
+             // DB 업데이트는 analyzeAudio 시점이나 별도 로직에서 수행
+        }
+
         if (!data.alias) setShowNicknameModal(true);
         if (data.last_heart_reset !== today) { await updateDoc(userRef, { free_hearts: 3, last_heart_reset: today }); setHearts(3); }
         else setHearts(data.free_hearts ?? 3);
@@ -160,7 +166,6 @@ export default function Home() {
   };
 
   const checkNewMail = async (email: string) => {
-    // 웰컴 메시지는 로컬 상태이므로 제외하고, 실제 DB 메시지 중 안 읽은 것이 있는지 확인
     const q = query(collection(db, "sori_users", email, "inbox"), where("read", "==", false));
     const snap = await getDocs(q);
     setHasNewMail(!snap.empty); 
@@ -178,14 +183,14 @@ export default function Home() {
     setInboxList(combinedMsgs);
     setShowInboxModal(true);
     
-    // 메시지함을 열면 안 읽은 메시지(DB)들을 읽음 처리하고 알림(빨간점) 끄기
+    // 메시지 확인 시 읽음 처리
     const unread = dbMsgs.filter((m: any) => !m.read);
     if (unread.length > 0) {
       const batch = writeBatch(db);
       unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
       await batch.commit(); 
     }
-    setHasNewMail(false); // UI 상 빨간 점 즉시 제거
+    setHasNewMail(false);
   };
 
   const saveNickname = async (newAlias: string) => {
@@ -204,6 +209,7 @@ export default function Home() {
       setShowRankingModal(true); 
   };
 
+  // 🔥 [수정됨] 분석 및 Streak 업데이트 로직
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
@@ -226,11 +232,40 @@ export default function Home() {
         if (courseType === "dialogue" && targetLineIndex !== null) {
           if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]);
         }
+        
+        // --- Firestore 업데이트 (Streak 로직 포함) ---
         const userRef = doc(db, "sori_users", currentUser.email);
-        const updates: any = { analysis_count: increment(1), last_access_date: new Date().toDateString() };
-        if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = hearts - 1; } else { setTokens(p=>p-1); updates.tokens = tokens - 1; }
+        const today = new Date().toDateString();
+        
+        let newTodayCount = todayCount + 1;
+        let newStreak = streak;
+
+        // DB에서 최신 데이터 한번 더 확인 권장하지만, 여기선 State 기반으로 간소화 처리
+        // 만약 오늘 카운트가 4 -> 5가 되는 순간 Streak +1
+        if (todayCount === 4) {
+            newStreak = streak + 1;
+        }
+
+        const updates: any = { 
+            analysis_count: increment(1), 
+            last_access_date: today,
+            today_count: increment(1)
+        };
+        
+        // Streak 증가 시 업데이트
+        if (todayCount === 4) {
+            updates.streak = increment(1);
+        }
+
+        if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = hearts - 1; } 
+        else { setTokens(p=>p-1); updates.tokens = tokens - 1; }
+
         await updateDoc(userRef, updates);
         
+        // 로컬 상태 즉시 반영
+        setTodayCount(newTodayCount);
+        if (todayCount === 4) setStreak(newStreak);
+
         await addDoc(collection(db, "sori_users", currentUser.email, "history"), { 
             text: targetText, 
             recognizedText: data.recognizedText || "", 
@@ -323,11 +358,23 @@ export default function Home() {
   const startRecording = async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorderRef.current = new MediaRecorder(s); mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); }; mediaRecorderRef.current.onstop = () => { const b = new Blob(chunksRef.current, { type: "audio/webm" }); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current = []; }; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch (err) { alert("마이크 권한 필요"); } };
   const stopRecording = () => { if (mediaRecorderRef.current && recording) { mediaRecorderRef.current.stop(); setRecording(false); mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop()); } };
 
-  // Google TTS API 연동 함수
-  const handleGoogleTTS = async (textToRead: string | undefined) => {
-    // 1. 텍스트가 없거나, URL 형태인 경우(오류 방지) TTS 실행 차단
-    if (!textToRead) return alert("읽을 텍스트가 없습니다.");
-    if (textToRead.startsWith("http") || textToRead.includes(".com")) {
+  // 🔥 [수정됨] Google TTS API + 오디오 파일 우선 재생 함수
+  const handleGoogleTTS = async (textToRead: string | undefined, audioPath: string | null = null) => {
+    if (!textToRead && !audioPath) return alert("읽을 텍스트가 없습니다.");
+
+    // 1. 관리자가 생성한 고품질 오디오 파일(Chirp 3)이 있다면 우선 재생
+    if (audioPath) {
+        try {
+            const audio = new Audio(audioPath);
+            await audio.play();
+            return;
+        } catch (e) {
+            console.error("Audio playback error, falling back to real-time TTS", e);
+        }
+    }
+
+    // 2. 오디오 파일이 없으면 API로 실시간 생성 (Fallback)
+    if (textToRead?.startsWith("http") || textToRead?.includes(".com")) {
         console.error("TTS 오류: 텍스트가 아닌 URL이 감지되었습니다.", textToRead);
         return alert("오디오 링크가 텍스트로 잘못 입력되어 읽을 수 없습니다.");
     }
@@ -336,7 +383,6 @@ export default function Home() {
 
     try {
       setTtsLoading(true);
-      
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -379,7 +425,6 @@ export default function Home() {
   );
 
   return (
-    // [레이아웃 수정] h-screen을 사용하여 전체 높이를 고정하고 내부 스크롤을 활용
     <main className="flex h-[100dvh] flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
       
       {/* 1. 상단 헤더 */}
@@ -389,19 +434,15 @@ export default function Home() {
            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
         </div>
         <div className="flex items-center gap-3">
-           {/* 🚨 오류 제보 아이콘 변경 */}
            <button onClick={handleBugReport} className="text-xl hover:scale-110 transition" title="오류 제보">
              🚨
            </button>
            
-           {/* ✉️ 편지함 아이콘 변경 (Mail) */}
            <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition">
              <Mail size={22} />
-             {/* 읽지 않은 편지가 있을 때만 빨간 점 표시 */}
              {hasNewMail && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
            </button>
            
-           {/* 👋 로그아웃 아이콘 변경 */}
            <button onClick={handleLogout} className="text-xl hover:scale-110 transition ml-1" title="로그아웃">
              👋
            </button>
@@ -434,19 +475,37 @@ export default function Home() {
       <div className="flex-1 overflow-y-auto p-5 scrollbar-hide pb-24">
         {viewMode === "home" && (
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+            
+            {/* 🔥 [Streak 카드 수정됨] 진행 바(Progress Bar) 추가 */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
                <div>
                  <div className="flex items-center gap-2 mb-1">
                    <h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser.displayName}님</h3>
                    <button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button>
                  </div>
-                 <p className="text-xs text-slate-500">오늘도 화이팅하세요!</p>
+                 
+                 {/* 오늘 학습 목표 진행률 */}
+                 <div className="mt-2">
+                    <p className="text-xs text-slate-500 mb-1">오늘의 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p>
+                    <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-orange-500 transition-all duration-500 ease-out" 
+                          style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}
+                        ></div>
+                    </div>
+                    {todayCount < 5 ? (
+                         <p className="text-[10px] text-slate-400 mt-1">{(5 - todayCount)}번 더 연습하면 Streak +1 🔥</p>
+                    ) : (
+                         <p className="text-[10px] text-orange-600 font-bold mt-1">오늘 목표 달성 완료! 🎉</p>
+                    )}
+                 </div>
                </div>
-               <div className="text-center bg-orange-50 px-4 py-2 rounded-xl">
-                 <p className="text-2xl font-black text-orange-500 flex items-center gap-1 justify-center">
+               
+               <div className="text-center bg-orange-50 px-4 py-3 rounded-xl flex flex-col items-center justify-center min-w-[80px]">
+                 <p className="text-2xl font-black text-orange-500 flex items-center gap-1 justify-center leading-none mb-1">
                     {streak} <span className="text-sm font-bold text-orange-400">일</span>
                  </p>
-                 <p className="text-[10px] text-orange-700 font-bold">연속 학습 🔥</p>
+                 <p className="text-[10px] text-orange-700 font-bold">연속 학습중</p>
                </div>
             </div>
 
@@ -525,7 +584,7 @@ export default function Home() {
             </div>
             
             {courseType === "dialogue" ? (
-              <div className="space-y-4 pb-20"> {/* 하단 고정바 공간 확보 */}
+              <div className="space-y-4 pb-20"> 
                 <div className="bg-purple-50 p-5 rounded-2xl border border-purple-100">
                   <span className="text-xs text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded mb-2 inline-block">Role Play</span>
                   <h1 className="font-bold text-xl text-purple-900 mb-2">{currentProblem.title}</h1>
@@ -548,8 +607,9 @@ export default function Home() {
                           <div className="flex justify-between items-center mb-1">
                              <div className="text-xs font-bold flex items-center gap-1 opacity-70">
                                 {line.role}
+                                {/* 🔥 [수정됨] 각 대사마다 저장된 오디오가 있다면 우선 재생 */}
                                 <button 
-                                  onClick={(e) => { e.stopPropagation(); handleGoogleTTS(line.text); }} 
+                                  onClick={(e) => { e.stopPropagation(); handleGoogleTTS(line.text, currentProblem.audio_paths?.[idx]); }} 
                                   className="ml-1 bg-slate-200 p-1 rounded-full hover:bg-blue-500 hover:text-white transition disabled:opacity-50"
                                   disabled={ttsLoading}
                                 >
@@ -570,8 +630,9 @@ export default function Home() {
                  <h1 className="text-3xl font-black text-slate-800 mb-4 break-keep leading-tight">{currentProblem.text}</h1>
                  <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
                  
+                 {/* 🔥 [수정됨] 단어/문장 듣기 버튼: 저장된 audio_path가 있으면 우선 재생 */}
                  <button 
-                    onClick={() => handleGoogleTTS(currentProblem.text)} 
+                    onClick={() => handleGoogleTTS(currentProblem.text, currentProblem.audio_path)} 
                     disabled={ttsLoading}
                     className="mb-6 flex items-center gap-2 mx-auto bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-bold hover:bg-blue-100 transition"
                  >
@@ -580,7 +641,7 @@ export default function Home() {
 
                  <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">
                     💡 {courseType==="word" ? currentProblem.tip : currentProblem.translation}
-                    {/* 문장 설명도 읽어주기 버튼 추가 (순수 텍스트만) */}
+                     {/* 팁/번역 읽기 버튼 */}
                      <button 
                       onClick={() => handleGoogleTTS(courseType==="word" ? currentProblem.tip : currentProblem.translation)} 
                       className="ml-2 inline-flex align-middle bg-slate-200 rounded-full p-1 hover:bg-blue-500 hover:text-white transition"
@@ -594,7 +655,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* [레이아웃 수정] 하단 컨트롤 바 (Fixed Position으로 변경하여 항상 하단 고정) */}
+      {/* 하단 컨트롤 바 (Fixed Position) */}
       {viewMode === "practice" && (
         <div className="flex-none bg-white border-t border-slate-100 p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-50 rounded-t-3xl">
           {result ? (
@@ -640,7 +701,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- 모달 모음 (기존과 동일) --- */}
+      {/* --- 모달 모음 --- */}
 
       {showNicknameModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -688,7 +749,6 @@ export default function Home() {
                           <div className="p-4 overflow-y-auto flex-1 space-y-3">
                               {inboxList.map((msg) => (
                                   <div key={msg.id} onClick={() => setSelectedMessage(msg)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 active:scale-98 transition cursor-pointer relative">
-                                      {/* 여기서도 읽지 않은 메시지만 빨간 점 */}
                                       {!msg.read && <span className="absolute top-4 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
                                       <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mb-2 inline-block">{msg.from || "관리자"}</span>
                                       <h4 className="font-bold text-slate-800 text-sm truncate pr-4">{msg.title}</h4>
