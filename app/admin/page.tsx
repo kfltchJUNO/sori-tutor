@@ -1,12 +1,37 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { db, auth, storage } from "@/lib/firebase"; // storage import 필수
+import { db, auth, storage } from "@/lib/firebase"; 
 import { 
   collection, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, writeBatch 
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
-import { ref, uploadString, getDownloadURL } from "firebase/storage"; // 스토리지 함수
+import { ref, uploadString, getDownloadURL } from "firebase/storage"; 
+
+// 🎤 선생님이 정리하신 Chirp 3 HD 성우 리스트
+const VOICE_OPTIONS = [
+  { label: "--- 👩 여성 성우 (Chirp 3 HD) ---", value: "", disabled: true },
+  { label: "👩 Pulcherrima (직원 느낌)", value: "ko-KR-Chirp3-HD-Pulcherrima" },
+  { label: "👩 Zephyr (차분함)", value: "ko-KR-Chirp3-HD-Zephyr" },
+  { label: "👩 Sulafat (차분한데 조금 느림)", value: "ko-KR-Chirp3-HD-Sulafat" },
+  { label: "👩 Despina (차분함)", value: "ko-KR-Chirp3-HD-Despina" },
+  { label: "👩 Leda (자연스러움)", value: "ko-KR-Chirp3-HD-Leda" },
+  { label: "👩 Laomedeia (조금 낮고 차분함)", value: "ko-KR-Chirp3-HD-Laomedeia" },
+  { label: "👩 Kore (아나운서 느낌)", value: "ko-KR-Chirp3-HD-Kore" },
+  { label: "👩 Gacrux (중년 느낌)", value: "ko-KR-Chirp3-HD-Gacrux" },
+
+  { label: "--- 👨 남성 성우 (Chirp 3 HD) ---", value: "", disabled: true },
+  { label: "👨 Umbriel (차분함)", value: "ko-KR-Chirp3-HD-Umbriel" },
+  { label: "👨 Rasalgethi (밝고 발랄한 느낌)", value: "ko-KR-Chirp3-HD-Rasalgethi" },
+  { label: "👨 Sadachibia (밝고 발랄한 느낌)", value: "ko-KR-Chirp3-HD-Sadachibia" },
+  { label: "👨 Sadaltager (낮고, 조금 처진 느낌)", value: "ko-KR-Chirp3-HD-Sadaltager" },
+  { label: "👨 Enceladus (코맹맹이 목소리)", value: "ko-KR-Chirp3-HD-Enceladus" },
+  { label: "👨 Puck (밝음)", value: "ko-KR-Chirp3-HD-Puck" },
+  { label: "👨 Iapetus (차분한 후배 느낌)", value: "ko-KR-Chirp3-HD-Iapetus" },
+  { label: "👨 Charon (가벼운 선배 느낌)", value: "ko-KR-Chirp3-HD-Charon" },
+  { label: "👨 Alnilam (자연스러움)", value: "ko-KR-Chirp3-HD-Alnilam" },
+  { label: "👨 Algieba (낮고 차분함)", value: "ko-KR-Chirp3-HD-Algieba" },
+];
 
 export default function AdminPage() {
   const [loading, setLoading] = useState(true);
@@ -19,26 +44,22 @@ export default function AdminPage() {
   const [dialogues, setDialogues] = useState<any[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  
-  // TTS 생성 상태 관리
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
-  // 쪽지 상태
+  // 🎭 기본 캐스팅 (처음 선택된 값)
+  const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); // Kore (아나운서)
+  const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); // Puck (밝음)
+
   const [mailContent, setMailContent] = useState("");
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [isAllSelected, setIsAllSelected] = useState(false);
-
-  // CSV 업로드 상태
   const [isDragging, setIsDragging] = useState(false);
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>("");
-
-  // 입력 폼
   const [newWord, setNewWord] = useState({ category: "비음화", text: "", pronunciation: "", tip: "" });
   const [newSentence, setNewSentence] = useState({ category: "인사", text: "", pronunciation: "", translation: "" });
   const [newDialogue, setNewDialogue] = useState({ category: "식당", title: "", script: "", translation: "" });
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,14 +94,18 @@ export default function AdminPage() {
     setFunc(s.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
-  // --- 🔥 [New] 담화 음성 생성 로직 ---
+  // --- 🔥 [음성 생성] 지정된 성우로 생성 ---
   const handleGenerateTTS = async (dialogue: any) => {
     if (!dialogue.script) return alert("스크립트가 없습니다.");
-    if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n(기존 음성이 있다면 덮어씌워집니다)`)) return;
+    
+    // 현재 선택된 캐스팅 정보 확인
+    const voiceALabel = VOICE_OPTIONS.find(v => v.value === castA)?.label;
+    const voiceBLabel = VOICE_OPTIONS.find(v => v.value === castB)?.label;
+
+    if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n\n🎙️ 캐스팅 정보\nA 역할: ${voiceALabel}\nB 역할: ${voiceBLabel}`)) return;
 
     setGeneratingId(dialogue.id);
     try {
-      // 1. 스크립트 파싱 (A: ... | B: ...)
       const lines = dialogue.script.split("|").map((line: string) => {
         const [role, text] = line.split(":");
         return { role: role?.trim(), text: text?.trim() };
@@ -88,7 +113,6 @@ export default function AdminPage() {
 
       const audioUrls = [];
 
-      // 2. 각 줄마다 TTS 생성 및 업로드
       for (let i = 0; i < lines.length; i++) {
         const { role, text } = lines[i];
         if (!text) {
@@ -96,32 +120,31 @@ export default function AdminPage() {
           continue;
         }
 
-        // 2-1. API 호출 (음성 데이터 받기)
+        // 역할에 맞는 성우 선택
+        const selectedVoice = role === "A" ? castA : castB;
+
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, role }),
+          body: JSON.stringify({ text, voiceName: selectedVoice }),
         });
         const data = await res.json();
         
         if (data.error) throw new Error(data.error);
 
-        // 2-2. Firebase Storage에 업로드 (mp3 파일)
         const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
-        
-        // 2-3. 다운로드 URL 가져오기
         const url = await getDownloadURL(storageRef);
         audioUrls.push(url);
       }
 
-      // 3. Firestore에 URL 배열 저장
       await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), {
         audio_paths: audioUrls,
-        has_audio: true
+        has_audio: true,
+        voices: { A: castA, B: castB } // 기록용
       });
 
-      alert("✅ 음성 생성 완료!");
+      alert("✅ 캐스팅된 목소리로 생성 완료!");
       fetchData("sori_curriculum_dialogue", setDialogues);
 
     } catch (e: any) {
@@ -132,103 +155,16 @@ export default function AdminPage() {
     }
   };
 
-
-  // --- 기존 로직들 (CSV, 쪽지 등) ---
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const processFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (ev: any) => {
-      const rows = ev.target.result.split("\n").slice(1);
-      const parsedData: any[] = [];
-      
-      rows.forEach((row: string) => {
-        const c = row.split(","); // 쉼표 파싱 주의
-        if (c.length >= 3) {
-          let d: any = {};
-          if (activeTab === "word") d = { category: c[0], text: c[1], pronunciation: c[2], tip: c[3] || "" };
-          else if (activeTab === "sentence") d = { category: c[0], text: c[1], pronunciation: c[2], translation: c[3] || "" };
-          else d = { category: c[0], title: c[1], script: c[2], translation: c[3] || "" };
-          
-          if (d.category && (d.text || d.title)) {
-             parsedData.push(d);
-          }
-        }
-      });
-
-      const currentList = activeTab === "word" ? problems : activeTab === "sentence" ? sentences : dialogues;
-      const key = activeTab === "dialogue" ? "title" : "text";
-      
-      const dups = parsedData.filter(newItem => 
-        currentList.some((existItem: any) => existItem[key] === newItem[key])
-      ).length;
-
-      setCsvPreview(parsedData);
-      setDuplicateCount(dups);
-      setUploadStatus("ready");
-    };
-    reader.readAsText(file);
-  };
-
-  const executeBatchUpload = async () => {
-    if (csvPreview.length === 0) return alert("데이터 없음");
-    const tabName = activeTab === "word" ? "단어" : activeTab === "sentence" ? "문장" : "담화";
-    if (!confirm(`'${tabName}' 문제 ${csvPreview.length}개를 업로드 하시겠습니까?`)) return;
-
-    try {
-      const batch = writeBatch(db);
-      const col = `sori_curriculum_${activeTab}`;
-      csvPreview.forEach(item => {
-        const ref = doc(collection(db, col));
-        batch.set(ref, { ...item, created_at: serverTimestamp() });
-      });
-      await batch.commit();
-      alert(`✅ ${csvPreview.length}개 업로드 완료!`);
-      setCsvPreview([]); setDuplicateCount(null); setUploadStatus(""); fetchAllData();
-    } catch (e) { alert("오류 발생"); console.error(e); }
-  };
-
+  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) { processFile(e.dataTransfer.files[0]); } };
+  const processFile = (file: File) => { const reader = new FileReader(); reader.onload = (ev: any) => { const rows = ev.target.result.split("\n").slice(1); const parsedData: any[] = []; rows.forEach((row: string) => { const c = row.split(","); if (c.length >= 3) { let d: any = {}; if (activeTab === "word") d = { category: c[0], text: c[1], pronunciation: c[2], tip: c[3] || "" }; else if (activeTab === "sentence") d = { category: c[0], text: c[1], pronunciation: c[2], translation: c[3] || "" }; else d = { category: c[0], title: c[1], script: c[2], translation: c[3] || "" }; if (d.category && (d.text || d.title)) { parsedData.push(d); } } }); const currentList = activeTab === "word" ? problems : activeTab === "sentence" ? sentences : dialogues; const key = activeTab === "dialogue" ? "title" : "text"; const dups = parsedData.filter(newItem => currentList.some((existItem: any) => existItem[key] === newItem[key]) ).length; setCsvPreview(parsedData); setDuplicateCount(dups); setUploadStatus("ready"); }; reader.readAsText(file); };
+  const executeBatchUpload = async () => { if (csvPreview.length === 0) return alert("데이터 없음"); const tabName = activeTab === "word" ? "단어" : activeTab === "sentence" ? "문장" : "담화"; if (!confirm(`'${tabName}' 문제 ${csvPreview.length}개를 업로드 하시겠습니까?`)) return; try { const batch = writeBatch(db); const col = `sori_curriculum_${activeTab}`; csvPreview.forEach(item => { const ref = doc(collection(db, col)); batch.set(ref, { ...item, created_at: serverTimestamp() }); }); await batch.commit(); alert(`✅ ${csvPreview.length}개 업로드 완료!`); setCsvPreview([]); setDuplicateCount(null); setUploadStatus(""); fetchAllData(); } catch (e) { alert("오류 발생"); console.error(e); } };
   const toggleSelectUser = (email: string) => { setSelectedEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]); };
   const toggleSelectAll = () => { if (isAllSelected) setSelectedEmails([]); else setSelectedEmails(users.map(u => u.email)); setIsAllSelected(!isAllSelected); };
-  const sendMail = async () => {
-    if (!mailContent.trim()) return alert("내용 필수");
-    if (selectedEmails.length === 0) return alert("대상 선택 필수");
-    if (!confirm(`${selectedEmails.length}명 전송?`)) return;
-    try {
-      const batch = writeBatch(db);
-      const msg = { from: "관리자", content: mailContent, date: serverTimestamp(), read: false };
-      selectedEmails.forEach(e => batch.set(doc(collection(db, "sori_users", e, "inbox")), msg));
-      await batch.commit(); alert("전송 완료"); setMailContent(""); setSelectedEmails([]); setIsAllSelected(false); setActiveTab("users");
-    } catch (e) { alert("전송 실패"); }
-  };
-  const handleAddTokens = async (email: string, cur: number) => {
-    const amtStr = prompt("충전할 개수", "100");
-    if (!amtStr) return;
-    const amt = parseInt(amtStr);
-    if (!confirm(`${amt}개 처리?`)) return;
-    await updateDoc(doc(db, "sori_users", email), { tokens: (cur||0)+amt, role: 'student' });
-    alert("완료"); fetchUsers();
-  };
-  const handleSave = async (e: any, type: any) => {
-    e.preventDefault();
-    const col = `sori_curriculum_${type}`;
-    const data = type==="word"?newWord : type==="sentence"?newSentence : newDialogue;
-    if (!data.category) return alert("카테고리 필수");
-    const list = type==="word"?problems : type==="sentence"?sentences : dialogues;
-    const key = type==="dialogue" ? "title" : "text";
-    if (!editingId && list.some((item: any) => item[key] === (data as any)[key])) return alert("이미 등록됨");
-    if(editingId) await updateDoc(doc(db, col, editingId), { ...data, updated_at: serverTimestamp() });
-    else await addDoc(collection(db, col), { ...data, created_at: serverTimestamp() });
-    cancelEdit(); fetchData(col, type==="word"?setProblems : type==="sentence"?setSentences : setDialogues);
-    alert("저장 완료");
-  };
+  const sendMail = async () => { if (!mailContent.trim()) return alert("내용 필수"); if (selectedEmails.length === 0) return alert("대상 선택 필수"); if (!confirm(`${selectedEmails.length}명 전송?`)) return; try { const batch = writeBatch(db); const msg = { from: "관리자", content: mailContent, date: serverTimestamp(), read: false }; selectedEmails.forEach(e => batch.set(doc(collection(db, "sori_users", e, "inbox")), msg)); await batch.commit(); alert("전송 완료"); setMailContent(""); setSelectedEmails([]); setIsAllSelected(false); setActiveTab("users"); } catch (e) { alert("전송 실패"); } };
+  const handleAddTokens = async (email: string, cur: number) => { const amtStr = prompt("충전할 개수", "100"); if (!amtStr) return; const amt = parseInt(amtStr); if (!confirm(`${amt}개 처리?`)) return; await updateDoc(doc(db, "sori_users", email), { tokens: (cur||0)+amt, role: 'student' }); alert("완료"); fetchUsers(); };
+  const handleSave = async (e: any, type: any) => { e.preventDefault(); const col = `sori_curriculum_${type}`; const data = type==="word"?newWord : type==="sentence"?newSentence : newDialogue; if (!data.category) return alert("카테고리 필수"); const list = type==="word"?problems : type==="sentence"?sentences : dialogues; const key = type==="dialogue" ? "title" : "text"; if (!editingId && list.some((item: any) => item[key] === (data as any)[key])) return alert("이미 등록됨"); if(editingId) await updateDoc(doc(db, col, editingId), { ...data, updated_at: serverTimestamp() }); else await addDoc(collection(db, col), { ...data, created_at: serverTimestamp() }); cancelEdit(); fetchData(col, type==="word"?setProblems : type==="sentence"?setSentences : setDialogues); alert("저장 완료"); };
   const startEdit = (item: any, type: any) => { setEditingId(item.id); setActiveTab(type); window.scrollTo({top:0, behavior:"smooth"}); if(type==="word") setNewWord({...item}); else if(type==="sentence") setNewSentence({...item}); else setNewDialogue({...item}); };
   const cancelEdit = () => { setEditingId(null); setNewWord({category:"비음화", text:"", pronunciation:"", tip:""}); setNewSentence({category:"인사", text:"", pronunciation:"", translation:""}); setNewDialogue({category:"식당", title:"", script:"", translation:""}); };
   const handleDelete = async (id: string, type: any) => { if(!confirm("삭제?")) return; await deleteDoc(doc(db, `sori_curriculum_${type}`, id)); fetchData(`sori_curriculum_${type}`, type==="word"?setProblems:type==="sentence"?setSentences:setDialogues); };
@@ -239,6 +175,7 @@ export default function AdminPage() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto min-h-screen bg-gray-50 text-gray-900">
+      {/* 상단 헤더 및 탭 메뉴 */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-3xl font-bold">👮‍♀️ Admin Dashboard</h1>
         <div className="flex space-x-1 bg-white p-1 rounded-lg border overflow-x-auto">
@@ -294,43 +231,64 @@ export default function AdminPage() {
                </form>
              </div>
              
+             {/* 🔥 보이스 캐스팅 패널 (리스트 반영됨) */}
+             {activeTab === "dialogue" && (
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 shadow-sm animate-fade-in-up">
+                  <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">🎙️ 보이스 캐스팅 (Chirp 3 HD)</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 mb-1 block">A 역할 목소리</label>
+                      <select value={castA} onChange={e => setCastA(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
+                        {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 mb-1 block">B 역할 목소리</label>
+                      <select value={castB} onChange={e => setCastB(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
+                        {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+             )}
+
+             {/* CSV 업로드 UI */}
              <div 
-               className={`p-6 rounded-lg shadow border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[200px] ${isDragging ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300 hover:border-blue-400'}`}
+               className={`p-6 rounded-lg shadow border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[150px] ${isDragging ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300 hover:border-blue-400'}`}
                onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
              >
                <input type="file" accept=".csv" ref={fileInputRef} hidden onChange={(e) => e.target.files && processFile(e.target.files[0])} />
                {uploadStatus === "ready" ? (
                  <div className="animate-fade-in-up w-full">
-                    <p className="font-bold text-gray-800 text-lg mb-1">{csvPreview.length}개 항목 대기 중</p>
-                    {duplicateCount !== null && duplicateCount > 0 ? <p className="text-red-500 font-bold mb-4 bg-red-50 py-1 rounded">⚠️ 중복 {duplicateCount}개</p> : <p className="text-green-600 font-bold mb-4 text-sm">✅ 중복 없음</p>}
-                    <div className="flex gap-2"><button onClick={(e) => { e.stopPropagation(); executeBatchUpload(); }} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold">업로드 확정</button><button onClick={(e) => { e.stopPropagation(); setCsvPreview([]); setUploadStatus(""); }} className="px-4 bg-gray-300 text-gray-700 rounded font-bold">취소</button></div>
+                    <p className="font-bold text-gray-800 text-lg mb-1">{csvPreview.length}개 대기</p>
+                    {duplicateCount !== null && duplicateCount > 0 ? <p className="text-red-500 text-xs font-bold mb-2">⚠️ 중복 {duplicateCount}개</p> : <p className="text-green-600 text-xs font-bold mb-2">✅ 중복 없음</p>}
+                    <div className="flex gap-2"><button onClick={(e) => { e.stopPropagation(); executeBatchUpload(); }} className="flex-1 bg-blue-600 text-white py-1 rounded font-bold text-sm">업로드</button><button onClick={(e) => { e.stopPropagation(); setCsvPreview([]); setUploadStatus(""); }} className="px-3 bg-gray-300 text-gray-700 rounded font-bold text-sm">취소</button></div>
                  </div>
                ) : (
-                 <><div className="text-4xl text-gray-300 mb-2">📂</div><p className="font-bold text-gray-500">CSV 드래그 & 드롭</p></>
+                 <><div className="text-3xl text-gray-300 mb-1">📂</div><p className="font-bold text-gray-500 text-sm">CSV 업로드</p></>
                )}
              </div>
            </div>
            
            <div className="md:col-span-2 bg-white p-6 rounded shadow border overflow-y-auto max-h-[600px]">
              {(activeTab==="word"?problems:activeTab==="sentence"?sentences:dialogues).map((item:any)=>(
-               <div key={item.id} className="flex justify-between p-3 border-b hover:bg-gray-50">
-                 <div className="flex-1">
-                   <span className="text-xs font-bold bg-gray-100 px-2 rounded mr-2">{item.category}</span>
-                   <span className="font-bold">{item.text||item.title}</span>
+               <div key={item.id} className="flex justify-between items-center p-3 border-b hover:bg-gray-50">
+                 <div className="flex-1 overflow-hidden">
+                   <span className="text-xs font-bold bg-gray-100 px-2 py-0.5 rounded mr-2 align-middle">{item.category}</span>
+                   <span className="font-bold align-middle truncate">{item.text||item.title}</span>
                  </div>
-                 <div className="flex gap-2 items-center">
-                    {/* 🔥 담화 탭에서만 보이는 TTS 버튼 */}
+                 <div className="flex gap-2 items-center shrink-0 ml-2">
                     {activeTab === "dialogue" && (
                       <button 
                         onClick={() => handleGenerateTTS(item)} 
                         disabled={generatingId === item.id}
-                        className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 ${item.has_audio ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-purple-100 hover:text-purple-700'}`}
+                        className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
                       >
-                        {generatingId === item.id ? "생성 중..." : item.has_audio ? "🔊 재생성" : "🔊 음성 생성"}
+                        {generatingId === item.id ? "⏳" : item.has_audio ? "🔊 재생성" : "🔊 생성"}
                       </button>
                     )}
-                    <button onClick={()=>startEdit(item,activeTab)} className="text-blue-600 text-xs border px-2 rounded">수정</button>
-                    <button onClick={()=>handleDelete(item.id,activeTab)} className="text-red-500 text-xs border px-2 rounded">삭제</button>
+                    <button onClick={()=>startEdit(item,activeTab)} className="text-blue-600 text-xs border px-2 py-1 rounded hover:bg-blue-50">수정</button>
+                    <button onClick={()=>handleDelete(item.id,activeTab)} className="text-red-500 text-xs border px-2 py-1 rounded hover:bg-red-50">삭제</button>
                  </div>
                </div>
              ))}
