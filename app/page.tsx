@@ -26,7 +26,7 @@ const WELCOME_MESSAGE = {
 
 🚀 **이렇게 시작해보세요!**
 🎙️ **발음 테스트:** 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다.
-🎭 **실전 회화 (롤플레잉):** '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다.
+🎭 **실전 회화 (롤플레잉):** '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
 📊 **랭킹 도전:** 매일 5번 이상 연습하면 '연속 학습일(Streak)'이 올라갑니다.
 
 💡 **왜 소리튜터인가요?**
@@ -59,7 +59,7 @@ export default function Home() {
   const [userAlias, setUserAlias] = useState<string>(""); 
   
   const [streak, setStreak] = useState(0);
-  const [todayCount, setTodayCount] = useState(0); // 🔥 오늘 학습 횟수
+  const [todayCount, setTodayCount] = useState(0);
 
   const [inboxList, setInboxList] = useState<any[]>([]);
   const [showInboxModal, setShowInboxModal] = useState(false);
@@ -94,7 +94,7 @@ export default function Home() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // 🔥 결과 데이터 구조 (3단 피드백)
+  // 3단 피드백 결과 데이터
   const [result, setResult] = useState<{
     score: number;
     recognized: string;
@@ -122,7 +122,6 @@ export default function Home() {
         setUserAlias(data.alias || "");
         setStreak(data.streak || 0);
         
-        // 날짜가 바뀌었는지 확인하여 오늘 횟수 리셋
         if (data.last_access_date === today) {
              setTodayCount(data.today_count || 0);
         } else {
@@ -130,7 +129,6 @@ export default function Home() {
         }
 
         if (!data.alias) setShowNicknameModal(true);
-        // 무료 하트 리셋 로직
         if (data.last_heart_reset !== today) { 
             await updateDoc(userRef, { free_hearts: 3, last_heart_reset: today }); 
             setHearts(3); 
@@ -139,7 +137,6 @@ export default function Home() {
         }
         checkNewMail(user.email);
       } else {
-        // 신규 유저 생성
         await setDoc(userRef, {
           email: user.email, name: user.displayName, role: "guest",
           free_hearts: 3, tokens: 0, last_heart_reset: today, joined_at: serverTimestamp(), 
@@ -149,7 +146,6 @@ export default function Home() {
         setUserRole("guest"); setHearts(3); setShowNicknameModal(true);
       }
     } else {
-        // 로그아웃 초기화
         setUserRole("guest"); setHearts(3); setTokens(0); setUserAlias("");
     }
   };
@@ -185,7 +181,6 @@ export default function Home() {
     setInboxList([WELCOME_MESSAGE, ...dbMsgs]);
     setShowInboxModal(true);
     
-    // 안 읽은 메시지 읽음 처리
     const unread = dbMsgs.filter((m: any) => !m.read);
     if (unread.length > 0) {
       const batch = writeBatch(db);
@@ -211,7 +206,7 @@ export default function Home() {
       setShowRankingModal(true); 
   };
 
-  // 🔥 [핵심] 오디오 분석 및 Streak 로직
+  // --- 분석 및 Streak 로직 ---
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
@@ -247,12 +242,12 @@ export default function Home() {
       } else {
         setResult(data);
 
-        // --- Streak 및 카운트 업데이트 ---
+        // Streak 및 카운트 업데이트
         const userRef = doc(db, "sori_users", currentUser.email);
         const today = new Date().toDateString();
         
         let newStreak = streak;
-        // 오늘 4회에서 5회째로 넘어가는 순간 Streak 증가
+        // 오늘 4회 -> 5회 달성 시 Streak 증가
         if (todayCount === 4) newStreak = streak + 1;
 
         const updates: any = { 
@@ -270,7 +265,7 @@ export default function Home() {
         setTodayCount(p => p + 1);
         if (todayCount === 4) setStreak(newStreak);
 
-        // 히스토리 저장 (오디오 제외, 텍스트 결과만)
+        // 히스토리 저장
         await addDoc(collection(db, "sori_users", currentUser.email, "history"), { 
             text: targetText, 
             score: data.score, 
@@ -288,50 +283,54 @@ export default function Home() {
     } catch (error) { alert("서버 통신 오류"); } finally { setLoading(false); }
   };
 
-  // 🔥 [TTS 우선순위 재생] 관리자 생성 파일 -> 없으면 API
-  const handleGoogleTTS = async (text: string, path: string | null = null) => {
-    if (!text && !path) return;
-    
-    // 1. 관리자 생성 파일 우선 재생
-    if (path) {
-        try { const audio = new Audio(path); await audio.play(); return; } catch(e) { console.log("File play error", e); }
+  // 🔥 [오디오 재생] 관리자 생성 파일이 있는 경우에만 재생 (TTS fallback 사용 안함)
+  const handlePlayAudio = (path: string | null) => {
+    if (!path) return; // 파일 없으면 아무 동작 안 함
+    try { 
+        const audio = new Audio(path); 
+        audio.play(); 
+    } catch(e) { 
+        console.error("Audio playback error", e); 
     }
-    
-    // 2. 파일 없으면 실시간 생성 (결과 화면 등에서 사용)
-    if (ttsLoading) return;
-    try {
-      setTtsLoading(true);
-      const res = await fetch("/api/tts", { 
-          method: "POST", 
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voiceName: "ko-KR-Chirp3-HD-Kore" }) 
-      });
-      const data = await res.json();
-      if(data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); }
-    } catch(e) { alert("재생 오류"); } finally { setTtsLoading(false); }
   };
 
   const getMailtoLink = (planName: string, price: string) => {
     return `mailto:ot.helper7@gmail.com?subject=${encodeURIComponent("[Sori-Tutor] "+planName+" 결제 문의")}`;
   };
 
-  // 녹음 관련
+  // 녹음
   const startRecording = async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorderRef.current = new MediaRecorder(s); mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); }; mediaRecorderRef.current.onstop = () => { const b = new Blob(chunksRef.current, { type: "audio/webm" }); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current = []; }; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch (err) { alert("마이크 권한 필요"); } };
   const stopRecording = () => { if (mediaRecorderRef.current && recording) { mediaRecorderRef.current.stop(); setRecording(false); mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop()); } };
 
-  // --- 네비게이션 ---
+  // --- 네비게이션 로직 수정 (회화는 카테고리로, 단어/문장은 랜덤으로) ---
   const selectCourse = async (type: any) => { 
     setCourseType(type); 
     setProblemList([]); 
-    if (type === "word") fetchData("sori_curriculum_word");
-    else if (type === "sentence") fetchData("sori_curriculum_sentence");
-    else fetchData("sori_curriculum_dialogue");
-    setViewMode("practice"); 
+    
+    // 🔥 실전 회화(dialogue)는 카테고리 선택 화면으로
+    if (type === "dialogue") {
+        fetchCategories("sori_curriculum_dialogue");
+        setViewMode("category");
+    } else {
+        // 단어/문장은 바로 전체 랜덤 학습으로
+        if (type === "word") fetchData("sori_curriculum_word");
+        else fetchData("sori_curriculum_sentence");
+        setViewMode("practice"); 
+    }
   };
   
+  const fetchCategories = async (col: string) => {
+      const q = query(collection(db, col));
+      const s = await getDocs(q);
+      const c = new Set<string>(); 
+      s.forEach(d => c.add(d.data().category)); 
+      setCategories(Array.from(c).sort()); 
+  };
+
   const selectCategory = async (cat: string) => { 
       setSelectedCategory(cat); 
-      const col = `sori_curriculum_${courseType}`; 
+      // 다이얼로그의 경우 선택된 카테고리만 로드
+      const col = "sori_curriculum_dialogue";
       const q = query(collection(db, col), where("category", "==", cat)); 
       const s = await getDocs(q); 
       const l = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -378,16 +377,7 @@ export default function Home() {
   
   const isDialogueFinished = courseType === 'dialogue' && parsedScript.length > 0 && completedLines.length === parsedScript.length;
 
-  if (!currentUser) return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <div className="text-center bg-white p-10 rounded-3xl shadow-2xl max-w-sm w-full border border-slate-100">
-        <h1 className="text-4xl font-black text-blue-600 mb-2">Sori-Tutor</h1>
-        <p className="text-slate-500 mb-8 font-medium">AI와 함께하는 한국어 발음 교정</p>
-        <Login onUserChange={handleUserChange} />
-        <p className="text-xs text-slate-400 mt-6">* 구글 로그인 시 무료 체험 (일 3회)</p>
-      </div>
-    </main>
-  );
+  if (!currentUser) return <Login onUserChange={handleUserChange} />;
 
   return (
     <main className="flex h-[100dvh] flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
@@ -471,7 +461,6 @@ export default function Home() {
         )}
 
         {viewMode === "history" && (
-           /* ... 내 기록 리스트 (기존 유지) ... */
            <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1"><ChevronLeft size={20}/> 메인으로</button>
             <h2 className="text-2xl font-black text-slate-900 mb-4">나의 학습 기록</h2>
@@ -493,7 +482,7 @@ export default function Home() {
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
-               <button onClick={() => courseType === "word" ? setViewMode("home") : setViewMode("category")} className="text-slate-400 font-bold text-sm flex items-center hover:text-slate-600"><X size={20}/> 종료</button>
+               <button onClick={() => courseType === "word" ? setViewMode("home") : (courseType === "sentence" ? setViewMode("home") : setViewMode("category"))} className="text-slate-400 font-bold text-sm flex items-center hover:text-slate-600"><X size={20}/> 종료</button>
                <div className="flex gap-2">
                  <button onClick={handlePrevProblem} disabled={historyIndex <= 0} className={`px-3 py-1 rounded-lg text-xs font-bold transition ${historyIndex > 0 ? 'bg-white text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-400'}`}>이전</button>
                  {courseType !== "dialogue" && <button onClick={handleNextProblem} className="px-3 py-1 rounded-lg text-xs font-bold bg-white text-blue-600 border border-blue-200 hover:bg-blue-50">다음 ▶</button>}
@@ -516,6 +505,9 @@ export default function Home() {
                       const isMyRole = line.role === myRole; 
                       const isSelected = targetLineIndex === idx;
                       const isDone = completedLines.includes(idx);
+                      // 🔥 [관리자 오디오 확인] 오디오 경로가 존재할 때만 재생 버튼 표시
+                      const hasAudio = currentProblem.audio_paths && currentProblem.audio_paths[idx];
+
                       return (
                         <div key={idx} className={`flex ${isMyRole ? 'justify-end' : 'justify-start'}`}>
                           <div onClick={() => { if (isMyRole) { setTargetLineIndex(idx); setResult(null); setAudioUrl(null); setAudioBlob(null); }}}
@@ -523,7 +515,12 @@ export default function Home() {
                             <div className="flex justify-between items-center mb-1">
                                <div className="text-xs font-bold flex items-center gap-1 opacity-70">
                                   {line.role}
-                                  <button onClick={(e) => { e.stopPropagation(); handleGoogleTTS(line.text, currentProblem.audio_paths?.[idx]); }} className="ml-1 bg-slate-200 p-1 rounded-full hover:bg-blue-500 hover:text-white transition disabled:opacity-50"><Volume2 size={10}/></button>
+                                  {/* 관리자가 생성한 오디오가 있을 때만 버튼 활성화 */}
+                                  {hasAudio && (
+                                    <button onClick={(e) => { e.stopPropagation(); handlePlayAudio(hasAudio); }} className="ml-1 bg-slate-200 p-1 rounded-full hover:bg-blue-500 hover:text-white transition disabled:opacity-50">
+                                        <Volume2 size={10}/>
+                                    </button>
+                                  )}
                                </div>
                                {isMyRole && isDone && <span className="text-green-600 text-[10px] font-bold bg-green-100 px-1.5 rounded">완료</span>}
                             </div>
@@ -535,16 +532,14 @@ export default function Home() {
                   </div>
                </div>
             ) : (
-               // 🔥 단어/문장 연습 화면: 스피커 버튼 삭제됨
+               // 🔥 [변경점] 단어/문장 연습 화면: 스피커 버튼 완전 제거됨
                <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mb-6 mt-4 relative">
                   <h1 className="text-3xl font-black text-slate-800 mb-4 break-keep leading-tight">{currentProblem.text}</h1>
                   <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
                   
-                  {/* 듣기 버튼이 없습니다. 사용자가 직접 읽어보도록 유도 */}
-                  
                   <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200 mt-4">
                      💡 {courseType==="word" ? currentProblem.tip : currentProblem.translation}
-                     <button onClick={() => handleGoogleTTS(courseType==="word" ? currentProblem.tip : currentProblem.translation)} className="ml-2 inline-flex align-middle bg-slate-200 rounded-full p-1 hover:bg-blue-500 hover:text-white transition"><Volume2 size={10} /></button>
+                     {/* 듣기 버튼 없음 (오직 텍스트만) */}
                   </div>
                </div>
             )}
@@ -577,8 +572,12 @@ export default function Home() {
                        <span className="text-xs font-bold text-slate-400 block mb-1">올바른 발음 (정답 소리)</span>
                        <div className="flex items-center justify-between bg-white p-2 rounded border border-green-100">
                            <div className="text-lg font-bold text-green-600 tracking-wide break-keep">{result.correct}</div>
-                           {/* 결과 화면에서는 정답 듣기 가능 */}
-                           <button onClick={()=>handleGoogleTTS(currentProblem.text, currentProblem.audio_path)} className="bg-green-100 text-green-700 p-2 rounded-full hover:bg-green-200 shadow-sm"><Volume2 size={18}/></button>
+                           {/* 결과 화면에서만 정답 듣기 가능 (관리자 오디오가 있을 때만) */}
+                           {(currentProblem.audio_path || (currentProblem.audio_paths && currentProblem.audio_paths[targetLineIndex||0])) && (
+                               <button onClick={()=>handlePlayAudio(currentProblem.audio_path || currentProblem.audio_paths[targetLineIndex||0])} className="bg-green-100 text-green-700 p-2 rounded-full hover:bg-green-200 shadow-sm">
+                                   <Volume2 size={18}/>
+                               </button>
+                           )}
                        </div>
                    </div>
                </div>

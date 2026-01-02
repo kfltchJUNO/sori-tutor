@@ -8,6 +8,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, uploadString, getDownloadURL } from "firebase/storage"; 
 
+// 🎤 [복원됨] Chirp 3 HD 성우 리스트
 const VOICE_OPTIONS = [
   { label: "--- 👩 여성 성우 (Chirp 3 HD) ---", value: "", disabled: true },
   { label: "👩 Pulcherrima (직원 느낌)", value: "ko-KR-Chirp3-HD-Pulcherrima" },
@@ -45,6 +46,7 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
+  // 🎭 캐스팅 상태 (기본값 설정)
   const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); 
   const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); 
   const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore"); 
@@ -63,6 +65,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // 본인 이메일로 수정 필요
       if (user && user.email === "ot.helper7@gmail.com") { 
         setIsAdmin(true);
         await fetchAllData();
@@ -93,10 +96,12 @@ export default function AdminPage() {
     setFunc(s.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
+  // --- 🔥 [음성 생성 1] 단어/문장용 (Single Voice) ---
   const handleGenerateSingleTTS = async (item: any, type: "word" | "sentence") => {
     if (!item.text) return alert("텍스트가 없습니다.");
+    
     const voiceLabel = VOICE_OPTIONS.find(v => v.value === castSingle)?.label;
-    if (!confirm(`'${item.text}'의 음성을 생성하시겠습니까?\n\n🎙️ 성우: ${voiceLabel}`)) return;
+    if (!confirm(`'${item.text}'의 음성을 생성하시겠습니까?\n\n🎙️ 선택된 성우: ${voiceLabel}`)) return;
 
     setGeneratingId(item.id);
     try {
@@ -106,6 +111,7 @@ export default function AdminPage() {
             body: JSON.stringify({ text: item.text, voiceName: castSingle }),
         });
         const data = await res.json();
+        
         if (data.error) throw new Error(data.error);
 
         const storagePath = `curriculum/${type}/${item.id}.mp3`;
@@ -123,17 +129,22 @@ export default function AdminPage() {
         alert("✅ 생성 및 업로드 완료!");
         if (type === "word") fetchData("sori_curriculum_word", setProblems);
         else fetchData("sori_curriculum_sentence", setSentences);
+
     } catch (e: any) {
         alert("실패: " + e.message);
+        console.error(e);
     } finally {
         setGeneratingId(null);
     }
   };
 
+  // --- 🔥 [음성 생성 2] 다이얼로그용 (Dual Voice) ---
   const handleGenerateDialogueTTS = async (dialogue: any) => {
     if (!dialogue.script) return alert("스크립트가 없습니다.");
+    
     const voiceALabel = VOICE_OPTIONS.find(v => v.value === castA)?.label;
     const voiceBLabel = VOICE_OPTIONS.find(v => v.value === castB)?.label;
+
     if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n\n🎙️ A: ${voiceALabel}\n🎙️ B: ${voiceBLabel}`)) return;
 
     setGeneratingId(dialogue.id);
@@ -142,48 +153,147 @@ export default function AdminPage() {
         const [role, text] = line.split(":");
         return { role: role?.trim(), text: text?.trim() };
       });
+
       const audioUrls = [];
+
       for (let i = 0; i < lines.length; i++) {
         const { role, text } = lines[i];
-        if (!text) { audioUrls.push(""); continue; }
+        if (!text) {
+          audioUrls.push(""); 
+          continue;
+        }
         const selectedVoice = role === "A" ? castA : castB;
+
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, voiceName: selectedVoice }),
         });
         const data = await res.json();
+        
         if (data.error) throw new Error(data.error);
+
         const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
         audioUrls.push(url);
       }
+
       await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), {
         audio_paths: audioUrls,
         has_audio: true,
         voices: { A: castA, B: castB }
       });
+
       alert("✅ 다이얼로그 생성 완료!");
       fetchData("sori_curriculum_dialogue", setDialogues);
+
     } catch (e: any) {
       alert("실패: " + e.message);
+      console.error(e);
     } finally {
       setGeneratingId(null);
     }
   };
 
-  // ... (파일 드래그앤드롭 및 기타 함수들 생략 없이 전체 포함) ...
+  // --- 파일 처리 및 기타 기능 ---
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) { processFile(e.dataTransfer.files[0]); } };
-  const processFile = (file: File) => { const reader = new FileReader(); reader.onload = (ev: any) => { const rows = ev.target.result.split("\n").slice(1); const parsedData: any[] = []; rows.forEach((row: string) => { const c = row.split(","); if (c.length >= 3) { let d: any = {}; if (activeTab === "word") d = { category: c[0], text: c[1], pronunciation: c[2], tip: c[3] || "" }; else if (activeTab === "sentence") d = { category: c[0], text: c[1], pronunciation: c[2], translation: c[3] || "" }; else d = { category: c[0], title: c[1], script: c[2], translation: c[3] || "" }; if (d.category && (d.text || d.title)) { parsedData.push(d); } } }); const currentList = activeTab === "word" ? problems : activeTab === "sentence" ? sentences : dialogues; const key = activeTab === "dialogue" ? "title" : "text"; const dups = parsedData.filter(newItem => currentList.some((existItem: any) => existItem[key] === newItem[key]) ).length; setCsvPreview(parsedData); setDuplicateCount(dups); setUploadStatus("ready"); }; reader.readAsText(file); };
-  const executeBatchUpload = async () => { if (csvPreview.length === 0) return alert("데이터 없음"); const tabName = activeTab === "word" ? "단어" : activeTab === "sentence" ? "문장" : "담화"; if (!confirm(`'${tabName}' 문제 ${csvPreview.length}개를 업로드 하시겠습니까?`)) return; try { const batch = writeBatch(db); const col = `sori_curriculum_${activeTab}`; csvPreview.forEach(item => { const ref = doc(collection(db, col)); batch.set(ref, { ...item, created_at: serverTimestamp() }); }); await batch.commit(); alert(`✅ ${csvPreview.length}개 업로드 완료!`); setCsvPreview([]); setDuplicateCount(null); setUploadStatus(""); fetchAllData(); } catch (e) { alert("오류 발생"); console.error(e); } };
+  
+  const processFile = (file: File) => { 
+    const reader = new FileReader(); 
+    reader.onload = (ev: any) => { 
+      const rows = ev.target.result.split("\n").slice(1); 
+      const parsedData: any[] = []; 
+      rows.forEach((row: string) => { 
+        const c = row.split(","); 
+        if (c.length >= 3) { 
+          let d: any = {}; 
+          if (activeTab === "word") d = { category: c[0], text: c[1], pronunciation: c[2], tip: c[3] || "" }; 
+          else if (activeTab === "sentence") d = { category: c[0], text: c[1], pronunciation: c[2], translation: c[3] || "" }; 
+          else d = { category: c[0], title: c[1], script: c[2], translation: c[3] || "" }; 
+          
+          if (d.category && (d.text || d.title)) { parsedData.push(d); } 
+        } 
+      }); 
+      
+      const currentList = activeTab === "word" ? problems : activeTab === "sentence" ? sentences : dialogues; 
+      const key = activeTab === "dialogue" ? "title" : "text"; 
+      const dups = parsedData.filter(newItem => currentList.some((existItem: any) => existItem[key] === newItem[key]) ).length; 
+      
+      setCsvPreview(parsedData); 
+      setDuplicateCount(dups); 
+      setUploadStatus("ready"); 
+    }; 
+    reader.readAsText(file); 
+  };
+
+  const executeBatchUpload = async () => { 
+    if (csvPreview.length === 0) return alert("데이터 없음"); 
+    const tabName = activeTab === "word" ? "단어" : activeTab === "sentence" ? "문장" : "담화"; 
+    if (!confirm(`'${tabName}' 문제 ${csvPreview.length}개를 업로드 하시겠습니까?`)) return; 
+    
+    try { 
+      const batch = writeBatch(db); 
+      const col = `sori_curriculum_${activeTab}`; 
+      csvPreview.forEach(item => { 
+        const ref = doc(collection(db, col)); 
+        batch.set(ref, { ...item, created_at: serverTimestamp() }); 
+      }); 
+      await batch.commit(); 
+      alert(`✅ ${csvPreview.length}개 업로드 완료!`); 
+      setCsvPreview([]); 
+      setDuplicateCount(null); 
+      setUploadStatus(""); 
+      fetchAllData(); 
+    } catch (e) { 
+      alert("오류 발생"); 
+      console.error(e); 
+    } 
+  };
+
   const toggleSelectUser = (email: string) => { setSelectedEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]); };
   const toggleSelectAll = () => { if (isAllSelected) setSelectedEmails([]); else setSelectedEmails(users.map(u => u.email)); setIsAllSelected(!isAllSelected); };
-  const sendMail = async () => { if (!mailContent.trim()) return alert("내용 필수"); if (selectedEmails.length === 0) return alert("대상 선택 필수"); if (!confirm(`${selectedEmails.length}명 전송?`)) return; try { const batch = writeBatch(db); const msg = { from: "관리자", content: mailContent, date: serverTimestamp(), read: false }; selectedEmails.forEach(e => batch.set(doc(collection(db, "sori_users", e, "inbox")), msg)); await batch.commit(); alert("전송 완료"); setMailContent(""); setSelectedEmails([]); setIsAllSelected(false); setActiveTab("users"); } catch (e) { alert("전송 실패"); } };
+  
+  const sendMail = async () => { 
+    if (!mailContent.trim()) return alert("내용 필수"); 
+    if (selectedEmails.length === 0) return alert("대상 선택 필수"); 
+    if (!confirm(`${selectedEmails.length}명 전송?`)) return; 
+    try { 
+      const batch = writeBatch(db); 
+      const msg = { from: "관리자", content: mailContent, date: serverTimestamp(), read: false }; 
+      selectedEmails.forEach(e => batch.set(doc(collection(db, "sori_users", e, "inbox")), msg)); 
+      await batch.commit(); 
+      alert("전송 완료"); 
+      setMailContent(""); 
+      setSelectedEmails([]); 
+      setIsAllSelected(false); 
+      setActiveTab("users"); 
+    } catch (e) { alert("전송 실패"); } 
+  };
+
   const handleAddTokens = async (email: string, cur: number) => { const amtStr = prompt("충전할 개수", "100"); if (!amtStr) return; const amt = parseInt(amtStr); if (!confirm(`${amt}개 처리?`)) return; await updateDoc(doc(db, "sori_users", email), { tokens: (cur||0)+amt, role: 'student' }); alert("완료"); fetchUsers(); };
-  const handleSave = async (e: any, type: any) => { e.preventDefault(); const col = `sori_curriculum_${type}`; const data = type==="word"?newWord : type==="sentence"?newSentence : newDialogue; if (!data.category) return alert("카테고리 필수"); const list = type==="word"?problems : type==="sentence"?sentences : dialogues; const key = type==="dialogue" ? "title" : "text"; if (!editingId && list.some((item: any) => item[key] === (data as any)[key])) return alert("이미 등록됨"); if(editingId) await updateDoc(doc(db, col, editingId), { ...data, updated_at: serverTimestamp() }); else await addDoc(collection(db, col), { ...data, created_at: serverTimestamp() }); cancelEdit(); fetchData(col, type==="word"?setProblems : type==="sentence"?setSentences : setDialogues); alert("저장 완료"); };
+  
+  const handleSave = async (e: any, type: any) => { 
+    e.preventDefault(); 
+    const col = `sori_curriculum_${type}`; 
+    const data = type==="word"?newWord : type==="sentence"?newSentence : newDialogue; 
+    if (!data.category) return alert("카테고리 필수"); 
+    
+    const list = type==="word"?problems : type==="sentence"?sentences : dialogues; 
+    const key = type==="dialogue" ? "title" : "text"; 
+    
+    if (!editingId && list.some((item: any) => item[key] === (data as any)[key])) return alert("이미 등록됨"); 
+    
+    if(editingId) await updateDoc(doc(db, col, editingId), { ...data, updated_at: serverTimestamp() }); 
+    else await addDoc(collection(db, col), { ...data, created_at: serverTimestamp() }); 
+    
+    cancelEdit(); 
+    fetchData(col, type==="word"?setProblems : type==="sentence"?setSentences : setDialogues); 
+    alert("저장 완료"); 
+  };
+
   const startEdit = (item: any, type: any) => { setEditingId(item.id); setActiveTab(type); window.scrollTo({top:0, behavior:"smooth"}); if(type==="word") setNewWord({...item}); else if(type==="sentence") setNewSentence({...item}); else setNewDialogue({...item}); };
   const cancelEdit = () => { setEditingId(null); setNewWord({category:"비음화", text:"", pronunciation:"", tip:""}); setNewSentence({category:"인사", text:"", pronunciation:"", translation:""}); setNewDialogue({category:"식당", title:"", script:"", translation:""}); };
   const handleDelete = async (id: string, type: any) => { if(!confirm("삭제?")) return; await deleteDoc(doc(db, `sori_curriculum_${type}`, id)); fetchData(`sori_curriculum_${type}`, type==="word"?setProblems:type==="sentence"?setSentences:setDialogues); };
@@ -306,8 +416,12 @@ export default function AdminPage() {
                    <span className="font-bold align-middle truncate">{item.text||item.title}</span>
                  </div>
                  <div className="flex gap-2 items-center shrink-0 ml-2">
+                    {/* 🔥 타입 오류 해결: as 'word' | 'sentence' */}
                     <button 
-                      onClick={() => activeTab === "dialogue" ? handleGenerateDialogueTTS(item) : handleGenerateSingleTTS(item, activeTab as "word"|"sentence")} 
+                      onClick={() => activeTab === "dialogue" 
+                        ? handleGenerateDialogueTTS(item) 
+                        : handleGenerateSingleTTS(item, activeTab as "word" | "sentence")
+                      } 
                       disabled={generatingId === item.id}
                       className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
                     >
