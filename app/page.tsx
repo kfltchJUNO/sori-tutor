@@ -3,44 +3,43 @@
 import { useState, useRef, useEffect } from "react";
 import Login from "./components/Login";
 import HistoryItem from "./components/HistoryItem"; 
-import { db, auth } from "@/lib/firebase"; // auth 추가 필요
-import { signOut } from "firebase/auth"; // 로그아웃용
+import { db, auth } from "@/lib/firebase"; 
+import { signOut } from "firebase/auth"; 
 import { 
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
-// 아이콘 라이브러리 (npm install lucide-react 필요)
+// 아이콘 라이브러리
 import { 
   Mic, MessageSquare, Trophy, Bell, LogOut, AlertTriangle, 
-  X, ChevronRight, ChevronLeft, Star, Heart, Coins 
+  X, ChevronLeft, Star, Heart, Coins 
 } from 'lucide-react';
 
-// --- 고정된 환영 메시지 데이터 ---
+// --- 환영 메시지 데이터 (이모티콘 적용됨) ---
 const WELCOME_MESSAGE = {
   id: 'welcome-guide',
   from: '소리튜터 운영진',
   title: "🎉 소리튜터에 오신 것을 환영합니다! (사용 설명서 포함)",
-  date: new Date(), // 현재 날짜
+  date: new Date(), 
   read: false,
   content: `안녕하세요, 새로운 학습자님! 👋
 
 한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.
 소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.
 
-🚀 이렇게 시작해보세요!
-🎙️ 발음 테스트: 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)
-🎭 실전 회화 (롤플레잉): '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
-📊 랭킹 도전: 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!
+🚀 **이렇게 시작해보세요!**
+🎙️ **발음 테스트:** 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)
+🎭 **실전 회화 (롤플레잉):** '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
+📊 **랭킹 도전:** 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!
 
-💡 왜 소리튜터인가요?
-* Expert-Led Content: 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
-* High-End AI: 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.)
+💡 **왜 소리튜터인가요?**
+* **Expert-Led Content:** 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
+* **High-End AI:** 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.)
 
-📢 충전 및 이용 안내 (Pre-Launch) 
-정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
+📢 **충전 및 이용 안내 (Pre-Launch)** 정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
 다소 번거로우시더라도, 수수료 절감분을 더 높은 퀄리티의 AI 모델 유지에 재투자하기 위함이니 양해 부탁드립니다.
 초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.
 
-🎁 7일 연속 학습 챌린지!
+🎁 **7일 연속 학습 챌린지!**
 작심삼일은 이제 그만! 확실한 동기부여를 드립니다.
 * 미션: 7일 동안 매일 5번 이상 연습하기
 * 선물: 미션 성공 시 15 토큰 즉시 지급!
@@ -48,6 +47,7 @@ const WELCOME_MESSAGE = {
 로그인 시 매일 무료 하트 3개가 충전됩니다. 부담없이 사용해 보세요.
 학습 중 오류가 있거나 건의사항이 생기면 상단의 [🚨] 아이콘을 눌러 언제든 알려주세요.
 학습이 끝나면 [👋] 아이콘으로 로그아웃 하시면 됩니다.
+
 당신의 한국어가 유창해지는 그날까지 소리튜터가 함께하겠습니다. 화이팅! 💪
 
 - 소리튜터 운영진 드림 -`
@@ -67,7 +67,7 @@ export default function Home() {
 
   const [inboxList, setInboxList] = useState<any[]>([]);
   const [showInboxModal, setShowInboxModal] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<any>(null); // 상세 볼 메시지
+  const [selectedMessage, setSelectedMessage] = useState<any>(null); 
   const [hasNewMail, setHasNewMail] = useState(false);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -85,7 +85,6 @@ export default function Home() {
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   const [completedLines, setCompletedLines] = useState<number[]>([]);
-
   const [rankingList, setRankingList] = useState<any[]>([]);
   const [historyList, setHistoryList] = useState<any[]>([]); 
   const [historyTab, setHistoryTab] = useState<"all" | "word" | "sentence" | "dialogue">("all");
@@ -99,6 +98,9 @@ export default function Home() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  
+  // TTS 로딩 상태
+  const [ttsLoading, setTtsLoading] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -133,7 +135,6 @@ export default function Home() {
         setUserRole("guest"); setHearts(3); setShowNicknameModal(true);
       }
     } else {
-        // 로그아웃 상태 초기화
         setUserRole("guest");
         setHearts(3);
         setTokens(0);
@@ -146,16 +147,15 @@ export default function Home() {
         await signOut(auth);
         setCurrentUser(null);
         alert("안녕히 가세요! 👋");
-        window.location.reload(); // 상태 초기화를 위해 리로드
+        window.location.reload(); 
     }
   };
 
-  // 오류 제보 링크 (Mailto)
   const handleBugReport = () => {
     const email = "ot.helper7@gmail.com";
     const subject = "소리튜터 오류 제보";
     const body = `[소리튜터 피드백]
-1. 사용 기기: (예: 아이폰 15, 갤럭시 S24 등)
+1. 사용 기기: 
 2. 문제 내용: 
 3. 건의 사항: `;
     window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -164,7 +164,6 @@ export default function Home() {
   const checkNewMail = async (email: string) => {
     const q = query(collection(db, "sori_users", email, "inbox"), where("read", "==", false));
     const snap = await getDocs(q);
-    // 웰컴 메시지는 항상 상단에 있으므로, 실제 DB의 안 읽은 메시지만 체크하거나 로직 조정 가능
     setHasNewMail(!snap.empty); 
   };
 
@@ -174,13 +173,12 @@ export default function Home() {
     const snap = await getDocs(q);
     const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     
-    // 고정 웰컴 메시지와 DB 메시지 합치기
+    // 고정 웰컴 메시지 + DB 메시지
     const combinedMsgs = [WELCOME_MESSAGE, ...dbMsgs];
     
     setInboxList(combinedMsgs);
     setShowInboxModal(true);
     
-    // 읽음 처리 (DB 메시지만)
     const unread = dbMsgs.filter((m: any) => !m.read);
     if (unread.length > 0) {
       const batch = writeBatch(db);
@@ -324,14 +322,42 @@ export default function Home() {
   const startRecording = async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorderRef.current = new MediaRecorder(s); mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); }; mediaRecorderRef.current.onstop = () => { const b = new Blob(chunksRef.current, { type: "audio/webm" }); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current = []; }; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch (err) { alert("마이크 권한 필요"); } };
   const stopRecording = () => { if (mediaRecorderRef.current && recording) { mediaRecorderRef.current.stop(); setRecording(false); mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop()); } };
 
-  const playTTS = (text: string | undefined) => {
-    if (!text) return alert("읽을 텍스트가 없습니다.");
-    const synth = window.speechSynthesis;
-    if (synth.speaking) synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "ko-KR";
-    utterance.rate = 1.0;
-    synth.speak(utterance);
+  // 🔥 [수정됨] Google TTS API 연동 함수 (route.ts 사용)
+  const handleGoogleTTS = async (textToRead: string | undefined) => {
+    if (!textToRead) return alert("읽을 텍스트가 없습니다.");
+    if (ttsLoading) return; // 중복 요청 방지
+
+    try {
+      setTtsLoading(true);
+      
+      // 첨부해주신 route.ts 로 요청 전송
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          text: textToRead,
+          voiceName: "ko-KR-Chirp3-HD-Kore" // 고급 한국어 모델
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "TTS Error");
+      }
+
+      if (data.audioContent) {
+        // Base64 오디오 재생
+        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+        audio.play();
+      }
+
+    } catch (error) {
+      console.error("TTS 실패:", error);
+      alert("음성 재생 중 오류가 발생했습니다.");
+    } finally {
+      setTtsLoading(false);
+    }
   };
 
   const isDialogueFinished = courseType === 'dialogue' && parsedScript.length > 0 && completedLines.length === parsedScript.length;
@@ -351,32 +377,25 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
       
-      {/* 1. 상단 헤더 수정됨: 아이콘 적용 및 버튼 추가 */}
       <header className="bg-white px-5 py-3 flex justify-between items-center sticky top-0 z-40 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode("home")}>
            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">S</div>
            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
         </div>
         <div className="flex items-center gap-3">
-           {/* 오류 제보 */}
            <button onClick={handleBugReport} className="text-slate-400 hover:text-red-500 transition" title="오류 제보">
              <AlertTriangle size={20} />
            </button>
-           
-           {/* 메시지함 */}
            <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition">
              <Bell size={20} />
              {hasNewMail && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
            </button>
-           
-           {/* 로그아웃 */}
            <button onClick={handleLogout} className="text-slate-400 hover:text-slate-700 transition" title="로그아웃">
              <LogOut size={20} />
            </button>
         </div>
       </header>
 
-      {/* 서브 헤더 (상태 표시줄) */}
       <div className="bg-white px-5 py-2 flex justify-between items-center border-b border-slate-50 text-sm">
          <div className="flex gap-2">
             <button onClick={fetchRanking} className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full font-bold hover:bg-yellow-100 transition">
@@ -402,7 +421,6 @@ export default function Home() {
       <div className="p-5 flex-1 overflow-y-auto pb-32 scrollbar-hide">
         {viewMode === "home" && (
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
-            {/* 유저 상태 카드 */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
                <div>
                  <div className="flex items-center gap-2 mb-1">
@@ -419,11 +437,11 @@ export default function Home() {
                </div>
             </div>
 
-            {/* 학습 메뉴 */}
+            {/* 학습 메뉴 이름 수정됨 */}
             <div className="grid gap-3">
               {[
-                {id:'word', t:'단어 카드', d:'기초 어휘 발음 연습', icon: <Mic />, color: 'blue'}, 
-                {id:'sentence', t:'문장 억양', d:'자연스러운 문장 말하기', icon: <Star />, color: 'indigo'}, 
+                {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
+                {id:'sentence', t:'문장 억양 연습', d:'자연스러운 억양 익히기', icon: <Star />, color: 'indigo'}, 
                 {id:'dialogue', t:'실전 회화', d:'AI와 역할극 대화', icon: <MessageSquare />, color: 'purple'}
               ].map((item) => (
                 <button 
@@ -458,7 +476,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* 히스토리 모드 (기존 유지) */}
         {viewMode === "history" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1"><ChevronLeft size={20}/> 메인으로</button>
@@ -483,7 +500,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 연습 모드 (UI 기존과 유사하되 깔끔하게 정리) */}
+        {/* 연습 모드 */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
@@ -511,7 +528,6 @@ export default function Home() {
                   {parsedScript.map((line, idx) => {
                     const isMyRole = line.role === myRole; 
                     const isSelected = targetLineIndex === idx;
-                    const audioSrc = currentProblem.audio_paths?.[idx];
                     const isDone = completedLines.includes(idx);
                     return (
                       <div key={idx} className={`flex ${isMyRole ? 'justify-end' : 'justify-start'}`}>
@@ -521,7 +537,14 @@ export default function Home() {
                           <div className="flex justify-between items-center mb-1">
                              <div className="text-xs font-bold flex items-center gap-1 opacity-70">
                                 {line.role}
-                                {audioSrc && (<button onClick={(e) => { e.stopPropagation(); playTTS(audioSrc); }} className="ml-1 bg-slate-200 p-1 rounded-full hover:bg-blue-500 hover:text-white transition"><Mic size={10}/></button>)}
+                                {/* 🔥 [수정됨] 링크 대신 텍스트를 읽도록 TTS 함수 호출 */}
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleGoogleTTS(line.text); }} 
+                                  className="ml-1 bg-slate-200 p-1 rounded-full hover:bg-blue-500 hover:text-white transition disabled:opacity-50"
+                                  disabled={ttsLoading}
+                                >
+                                  <Mic size={10}/>
+                                </button>
                              </div>
                              {isMyRole && isDone && <span className="text-green-600 text-[10px] font-bold bg-green-100 px-1.5 rounded">완료</span>}
                           </div>
@@ -536,6 +559,16 @@ export default function Home() {
               <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mb-6 relative mt-4">
                  <h1 className="text-3xl font-black text-slate-800 mb-4 break-keep leading-tight">{currentProblem.text}</h1>
                  <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
+                 
+                 {/* 🔥 [수정됨] 단어/문장 듣기 버튼 추가 */}
+                 <button 
+                    onClick={() => handleGoogleTTS(currentProblem.text)} 
+                    disabled={ttsLoading}
+                    className="mb-6 flex items-center gap-2 mx-auto bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-bold hover:bg-blue-100 transition"
+                 >
+                    {ttsLoading ? "로딩 중..." : <><Mic size={18}/> 들어보기</>}
+                 </button>
+
                  <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">
                     💡 {courseType==="word" ? currentProblem.tip : currentProblem.translation}
                  </div>
@@ -545,7 +578,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 컨트롤 바 (녹음/피드백) */}
+      {/* 하단 컨트롤 바 */}
       {viewMode === "practice" && (
         <div className="bg-white border-t border-slate-100 p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] sticky bottom-0 z-50 rounded-t-3xl">
           {result ? (
@@ -608,12 +641,11 @@ export default function Home() {
           </div>
       )}
 
-      {/* 메시지함 모달 (리스트 <-> 상세 보기 구조 변경) */}
+      {/* 메시지함 모달 */}
       {showInboxModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm">
               <div className="bg-white w-full h-full sm:h-[600px] sm:max-w-md sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
                   {selectedMessage ? (
-                      // 상세 보기 뷰
                       <div className="flex flex-col h-full bg-white">
                           <div className="p-4 border-b flex items-center gap-2 bg-white sticky top-0 z-10">
                               <button onClick={() => setSelectedMessage(null)} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={24}/></button>
@@ -634,7 +666,6 @@ export default function Home() {
                           </div>
                       </div>
                   ) : (
-                      // 리스트 뷰
                       <div className="flex flex-col h-full bg-slate-50">
                           <div className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10">
                               <h3 className="font-bold text-lg flex items-center gap-2"><Bell size={18}/> 메시지함</h3>
@@ -657,7 +688,7 @@ export default function Home() {
           </div>
       )}
 
-      {/* 랭킹 모달 (디자인 수정) */}
+      {/* 랭킹 모달 */}
       {showRankingModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm">
               <div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300">
@@ -690,7 +721,7 @@ export default function Home() {
           </div>
       )}
 
-      {/* 결제 모달 (기존 유지) */}
+      {/* 결제 모달 */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
