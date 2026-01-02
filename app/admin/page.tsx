@@ -8,7 +8,6 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, uploadString, getDownloadURL } from "firebase/storage"; 
 
-// 🎤 선생님이 정리하신 Chirp 3 HD 성우 리스트
 const VOICE_OPTIONS = [
   { label: "--- 👩 여성 성우 (Chirp 3 HD) ---", value: "", disabled: true },
   { label: "👩 Pulcherrima (직원 느낌)", value: "ko-KR-Chirp3-HD-Pulcherrima" },
@@ -46,10 +45,9 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
-  // 🎭 캐스팅 상태
-  const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); // Dialogue A
-  const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); // Dialogue B
-  const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore"); // 🔥 단어/문장용 단독 성우
+  const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); 
+  const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); 
+  const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore"); 
 
   const [mailContent, setMailContent] = useState("");
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -65,7 +63,6 @@ export default function AdminPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      // 본인 이메일 확인
       if (user && user.email === "ot.helper7@gmail.com") { 
         setIsAdmin(true);
         await fetchAllData();
@@ -96,16 +93,13 @@ export default function AdminPage() {
     setFunc(s.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
-  // --- 🔥 [음성 생성 1] 단어/문장용 (Single Voice) ---
   const handleGenerateSingleTTS = async (item: any, type: "word" | "sentence") => {
     if (!item.text) return alert("텍스트가 없습니다.");
-    
     const voiceLabel = VOICE_OPTIONS.find(v => v.value === castSingle)?.label;
-    if (!confirm(`'${item.text}'의 음성을 생성하시겠습니까?\n\n🎙️ 선택된 성우: ${voiceLabel}`)) return;
+    if (!confirm(`'${item.text}'의 음성을 생성하시겠습니까?\n\n🎙️ 성우: ${voiceLabel}`)) return;
 
     setGeneratingId(item.id);
     try {
-        // 1. TTS 생성 요청
         const res = await fetch("/api/tts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -114,40 +108,32 @@ export default function AdminPage() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        // 2. Storage 업로드 (경로: curriculum/word/{id}.mp3)
         const storagePath = `curriculum/${type}/${item.id}.mp3`;
         const storageRef = ref(storage, storagePath);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
 
-        // 3. Firestore 업데이트
         const colName = type === "word" ? "sori_curriculum_word" : "sori_curriculum_sentence";
         await updateDoc(doc(db, colName, item.id), {
-            audio_path: url, // 단일 파일 URL
+            audio_path: url,
             has_audio: true,
-            voice: castSingle // 나중에 어떤 성우 썼는지 확인용
+            voice: castSingle
         });
 
         alert("✅ 생성 및 업로드 완료!");
-        // 리스트 새로고침
         if (type === "word") fetchData("sori_curriculum_word", setProblems);
         else fetchData("sori_curriculum_sentence", setSentences);
-
     } catch (e: any) {
         alert("실패: " + e.message);
-        console.error(e);
     } finally {
         setGeneratingId(null);
     }
   };
 
-  // --- 🔥 [음성 생성 2] 다이얼로그용 (Dual Voice) ---
   const handleGenerateDialogueTTS = async (dialogue: any) => {
     if (!dialogue.script) return alert("스크립트가 없습니다.");
-    
     const voiceALabel = VOICE_OPTIONS.find(v => v.value === castA)?.label;
     const voiceBLabel = VOICE_OPTIONS.find(v => v.value === castB)?.label;
-
     if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n\n🎙️ A: ${voiceALabel}\n🎙️ B: ${voiceBLabel}`)) return;
 
     setGeneratingId(dialogue.id);
@@ -156,17 +142,11 @@ export default function AdminPage() {
         const [role, text] = line.split(":");
         return { role: role?.trim(), text: text?.trim() };
       });
-
       const audioUrls = [];
-
       for (let i = 0; i < lines.length; i++) {
         const { role, text } = lines[i];
-        if (!text) {
-          audioUrls.push(""); 
-          continue;
-        }
+        if (!text) { audioUrls.push(""); continue; }
         const selectedVoice = role === "A" ? castA : castB;
-
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -174,30 +154,26 @@ export default function AdminPage() {
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-
         const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
         audioUrls.push(url);
       }
-
       await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), {
         audio_paths: audioUrls,
         has_audio: true,
         voices: { A: castA, B: castB }
       });
-
       alert("✅ 다이얼로그 생성 완료!");
       fetchData("sori_curriculum_dialogue", setDialogues);
-
     } catch (e: any) {
       alert("실패: " + e.message);
-      console.error(e);
     } finally {
       setGeneratingId(null);
     }
   };
 
+  // ... (파일 드래그앤드롭 및 기타 함수들 생략 없이 전체 포함) ...
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) { processFile(e.dataTransfer.files[0]); } };
@@ -218,7 +194,6 @@ export default function AdminPage() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto min-h-screen bg-gray-50 text-gray-900">
-      {/* 상단 헤더 및 탭 메뉴 */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-3xl font-bold">👮‍♀️ Admin Dashboard</h1>
         <div className="flex space-x-1 bg-white p-1 rounded-lg border overflow-x-auto">
@@ -274,11 +249,10 @@ export default function AdminPage() {
                </form>
              </div>
              
-             {/* 🔥 보이스 캐스팅 패널 (단어/문장 및 다이얼로그 통합) */}
+             {/* 보이스 캐스팅 패널 (통합) */}
              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 shadow-sm animate-fade-in-up">
                 <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">🎙️ 보이스 캐스팅 (Chirp 3 HD)</h3>
                 <div className="space-y-3">
-                  {/* 단어/문장용 단일 선택 */}
                   {(activeTab === "word" || activeTab === "sentence") && (
                      <div>
                         <label className="text-xs font-bold text-gray-500 mb-1 block">생성할 목소리 선택</label>
@@ -287,8 +261,6 @@ export default function AdminPage() {
                         </select>
                      </div>
                   )}
-
-                  {/* 다이얼로그용 A/B 선택 */}
                   {activeTab === "dialogue" && (
                     <>
                       <div>
@@ -334,18 +306,19 @@ export default function AdminPage() {
                    <span className="font-bold align-middle truncate">{item.text||item.title}</span>
                  </div>
                  <div className="flex gap-2 items-center shrink-0 ml-2">
-                    {/* 🔥 [수정됨] 타입 오류 해결: 조건을 명확히 하여 함수 호출 */}
                     <button 
-                      onClick={() => activeTab === "dialogue" 
-                        ? handleGenerateDialogueTTS(item) 
-                        : handleGenerateSingleTTS(item, activeTab as "word" | "sentence")
-                      } 
+                      onClick={() => activeTab === "dialogue" ? handleGenerateDialogueTTS(item) : handleGenerateSingleTTS(item, activeTab as "word"|"sentence")} 
                       disabled={generatingId === item.id}
                       className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
                     >
                       {generatingId === item.id ? "⏳" : item.has_audio ? "🔊 재생성" : "🔊 생성"}
                     </button>
-                    
+                    {item.has_audio && (
+                       <button onClick={() => { 
+                           const path = item.audio_path || (item.audio_paths ? item.audio_paths[0] : null);
+                           if(path) new Audio(path).play(); 
+                       }} className="bg-gray-100 px-2 py-1 rounded text-xs">▶</button>
+                    )}
                     <button onClick={()=>startEdit(item,activeTab)} className="text-blue-600 text-xs border px-2 py-1 rounded hover:bg-blue-50">수정</button>
                     <button onClick={()=>handleDelete(item.id,activeTab)} className="text-red-500 text-xs border px-2 py-1 rounded hover:bg-red-50">삭제</button>
                  </div>

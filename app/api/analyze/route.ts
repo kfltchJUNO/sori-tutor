@@ -1,16 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-
-// 1. 🔥 [핵심 수정] Vercel에 등록한 'GEMINI_API_KEY'를 가장 먼저 찾도록 수정
-// 혹시 모를 상황을 대비해 다른 이름들도 다 찾아봅니다. (하나라도 있으면 OK)
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-
-// 2. 🔥 [요청하신 모델 전략] 2.5 Flash -> Lite 순서
-const modelCandidates = [
-  "gemini-2.5-flash",       // 1순위: 메인 모델 (성능)
-  "gemini-2.5-flash-lite",  // 2순위: 백업 모델 (가성비)
-  "gemini-1.5-flash"        // 3순위: 최후의 안전장치 (구글 표준 모델)
-];
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: Request) {
   try {
@@ -19,92 +8,55 @@ export async function POST(req: Request) {
     const targetText = formData.get("targetText") as string;
     const context = formData.get("context") as string;
 
-    // 디버깅 로그: 키가 잘 로드됐는지 확인 (보안상 값은 숨김)
-    console.log("Analyze 요청 시작");
-    console.log(`- API Key 상태: ${apiKey ? "✅ 로드됨" : "❌ 없음 (GEMINI_API_KEY 확인 필요)"}`);
+    if (!audioFile || !targetText) return NextResponse.json({ error: "Missing data" }, { status: 400 });
 
-    // 키가 없으면 에러 반환
-    if (!apiKey) {
-      return NextResponse.json({ 
-        error: "API Key Missing", 
-        details: "Vercel 환경변수에 'GEMINI_API_KEY'가 없습니다." 
-      }, { status: 500 });
-    }
-
-    if (!audioFile) {
-      return NextResponse.json({ error: "No audio provided" }, { status: 400 });
-    }
-
-    // Google AI 클라이언트 초기화
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_TTS_API_KEY; 
+    if (!apiKey) throw new Error("API Key missing");
     
-    // 오디오 버퍼 변환
-    const buffer = Buffer.from(await audioFile.arrayBuffer());
-    const base64Audio = buffer.toString("base64");
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    let finalResult = null;
-    let errorLog = "";
+    const arrayBuffer = await audioFile.arrayBuffer();
+    const base64Audio = Buffer.from(arrayBuffer).toString("base64");
 
-    // 🔥 모델 순차 시도 (Fail-over System)
-    for (const modelName of modelCandidates) {
-      try {
-        console.log(`Trying model: ${modelName}...`);
-        const model = genAI.getGenerativeModel({ model: modelName });
+    const prompt = `
+      당신은 외국인을 위한 한국어 발음 교정 최고 전문가입니다. 
+      사용자의 녹음된 음성을 듣고, 목표 문장과 비교하여 정확하게 평가해야 합니다.
+      
+      [목표 문장]
+      "${targetText}"
+      
+      [상황 및 맥락 정보]
+      ${context || "일반적인 말하기 상황"}
 
-        const prompt = `
-          Role: Strict Korean Pronunciation Coach.
-          Target: "${targetText}"
-          Context: "${context}"
-          
-          STEP 1: Check content (Most Important).
-          - Listen carefully. Did the user say "${targetText}"?
-          - If the user said different words or missed key parts:
-            -> Set SCORE to 10.
-            -> Set FEEDBACK to "다른 문장을 말씀하신 것 같아요. 문장을 다시 확인하고 읽어주세요!".
-            -> Output JSON immediately.
+      [분석 지침]
+      1. 사용자의 오디오를 **들리는 소리 그대로** 분석하십시오. (STT 보정 금지)
+      2. 한국어의 표준 발음법(음운 변동 등)을 기준으로 평가하십시오.
+      3. 문장의 종류와 상황에 맞는 **억양**과 **감정**이 잘 표현되었는지 확인하십시오.
+      4. 결과는 반드시 아래 JSON 포맷으로만 출력하십시오.
 
-          STEP 2: Analyze Pronunciation (Only if content matches).
-          - Evaluate pitch, speed, and intonation naturally.
-          - Score scale: 0 to 100.
-          - Feedback: Keep it polite (해요-che), specific to the error.
-
-          Output JSON ONLY: { "score": number, "feedback": "string" }
-        `;
-
-        const result = await model.generateContent([
-          prompt,
-          { inlineData: { mimeType: "audio/webm", data: base64Audio } }
-        ]);
-
-        const responseText = result.response.text();
-        
-        // JSON 파싱 (마크다운 제거)
-        const cleanJson = responseText.replace(/```json|```/g, "").trim();
-        finalResult = JSON.parse(cleanJson);
-        
-        console.log(`✅ Success with ${modelName}`);
-        break; // 성공하면 반복문 종료
-
-      } catch (e: any) {
-        console.warn(`⚠️ Model ${modelName} failed:`, e.message);
-        errorLog += `[${modelName}: ${e.message}] `;
-        // 실패하면 다음 모델로 넘어감 (continue)
+      [출력 포맷 (JSON)]
+      {
+        "score": (0~100 사이 정수),
+        "recognized": "사용자가 실제 발음한 소리 표기 (예: [하교-에 갇 어요])",
+        "correct": "올바른 표준 발음 표기 (예: [하꾜에 가써요])",
+        "explanation": "발음 교정 방법 설명 (예: '학교'에서 ㄱ과 ㄱ이 만나 'ㄲ' 소리가 나요...)",
+        "advice": "어조 및 감정 조언 (예: 질문이므로 문장 끝을 올려야 해요...)"
       }
-    }
+    `;
 
-    // 모든 모델이 실패했을 경우
-    if (!finalResult) {
-      console.error("All models failed:", errorLog);
-      throw new Error(`모든 AI 모델 응답 실패: ${errorLog}`);
-    }
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { mimeType: "audio/webm", data: base64Audio } }
+    ]);
 
-    return NextResponse.json(finalResult);
+    const responseText = result.response.text();
+    const cleanedText = responseText.replace(/```json|```/g, "").trim();
+    
+    return NextResponse.json(JSON.parse(cleanedText));
 
   } catch (error: any) {
-    console.error("Critical Error:", error);
-    return NextResponse.json({ 
-      error: "Analysis failed", 
-      details: error.message 
-    }, { status: 500 });
+    console.error("Analysis Error:", error);
+    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
   }
 }
