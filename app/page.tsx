@@ -26,22 +26,19 @@ const WELCOME_MESSAGE = {
 🚀 **이렇게 시작해보세요!**
 🎙️ **발음 테스트:** 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)
 🎭 **실전 회화 (롤플레잉):** '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
-🗣️ **프리토킹 (Beta):** AI 친구 '수경' 또는 '민철'이와 자유롭게 대화해보세요. 정해진 대본 없이 실시간으로 대화하며 회화 자신감을 키울 수 있습니다. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.
+🗣️ **프리토킹 (Beta):** AI와 자유롭게 대화해보세요. 정해진 대본 없이 실시간으로 대화하며 회화 자신감을 키울 수 있습니다. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.
 📊 **랭킹 도전:** 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!
 
 💡 **왜 소리튜터인가요?**
-* **Expert-Led Content:** 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
-* **High-End AI:** 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.) 오프라인 학원 수강료 대비 합리적인 비용으로 24시간 코칭을 받아보세요.
+* **Expert-Led Content:** 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다.
+* **High-End AI:** 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다.
 
 📢 **충전 및 이용 안내 (Pre-Launch)** 정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
-다소 번거로우시더라도, 수수료 절감분을 더 높은 퀄리티의 AI 모델 유지에 재투자하기 위함이니 양해 부탁드립니다.
-초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.
-(추후 상위 이용자 대상 커피 쿠폰 제공 등의 이벤트 기획중)
 
 🎁 **7일 연속 학습 챌린지!**
 작심삼일은 이제 그만! 확실한 동기부여를 드립니다.
-* 미션: 7일 동안 매일 5번 이상 연습하기
-* 선물: 미션 성공 시 15 토큰 즉시 지급!
+미션: 7일 동안 매일 5번 이상 연습하기
+선물: 미션 성공 시 15 토큰 즉시 지급!
 
 로그인 시 매일 무료 하트 3개가 충전됩니다. 부담없이 사용해 보세요.
 학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요.
@@ -51,9 +48,10 @@ const WELCOME_MESSAGE = {
 - 소리튜터 운영진 드림 -`
 };
 
+// 🔥 [수정됨] 실제 Google Cloud TTS 성우 이름으로 변경
 const PERSONAS = [
-    { id: 'su', name: '수경', desc: '차분하고 상냥한 친구', voice: 'ko-KR-Chirp3-HD-Zephyr', color: 'bg-pink-100 text-pink-600' },
-    { id: 'min', name: '민철', desc: '활기차고 에너지 넘치는 친구', voice: 'ko-KR-Chirp3-HD-Rasalgethi', color: 'bg-blue-100 text-blue-600' }
+    { id: 'su', name: '수경', desc: '차분하고 상냥한 친구', voice: 'ko-KR-Neural2-A', color: 'bg-pink-100 text-pink-600' },
+    { id: 'min', name: '민철', desc: '활기차고 에너지 넘치는 친구', voice: 'ko-KR-Neural2-C', color: 'bg-blue-100 text-blue-600' }
 ];
 
 export default function Home() {
@@ -104,13 +102,7 @@ export default function Home() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
   
-  const [result, setResult] = useState<{
-    score: number;
-    recognized: string;
-    correct: string;
-    explanation: string;
-    advice: string;
-  } | null>(null);
+  const [result, setResult] = useState<any>(null);
 
   // 프리토킹 상태
   const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string, audio?: string}[]>([]);
@@ -152,40 +144,17 @@ export default function Home() {
         });
         setUserRole("guest"); setHearts(3); setShowNicknameModal(true);
       }
-    } else {
-        setUserRole("guest");
-        setHearts(3);
-        setTokens(0);
-        setUserAlias("");
     }
   };
 
-  // --- 함수 정의 위치 수정 (Hoisting 해결) ---
+  const handleLogout = async () => {
+    if (confirm("로그아웃 하시겠습니까?")) { await signOut(auth); window.location.reload(); }
+  };
+
   const checkNewMail = async (email: string) => {
     const q = query(collection(db, "sori_users", email, "inbox"), where("read", "==", false));
     const snap = await getDocs(q);
     setHasNewMail(!snap.empty); 
-  };
-
-  const fetchHistory = async () => { 
-    if (!currentUser) return; 
-    setLoading(true); 
-    const q = query(collection(db, "sori_users", currentUser.email, "history"), orderBy("date", "desc")); 
-    const s = await getDocs(q); 
-    const safeList = s.docs.map(d => {
-        const data = d.data();
-        return { 
-            id: d.id, 
-            ...data,
-            recognized: data.recognized || "", 
-            correct: data.correct || "",
-            feedback: data.feedback || data.explanation || "내용 없음",
-            advice: data.advice || ""
-        };
-    });
-    setHistoryList(safeList); 
-    setViewMode("history"); 
-    setLoading(false); 
   };
 
   const fetchInbox = async () => {
@@ -203,10 +172,6 @@ export default function Home() {
       await batch.commit(); 
     }
     setHasNewMail(false);
-  };
-
-  const handleLogout = async () => {
-    if (confirm("로그아웃 하시겠습니까?")) { await signOut(auth); window.location.reload(); }
   };
 
   const handleSendInquiry = async () => {
@@ -241,98 +206,6 @@ export default function Home() {
       setShowRankingModal(true); 
   };
 
-  const handleGoogleTTS = async (text: string, path: string | null = null, voice: string | null = null) => {
-    if (!text && !path) return alert("읽을 텍스트가 없습니다.");
-    if (path) { new Audio(path).play(); return; }
-    if (ttsLoading) return; 
-    try {
-      setTtsLoading(true);
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          text,
-          voiceName: voice || "ko-KR-Chirp3-HD-Kore" 
-        }),
-      });
-      const data = await res.json();
-      if (data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); }
-    } catch (error) { alert("음성 재생 오류"); } finally { setTtsLoading(false); }
-  };
-
-  // --- 프리토킹 로직 ---
-  const enterFreeTalking = () => {
-    if (tokens < 2 && userRole !== 'guest') { 
-        if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true); 
-        if (userRole === 'student' && tokens < 2) return setShowPaymentModal(true);
-    }
-    setViewMode("freetalking");
-    setChatStatus('select_persona'); 
-  };
-
-  const startChatWithPersona = (personaId: string) => {
-      setSelectedPersona(personaId);
-      const persona = PERSONAS.find(p => p.id === personaId);
-      setChatHistory([{role: "model", text: `안녕하세요! 저는 ${persona?.name}이에요. 이름이 뭐예요?`}]);
-      setChatStatus('active');
-      setChatFeedback(null);
-      handleGoogleTTS(`안녕하세요! 저는 ${persona?.name}이에요. 이름이 뭐예요?`, null, persona?.voice);
-  };
-
-  const previewVoice = (voiceName: string) => {
-      handleGoogleTTS("안녕하세요?", null, voiceName);
-  };
-
-  const handleChatSend = async () => {
-    if (!audioBlob) return;
-    
-    if (userRole === 'guest') { if (hearts < 1) return setShowPaymentModal(true); setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
-    else { if (tokens < 2) return setShowPaymentModal(true); setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
-
-    setLoading(true);
-    const formData = new FormData();
-    formData.append("action", "chat");
-    formData.append("audio", audioBlob);
-    formData.append("history", JSON.stringify(chatHistory));
-    formData.append("persona", selectedPersona); 
-
-    try {
-        const res = await fetch("/api/chat", { method: "POST", body: formData });
-        const data = await res.json();
-
-        // 🔥 [수정됨] 사용자가 말한 내용(STT)과 AI의 답변을 순차적으로 추가
-        const newHistory = [
-            ...chatHistory, 
-            {role: 'user', text: data.userText} as any, 
-            {role: 'model', text: data.aiText, audio: data.audioContent ? `data:audio/mp3;base64,${data.audioContent}` : null}
-        ];
-        setChatHistory(newHistory);
-        
-        if (data.audioContent) {
-            new Audio(`data:audio/mp3;base64,${data.audioContent}`).play();
-        }
-        if (data.ended) setChatStatus('ended');
-        
-        setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-
-    } catch(e) { alert("오류 발생: 다시 시도해주세요."); } 
-    finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
-  };
-
-  const handleChatFeedback = async () => {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append("action", "feedback");
-      formData.append("history", JSON.stringify(chatHistory));
-      try {
-          const res = await fetch("/api/chat", { method: "POST", body: formData });
-          const data = await res.json();
-          setChatFeedback(data);
-      } catch(e) { alert("피드백 생성 실패"); }
-      finally { setLoading(false); }
-  };
-
-  // --- 일반 학습 분석 로직 ---
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
@@ -369,9 +242,96 @@ export default function Home() {
     } catch (error) { alert("서버 오류"); } finally { setLoading(false); }
   };
 
-  const startRecording = async () => { try { const s=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorderRef.current=new MediaRecorder(s); mediaRecorderRef.current.ondataavailable=e=>{if(e.data.size>0) chunksRef.current.push(e.data)}; mediaRecorderRef.current.onstop=()=>{const b=new Blob(chunksRef.current,{type:"audio/webm"}); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current=[];}; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch(e){ alert("마이크 권한 필요"); }};
-  const stopRecording = () => { if(mediaRecorderRef.current&&recording){ mediaRecorderRef.current.stop(); setRecording(false); }};
-  
+  const startFreeTalking = () => {
+    if (tokens < 2 && userRole !== 'guest') { 
+        if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true); 
+        if (userRole === 'student' && tokens < 2) return setShowPaymentModal(true);
+    }
+    setViewMode("freetalking");
+    setChatStatus('select_persona'); 
+  };
+
+  const startChatWithPersona = (personaId: string) => {
+      setSelectedPersona(personaId);
+      const persona = PERSONAS.find(p => p.id === personaId);
+      const greeting = `안녕하세요! 저는 ${persona?.name}이에요. 이름이 뭐예요?`;
+      setChatHistory([{role: "model", text: greeting}]);
+      setChatStatus('active');
+      setChatFeedback(null);
+      // 첫 인사 재생 (TTS API 호출)
+      handleGoogleTTS(greeting, null, persona?.voice);
+  };
+
+  const previewVoice = (voiceName: string) => {
+      handleGoogleTTS("안녕하세요?", null, voiceName);
+  };
+
+  const handleChatSend = async () => {
+    if (!audioBlob) return;
+    
+    // 토큰 차감
+    if (userRole === 'guest') { 
+        if (hearts < 1) return setShowPaymentModal(true); 
+        setHearts(p => p-1); 
+        updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); 
+    } else { 
+        if (tokens < 2) return setShowPaymentModal(true); 
+        setTokens(p => p-2); 
+        updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); 
+    }
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("action", "chat");
+    formData.append("audio", audioBlob);
+    formData.append("history", JSON.stringify(chatHistory));
+    formData.append("persona", selectedPersona); 
+
+    try {
+        const res = await fetch("/api/chat", { method: "POST", body: formData });
+        const data = await res.json();
+
+        if (data.error) {
+            alert("서버 오류: " + data.error);
+            setLoading(false); setAudioUrl(null); setAudioBlob(null);
+            return;
+        }
+
+        // 🔥 [수정됨] 빈 말풍선 방지 로직 (userText가 없으면 에러 메시지 표시)
+        const userText = data.userText && data.userText.trim() !== "" ? data.userText : "(소리를 인식하지 못했어요 😓)";
+        
+        const newHistory = [
+            ...chatHistory, 
+            {role: 'user', text: userText} as any, 
+            {role: 'model', text: data.aiText, audio: data.audioContent ? `data:audio/mp3;base64,${data.audioContent}` : null}
+        ];
+        setChatHistory(newHistory);
+        
+        if (data.audioContent) {
+            new Audio(`data:audio/mp3;base64,${data.audioContent}`).play();
+        }
+        if (data.ended) setChatStatus('ended');
+        
+        setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+
+    } catch(e) { alert("통신 오류 발생"); } 
+    finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
+  };
+
+  const handleChatFeedback = async () => {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append("action", "feedback");
+      formData.append("history", JSON.stringify(chatHistory));
+      try {
+          const res = await fetch("/api/chat", { method: "POST", body: formData });
+          const data = await res.json();
+          setChatFeedback(data);
+      } catch(e) { alert("피드백 생성 실패"); }
+      finally { setLoading(false); }
+  };
+
+  const getMailtoLink = (planName: string, price: string) => `mailto:ot.helper7@gmail.com?subject=${encodeURIComponent("[Sori-Tutor] "+planName+" 결제 문의")}`;
   const selectCourse = async (type: any) => { setCourseType(type); if(type==="word"){ const s=await getDocs(query(collection(db,"sori_curriculum_word"))); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(s.docs.length>0) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); } else { const s=await getDocs(collection(db,`sori_curriculum_${type}`)); const c=new Set<string>(); s.forEach(d=>c.add(d.data().category)); setCategories(Array.from(c).sort()); setViewMode("category"); } setResult(null); };
   const selectCategory = async (cat: string) => { setSelectedCategory(cat); const q=query(collection(db,`sori_curriculum_${courseType}`),where("category","==",cat)); const s=await getDocs(q); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(!s.empty) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); setResult(null); setAudioUrl(null); };
   const initPractice = (list: any[]) => { const r=Math.floor(Math.random()*list.length); updateCurrentProblem(list[r]); setHistoryStack([list[r]]); setHistoryIndex(0); };
@@ -380,9 +340,15 @@ export default function Home() {
   const updateCurrentProblem = (prob: any) => { setCurrentProblem(prob); setResult(null); setAudioUrl(null); setCompletedLines([]); if(prob.script) parseDialogue(prob.script); };
   const parseDialogue = (s: string) => { setParsedScript(s.split("|").map(l=>{const[r,t]=l.split(":");return{role:r?.trim(),text:t?.trim()}})); setTargetLineIndex(null); };
   
+  // --- 함수 순서 재배치 완료 ---
+  const fetchHistory = async () => { if (!currentUser) return; setLoading(true); const q = query(collection(db, "sori_users", currentUser.email, "history"), orderBy("date", "desc")); const s = await getDocs(q); const safeList = s.docs.map(d => { const data = d.data(); return { id: d.id, ...data, recognized: data.recognized || "", correct: data.correct || "", feedback: data.feedback || data.explanation || "내용 없음", advice: data.advice || "" }; }); setHistoryList(safeList); setViewMode("history"); setLoading(false); };
+  
+  const startRecording = async () => { try { const s=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorderRef.current=new MediaRecorder(s); mediaRecorderRef.current.ondataavailable=e=>{if(e.data.size>0) chunksRef.current.push(e.data)}; mediaRecorderRef.current.onstop=()=>{const b=new Blob(chunksRef.current,{type:"audio/webm"}); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current=[];}; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch(e){ alert("마이크 권한 필요"); }};
+  const stopRecording = () => { if(mediaRecorderRef.current&&recording){ mediaRecorderRef.current.stop(); setRecording(false); }};
+  
+  const handleGoogleTTS = async (text: string, path: string | null = null, voice: string | null = null) => { if (!text && !path) return; if (path) { new Audio(path).play(); return; } if (ttsLoading) return; try { setTtsLoading(true); const res = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voiceName: voice || "ko-KR-Neural2-A" }) }); const data = await res.json(); if (data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); } } catch (e) { alert("음성 재생 오류"); } finally { setTtsLoading(false); } };
   const isDialogueFinished = courseType === 'dialogue' && parsedScript.length > 0 && completedLines.length === parsedScript.length;
 
-  // --- 로그인 전 화면 ---
   if (!currentUser) return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6">
       <div className="w-full max-w-sm flex flex-col flex-1 justify-center">
@@ -457,16 +423,16 @@ export default function Home() {
                 </button>
               ))}
               
-              <button onClick={enterFreeTalking} className="w-full p-5 rounded-2xl text-left bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm border border-green-100 hover:border-green-500 transition group flex items-center gap-4 relative overflow-hidden">
+              <button onClick={startFreeTalking} className="w-full p-5 rounded-2xl text-left bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm border border-green-100 hover:border-green-500 transition group flex items-center gap-4 relative overflow-hidden">
                   <div className="absolute top-3 right-3 bg-white/80 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-green-700 border border-green-200">🪙 토큰 2개 / 턴</div>
                   <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:scale-110 transition-transform"><MessageCircle /></div>
-                  <div><div className="text-lg font-bold text-slate-800">프리토킹 (Beta)</div><div className="text-sm text-slate-500">AI 친구 지민이와 자유 대화</div></div>
+                  <div><div className="text-lg font-bold text-slate-800">프리토킹 (Beta)</div><div className="text-sm text-slate-500">AI와 자유 대화</div></div>
               </button>
             </div>
           </div>
         )}
 
-        {/* ... category, history views (기존 동일) ... */}
+        {/* ... category, history views (기존 유지) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -487,7 +453,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 🔥 [개선된] 프리토킹 뷰 */}
+        {/* 🔥 [프리토킹 뷰] */}
         {viewMode === "freetalking" && (
           <div className="flex flex-col h-full">
              {/* 1. 페르소나 선택 화면 */}
@@ -647,7 +613,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- 모달들 --- */}
+      {/* --- 모달들 (생략 없음) --- */}
       {showNicknameModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl"><h2 className="text-xl font-black mb-1 text-slate-800">닉네임 설정</h2><input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl mb-4 font-bold text-center" value={userAlias} onChange={e => setUserAlias(e.target.value)} placeholder="예: 열공하는개미" /><button onClick={() => saveNickname(userAlias)} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button></div></div>)}
       
       {showInboxModal && (
