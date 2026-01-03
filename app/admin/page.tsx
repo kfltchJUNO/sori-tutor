@@ -49,7 +49,7 @@ export default function AdminPage() {
   // 🎭 캐스팅 상태
   const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore"); // Dialogue A
   const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); // Dialogue B
-  const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore"); // 🔥 단어/문장용 단독 성우
+  const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore"); // 단어/문장용
 
   const [mailContent, setMailContent] = useState("");
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -66,7 +66,6 @@ export default function AdminPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      // 본인 이메일 확인 (관리자 권한 체크)
       if (user && user.email === "ot.helper7@gmail.com") { 
         setIsAdmin(true);
         await fetchAllData();
@@ -107,7 +106,6 @@ export default function AdminPage() {
 
     setGeneratingId(item.id);
     try {
-        // 1. TTS 생성 요청
         const res = await fetch("/api/tts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -116,13 +114,10 @@ export default function AdminPage() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        // 2. Storage 업로드 (경로: curriculum/word/{id}.mp3)
-        const storagePath = `curriculum/${type}/${item.id}.mp3`;
-        const storageRef = ref(storage, storagePath);
+        const storageRef = ref(storage, `curriculum/${type}/${item.id}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
 
-        // 3. Firestore 업데이트
         const colName = type === "word" ? "sori_curriculum_word" : "sori_curriculum_sentence";
         await updateDoc(doc(db, colName, item.id), {
             audio_path: url, 
@@ -199,7 +194,15 @@ export default function AdminPage() {
     }
   };
 
-  // --- 기존 유틸리티 함수들 ---
+  const playAudio = (url: string) => {
+    try {
+      const audio = new Audio(url);
+      audio.play();
+    } catch (e) {
+      alert("오디오 재생 오류");
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) { processFile(e.dataTransfer.files[0]); } };
@@ -275,7 +278,6 @@ export default function AdminPage() {
                </form>
              </div>
              
-             {/* 보이스 캐스팅 패널 (통합) */}
              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 shadow-sm animate-fade-in-up">
                 <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">🎙️ 보이스 캐스팅 (Chirp 3 HD)</h3>
                 <div className="space-y-3">
@@ -296,7 +298,6 @@ export default function AdminPage() {
                 </div>
              </div>
 
-             {/* CSV 업로드 UI */}
              <div 
                className={`p-6 rounded-lg shadow border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[150px] ${isDragging ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300 hover:border-blue-400'}`}
                onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
@@ -322,7 +323,17 @@ export default function AdminPage() {
                    <span className="font-bold align-middle truncate">{item.text||item.title}</span>
                  </div>
                  <div className="flex gap-2 items-center shrink-0 ml-2">
-                    {/* 🔥 [수정됨] TypeScript 오류 해결: 조건부 호출 및 타입 단언 사용 */}
+                    
+                    {/* 🔥 [복구됨] 미리듣기 버튼 */}
+                    {item.has_audio && (item.audio_path || (item.audio_paths && item.audio_paths.length > 0)) && (
+                        <button 
+                          onClick={() => playAudio(item.audio_path || item.audio_paths[0])}
+                          className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold flex items-center gap-1 hover:bg-purple-200"
+                        >
+                          ▶️
+                        </button>
+                    )}
+
                     <button 
                       onClick={() => activeTab === "dialogue" 
                         ? handleGenerateDialogueTTS(item) 
