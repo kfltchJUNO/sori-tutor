@@ -51,14 +51,12 @@ const WELCOME_MESSAGE = {
 - 소리튜터 운영진 드림 -`
 };
 
-// 🎭 프리토킹 페르소나 데이터
 const PERSONAS = [
     { id: 'su', name: '수경', desc: '차분하고 상냥한 친구', voice: 'ko-KR-Chirp3-HD-Zephyr', color: 'bg-pink-100 text-pink-600' },
     { id: 'min', name: '민철', desc: '활기차고 에너지 넘치는 친구', voice: 'ko-KR-Chirp3-HD-Rasalgethi', color: 'bg-blue-100 text-blue-600' }
 ];
 
 export default function Home() {
-  // --- 상태 관리 ---
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("guest");
   
@@ -154,10 +152,15 @@ export default function Home() {
         });
         setUserRole("guest"); setHearts(3); setShowNicknameModal(true);
       }
+    } else {
+        setUserRole("guest");
+        setHearts(3);
+        setTokens(0);
+        setUserAlias("");
     }
   };
 
-  // --- 🔥 [중요] 함수 정의 위치 이동 (Hoisting 문제 해결) ---
+  // --- 함수 정의 위치 수정 (Hoisting 해결) ---
   const checkNewMail = async (email: string) => {
     const q = query(collection(db, "sori_users", email, "inbox"), where("read", "==", false));
     const snap = await getDocs(q);
@@ -202,6 +205,10 @@ export default function Home() {
     setHasNewMail(false);
   };
 
+  const handleLogout = async () => {
+    if (confirm("로그아웃 하시겠습니까?")) { await signOut(auth); window.location.reload(); }
+  };
+
   const handleSendInquiry = async () => {
     if (!inquiryContent.trim()) return alert("내용을 입력해주세요.");
     if (!confirm("문의를 보내시겠습니까?")) return;
@@ -219,10 +226,6 @@ export default function Home() {
       setInquiryContent("");
       setInboxTab('received');
     } catch (e) { alert("전송 실패"); }
-  };
-
-  const handleLogout = async () => {
-    if (confirm("로그아웃 하시겠습니까?")) { await signOut(auth); window.location.reload(); }
   };
 
   const saveNickname = async (newAlias: string) => {
@@ -297,10 +300,10 @@ export default function Home() {
         const res = await fetch("/api/chat", { method: "POST", body: formData });
         const data = await res.json();
 
-        // 사용자 메시지와 AI 메시지 업데이트
+        // 🔥 [수정됨] 사용자가 말한 내용(STT)과 AI의 답변을 순차적으로 추가
         const newHistory = [
             ...chatHistory, 
-            {role: 'user', text: data.userText} as any, // 사용자의 말 (STT)
+            {role: 'user', text: data.userText} as any, 
             {role: 'model', text: data.aiText, audio: data.audioContent ? `data:audio/mp3;base64,${data.audioContent}` : null}
         ];
         setChatHistory(newHistory);
@@ -463,7 +466,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category ... */}
+        {/* ... category, history views (기존 동일) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -595,7 +598,7 @@ export default function Home() {
           
           {viewMode === "freetalking" ? (
              <div className="flex flex-col items-center gap-4">
-                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">AI가 대화를 듣고 있어요... 🤔</div>}
+                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">지민이가 생각하고 있어요... 🤔</div>}
                  {!recording && !loading && (
                      <button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>
                  )}
@@ -644,7 +647,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- 모달들 (생략 없음) --- */}
+      {/* --- 모달들 --- */}
       {showNicknameModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl"><h2 className="text-xl font-black mb-1 text-slate-800">닉네임 설정</h2><input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl mb-4 font-bold text-center" value={userAlias} onChange={e => setUserAlias(e.target.value)} placeholder="예: 열공하는개미" /><button onClick={() => saveNickname(userAlias)} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button></div></div>)}
       
       {showInboxModal && (

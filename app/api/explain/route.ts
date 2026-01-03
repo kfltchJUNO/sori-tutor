@@ -4,9 +4,9 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const modelCandidates = [
-  "gemini-2.0-flash-lite", // 1순위: 최신 가성비
-  "gemini-2.5-flash",      // 2순위: 최신 고성능
-  "gemini-2.0-flash",      // 3순위: 안정형 (fallback)
+  "gemini-2.0-flash-lite", // 1순위: 가성비
+  "gemini-2.5-flash",      // 2순위: 성능
+  "gemini-2.0-flash",      // 3순위: 안정성
 ];
 
 export async function POST(req: Request) {
