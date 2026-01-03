@@ -8,11 +8,26 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, uploadString, getDownloadURL } from "firebase/storage"; 
 
-// 🎤 Chirp 3 HD 성우 리스트 (기존 유지)
 const VOICE_OPTIONS = [
   { label: "--- 👩 여성 성우 (Chirp 3 HD) ---", value: "", disabled: true },
   { label: "👩 Pulcherrima (직원 느낌)", value: "ko-KR-Chirp3-HD-Pulcherrima" },
-  // ... (기존 목록 유지) ...
+  { label: "👩 Zephyr (차분함)", value: "ko-KR-Chirp3-HD-Zephyr" },
+  { label: "👩 Sulafat (차분한데 조금 느림)", value: "ko-KR-Chirp3-HD-Sulafat" },
+  { label: "👩 Despina (차분함)", value: "ko-KR-Chirp3-HD-Despina" },
+  { label: "👩 Leda (자연스러움)", value: "ko-KR-Chirp3-HD-Leda" },
+  { label: "👩 Laomedeia (조금 낮고 차분함)", value: "ko-KR-Chirp3-HD-Laomedeia" },
+  { label: "👩 Kore (아나운서 느낌)", value: "ko-KR-Chirp3-HD-Kore" },
+  { label: "👩 Gacrux (중년 느낌)", value: "ko-KR-Chirp3-HD-Gacrux" },
+  { label: "--- 👨 남성 성우 (Chirp 3 HD) ---", value: "", disabled: true },
+  { label: "👨 Umbriel (차분함)", value: "ko-KR-Chirp3-HD-Umbriel" },
+  { label: "👨 Rasalgethi (밝고 발랄한 느낌)", value: "ko-KR-Chirp3-HD-Rasalgethi" },
+  { label: "👨 Sadachibia (밝고 발랄한 느낌)", value: "ko-KR-Chirp3-HD-Sadachibia" },
+  { label: "👨 Sadaltager (낮고, 조금 처진 느낌)", value: "ko-KR-Chirp3-HD-Sadaltager" },
+  { label: "👨 Enceladus (코맹맹이 목소리)", value: "ko-KR-Chirp3-HD-Enceladus" },
+  { label: "👨 Puck (밝음)", value: "ko-KR-Chirp3-HD-Puck" },
+  { label: "👨 Iapetus (차분한 후배 느낌)", value: "ko-KR-Chirp3-HD-Iapetus" },
+  { label: "👨 Charon (가벼운 선배 느낌)", value: "ko-KR-Chirp3-HD-Charon" },
+  { label: "👨 Alnilam (자연스러움)", value: "ko-KR-Chirp3-HD-Alnilam" },
   { label: "👨 Algieba (낮고 차분함)", value: "ko-KR-Chirp3-HD-Algieba" },
 ];
 
@@ -40,7 +55,6 @@ export default function AdminPage() {
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>("");
-  
   const [newWord, setNewWord] = useState({ category: "비음화", text: "", pronunciation: "", tip: "" });
   const [newSentence, setNewSentence] = useState({ category: "인사", text: "", pronunciation: "", translation: "" });
   const [newDialogue, setNewDialogue] = useState({ category: "식당", title: "", script: "", translation: "" });
@@ -82,7 +96,7 @@ export default function AdminPage() {
   const handleGenerateSingleTTS = async (item: any, type: "word" | "sentence") => {
     if (!item.text) return alert("텍스트가 없습니다.");
     
-    // 🔥 발음기호 우선 읽기 로직 (대괄호 제거)
+    // 🔥 발음기호 우선 읽기 (대괄호 제거)
     let textToSpeak = item.text;
     if (type === "word" && item.pronunciation) {
         textToSpeak = item.pronunciation.replace(/[\[\]]/g, ""); 
@@ -126,11 +140,7 @@ export default function AdminPage() {
 
   const handleGenerateDialogueTTS = async (dialogue: any) => {
     if (!dialogue.script) return alert("스크립트가 없습니다.");
-    
-    const voiceALabel = VOICE_OPTIONS.find(v => v.value === castA)?.label;
-    const voiceBLabel = VOICE_OPTIONS.find(v => v.value === castB)?.label;
-
-    if (!confirm(`'${dialogue.title}'의 음성을 생성하시겠습니까?\n\n🎙️ A: ${voiceALabel}\n🎙️ B: ${voiceBLabel}`)) return;
+    if (!confirm(`'${dialogue.title}' 생성?`)) return;
 
     setGeneratingId(dialogue.id);
     try {
@@ -138,46 +148,25 @@ export default function AdminPage() {
         const [role, text] = line.split(":");
         return { role: role?.trim(), text: text?.trim() };
       });
-
       const audioUrls = [];
-
       for (let i = 0; i < lines.length; i++) {
         const { role, text } = lines[i];
-        if (!text) {
-          audioUrls.push(""); 
-          continue;
-        }
-        const selectedVoice = role === "A" ? castA : castB;
-
+        if (!text) { audioUrls.push(""); continue; }
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voiceName: selectedVoice }),
+          body: JSON.stringify({ text, voiceName: role === "A" ? castA : castB }),
         });
         const data = await res.json();
-        if (data.error) throw new Error(data.error);
-
         const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
         audioUrls.push(url);
       }
-
-      await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), {
-        audio_paths: audioUrls,
-        has_audio: true,
-        voices: { A: castA, B: castB }
-      });
-
-      alert("✅ 다이얼로그 생성 완료!");
+      await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), { audio_paths: audioUrls, has_audio: true, voices: { A: castA, B: castB } });
+      alert("완료!");
       fetchData("sori_curriculum_dialogue", setDialogues);
-
-    } catch (e: any) {
-      alert("실패: " + e.message);
-      console.error(e);
-    } finally {
-      setGeneratingId(null);
-    }
+    } catch (e: any) { alert("실패: " + e.message); } finally { setGeneratingId(null); }
   };
 
   const playAudio = (url: string) => {
@@ -189,11 +178,11 @@ export default function AdminPage() {
     }
   };
 
-  // --- 🔥 [수정] 삭제 오류 해결 (Optimistic Update) ---
+  // 🔥 [수정] 삭제 오류 해결 (Optimistic Update)
   const handleDelete = async (id: string, type: any) => {
     if(!confirm("정말 삭제하시겠습니까?")) return;
     
-    // UI에서 먼저 제거 (유령 데이터 방지)
+    // UI에서 먼저 제거
     if (type === 'word') setProblems(prev => prev.filter(i => i.id !== id));
     else if (type === 'sentence') setSentences(prev => prev.filter(i => i.id !== id));
     else setDialogues(prev => prev.filter(i => i.id !== id));
@@ -325,10 +314,28 @@ export default function AdminPage() {
                    <span className="font-bold align-middle truncate">{item.text||item.title}</span>
                  </div>
                  <div className="flex gap-2 items-center shrink-0 ml-2">
+                    
+                    {/* 🔥 [복구된 기능] 미리듣기 버튼 */}
                     {item.has_audio && (item.audio_path || (item.audio_paths && item.audio_paths.length > 0)) && (
-                        <button onClick={() => playAudio(item.audio_path || item.audio_paths[0])} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold flex items-center gap-1 hover:bg-purple-200">▶️</button>
+                        <button 
+                          onClick={() => playAudio(item.audio_path || item.audio_paths[0])}
+                          className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold flex items-center gap-1 hover:bg-purple-200"
+                        >
+                          ▶️
+                        </button>
                     )}
-                    <button onClick={() => activeTab === "dialogue" ? handleGenerateDialogueTTS(item) : handleGenerateSingleTTS(item, activeTab as "word" | "sentence")} disabled={generatingId === item.id} className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}>{generatingId === item.id ? "⏳" : item.has_audio ? "🔊 재생성" : "🔊 생성"}</button>
+
+                    <button 
+                      onClick={() => activeTab === "dialogue" 
+                        ? handleGenerateDialogueTTS(item) 
+                        : handleGenerateSingleTTS(item, activeTab as "word" | "sentence")
+                      } 
+                      disabled={generatingId === item.id}
+                      className={`text-xs border px-2 py-1 rounded font-bold flex items-center gap-1 transition ${item.has_audio ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'}`}
+                    >
+                      {generatingId === item.id ? "⏳" : item.has_audio ? "🔊 재생성" : "🔊 생성"}
+                    </button>
+                    
                     <button onClick={()=>startEdit(item,activeTab)} className="text-blue-600 text-xs border px-2 py-1 rounded hover:bg-blue-50">수정</button>
                     <button onClick={()=>handleDelete(item.id,activeTab)} className="text-red-500 text-xs border px-2 py-1 rounded hover:bg-red-50">삭제</button>
                  </div>

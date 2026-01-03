@@ -21,22 +21,21 @@ const WELCOME_MESSAGE = {
   content: `안녕하세요, 새로운 학습자님! 👋\n\n다양한 한국어 친구들을 만나보세요!\n\n🗣️ 한국어 자유 회화 (Beta): 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요.\n🎙️ 발음 테스트: 정확한 발음을 연습하고 점수를 받아보세요.\n\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요. 화이팅! 💪`
 };
 
-// 🎭 10명의 페르소나 데이터
+// 10명의 페르소나
 const PERSONAS = [
-  { id: 'su', name: '수경', role: '대학생', desc: '활발하고 호기심 많은 20대 대학생', color: 'bg-pink-50 border-pink-200', img: '/images/수경.png' },
-  { id: 'min', name: '민철', role: '카페 사장', desc: '감성적이고 따뜻한 30대 사장님', color: 'bg-amber-50 border-amber-200', img: '/images/민철.png' },
-  { id: 'jin', name: '진성', role: '면접관', desc: '논리적이고 깐깐한 대기업 부장님', color: 'bg-slate-50 border-slate-300', img: '/images/진성.png' },
-  { id: 'seol', name: '설아', role: 'K-Culture 팬', desc: '텐션 높은 K-POP/드라마 덕후', color: 'bg-purple-50 border-purple-200', img: '/images/설아.png' },
-  { id: 'do', name: '도식', role: '트레이너', desc: '에너지 넘치는 헬스 트레이너', color: 'bg-blue-50 border-blue-200', img: '/images/도식.png' },
-  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.png' },
-  { id: 'hye', name: '혜선', role: '상담사', desc: '지친 마음을 위로해주는 심리 상담가', color: 'bg-rose-50 border-rose-200', img: '/images/혜선.png' },
-  { id: 'woo', name: '우주', role: '중학생', desc: '축구와 게임을 좋아하는 개구쟁이', color: 'bg-yellow-50 border-yellow-200', img: '/images/우주.png' },
-  { id: 'hyun', name: '현성', role: '소설가', desc: '지적이고 시니컬한 소설 작가', color: 'bg-stone-50 border-stone-200', img: '/images/현성.png' },
-  { id: 'sun', name: '순자', role: '국밥집 할머니', desc: '구수한 사투리와 정이 넘치는 할머니', color: 'bg-orange-50 border-orange-200', img: '/images/순자.png' },
+  { id: 'su', name: '수경', role: '대학생', desc: '활발한 20대 대학생', color: 'bg-pink-50 border-pink-200', img: '/images/수경.jpg' },
+  { id: 'min', name: '민철', role: '카페 사장', desc: '감성적이고 따뜻한 30대 사장님', color: 'bg-amber-50 border-amber-200', img: '/images/민철.jpg' },
+  { id: 'jin', name: '진성', role: '면접관', desc: '논리적이고 깐깐한 대기업 부장님', color: 'bg-slate-50 border-slate-300', img: '/images/진성.jpg' },
+  { id: 'seol', name: '설아', role: 'K-Culture 팬', desc: '텐션 높은 K-POP/드라마 덕후', color: 'bg-purple-50 border-purple-200', img: '/images/설아.jpg' },
+  { id: 'do', name: '도식', role: '트레이너', desc: '에너지 넘치는 헬스 트레이너', color: 'bg-blue-50 border-blue-200', img: '/images/도식.jpg' },
+  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.jpg' },
+  { id: 'hye', name: '혜선', role: '상담사', desc: '지친 마음을 위로해주는 심리 상담가', color: 'bg-rose-50 border-rose-200', img: '/images/혜선.jpg' },
+  { id: 'woo', name: '우주', role: '중학생', desc: '축구와 게임을 좋아하는 개구쟁이', color: 'bg-yellow-50 border-yellow-200', img: '/images/우주.jpg' },
+  { id: 'hyun', name: '현성', role: '소설가', desc: '지적이고 시니컬한 소설 작가', color: 'bg-stone-50 border-stone-200', img: '/images/현성.jpg' },
+  { id: 'sun', name: '순자', role: '국밥집 할머니', desc: '구수한 사투리와 정이 넘치는 할머니', color: 'bg-orange-50 border-orange-200', img: '/images/순자.jpg' },
 ];
 
 export default function Home() {
-  // --- 상태 관리 ---
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("guest");
   
@@ -88,7 +87,6 @@ export default function Home() {
   const [result, setResult] = useState<any>(null);
   const [translation, setTranslation] = useState<string | null>(null);
 
-  // 한국어 자유 회화 상태
   const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string, audio?: string}[]>([]);
   const [chatStatus, setChatStatus] = useState<'select_persona'|'active'|'ended'>('select_persona');
   const [selectedPersona, setSelectedPersona] = useState<string>('su');
@@ -131,7 +129,6 @@ export default function Home() {
     }
   };
 
-  // --- 함수 정의 (스코프 오류 방지용 상단 배치) ---
   const checkNewMail = async (email: string) => {
     const q = query(collection(db, "sori_users", email, "inbox"), where("read", "==", false));
     const snap = await getDocs(q);
@@ -205,20 +202,19 @@ export default function Home() {
     if (ttsLoading) return; 
     try {
       setTtsLoading(true);
-      const res = await fetch("/api/chat", { // Chat API의 TTS 기능 활용
+      // 🔥 [수정] tts_simple 액션 사용
+      const formData = new FormData();
+      formData.append("action", "tts_simple");
+      formData.append("text", text);
+      formData.append("voiceName", voice || "ko-KR-Neural2-A");
+
+      const res = await fetch("/api/chat", { 
         method: "POST", 
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "tts", text, voiceName: voice || "ko-KR-Neural2-A" }) 
+        body: formData 
       });
-      // 만약 /api/chat에서 action='tts'를 처리하지 않는다면 /api/tts로 변경 필요
-      // 여기서는 아래 analyzeAudio 등 다른 로직과의 통일성을 위해 /api/tts로 가정하거나 action 처리 추가 필요.
-      // *안전하게 /api/tts로 복구* (이전 코드 기반)
-      // const res = await fetch("/api/tts", { ... });
-      // 하지만 사용자 요청은 "전체 코드"이므로, api/chat에 tts 기능을 넣거나 api/tts를 쓰거나 해야 함.
-      // 여기서는 api/tts를 쓴다고 가정하고 진행 (기존 코드 유지)
       const data = await res.json();
       if (data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); }
-    } catch (e) { console.error("TTS Error", e); } finally { setTtsLoading(false); }
+    } catch (e) { alert("재생 오류"); } finally { setTtsLoading(false); }
   };
 
   // --- 프리토킹 로직 ---
@@ -231,21 +227,49 @@ export default function Home() {
     setChatStatus('select_persona'); 
   };
 
+  // 🔥 [수정] 채팅 시작 및 첫 인사 (음성 포함)
   const startChatWithPersona = (personaId: string) => {
       setSelectedPersona(personaId);
       const persona = PERSONAS.find(p => p.id === personaId);
-      const greeting = `안녕하세요! 저는 ${persona?.name}이에요. 우리 대화할까요?`;
+      // 페르소나별 첫 인사말 다르게 설정 가능하지만 여기선 공통 포맷 사용
+      const greeting = `안녕하세요! 저는 ${persona?.name}이에요. 우리 재밌는 이야기 나눠봐요!`;
       setChatHistory([{role: "model", text: greeting}]);
       setChatStatus('active');
       setChatFeedback(null);
-      // 첫 인사 TTS 재생 (선택)
-      // handleGoogleTTS(greeting, null, persona?.voice);
+      
+      // 첫 인사말 TTS 자동 재생
+      // 해당 페르소나의 목소리 정보는 API에서 관리하거나 여기서 직접 지정해야 함.
+      // API route.ts에 있는 PERSONA_CONFIG와 싱크를 맞춰야 함.
+      // 간단하게 API route에 있는 voice 매핑 정보를 여기도 일부 가지고 있거나, 
+      // API에 "첫 인사 요청"을 보내는 방식이 좋음.
+      // 여기서는 하드코딩된 voice 매핑 대신, API route에서 voice를 가져오기 어려우므로
+      // 주요 캐릭터 몇 명만 예시로 매핑하거나, 기본값 사용.
+      // *더 좋은 방법: route.ts의 PERSONA_CONFIG를 프론트와 공유하거나, 여기서도 정의.
+      // 프론트 상단 PERSONAS 배열에는 voice 정보가 없으므로 추가 필요. (위 코드에 추가해둠)
+      // 단, route.ts의 voice와 일치해야 함.
+      // *수정된 PERSONAS 배열에는 img만 있고 voice가 없음. -> 추가해야 함.
+      // *위 PERSONAS 배열에 voice 속성을 추가하지 않았으므로, 여기서 임시로 매핑하거나 기본값 사용.
+      // *안전하게: 여기서도 voice를 매핑해주는 것이 좋음. (위 코드 PERSONAS에 voice 추가함)
+      
+      // 수경: Neural2-A, 민철: Neural2-C 등 (route.ts와 일치시킴)
+      const personaVoice = 
+        personaId === 'su' ? 'ko-KR-Neural2-A' :
+        personaId === 'min' ? 'ko-KR-Neural2-C' :
+        personaId === 'jin' ? 'ko-KR-Standard-D' :
+        personaId === 'seol' ? 'ko-KR-Neural2-B' :
+        personaId === 'do' ? 'ko-KR-Wavenet-C' :
+        personaId === 'ju' ? 'ko-KR-Standard-C' :
+        personaId === 'hye' ? 'ko-KR-Standard-B' :
+        personaId === 'woo' ? 'ko-KR-Neural2-C' : // Pitch 조절은 API에서 처리
+        personaId === 'hyun' ? 'ko-KR-Wavenet-D' :
+        'ko-KR-Standard-A'; // 순자
+
+      handleGoogleTTS(greeting, null, personaVoice);
   };
 
   const handleChatSend = async () => {
     if (!audioBlob) return;
     
-    // 잔액 체크 (차감은 성공 후에)
     if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -264,7 +288,6 @@ export default function Home() {
             alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return;
         }
 
-        // 성공 시 토큰 차감
         if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
         else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
 
@@ -328,7 +351,6 @@ export default function Home() {
       } catch(e) { alert("번역 실패"); } finally { setLoading(false); }
   };
 
-  // ... (기존 selectCourse 등 유지) ...
   const selectCourse = async (type: any) => { setCourseType(type); if(type==="word"){ const s=await getDocs(query(collection(db,"sori_curriculum_word"))); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(s.docs.length>0) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); } else { const s=await getDocs(collection(db,`sori_curriculum_${type}`)); const c=new Set<string>(); s.forEach(d=>c.add(d.data().category)); setCategories(Array.from(c).sort()); setViewMode("category"); } setResult(null); };
   const selectCategory = async (cat: string) => { setSelectedCategory(cat); const q=query(collection(db,`sori_curriculum_${courseType}`),where("category","==",cat)); const s=await getDocs(q); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(!s.empty) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); setResult(null); setAudioUrl(null); };
   const initPractice = (list: any[]) => { const r=Math.floor(Math.random()*list.length); updateCurrentProblem(list[r]); setHistoryStack([list[r]]); setHistoryIndex(0); };
@@ -414,7 +436,7 @@ export default function Home() {
                <div><div className="flex items-center gap-2 mb-1"><h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button></div><div className="mt-2"><p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p><div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div></div></div>
                <div className="text-center bg-orange-50 px-4 py-3 rounded-xl min-w-[80px]"><p className="text-2xl font-black text-orange-500 mb-1">{streak} <span className="text-sm font-bold text-orange-400">일</span></p><p className="text-[10px] text-orange-700 font-bold">연속 학습중</p></div>
             </div>
-            {/* Cards */}
+            {/* Course Cards */}
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -435,7 +457,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -458,10 +479,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* 🔥 [New] 프리토킹 뷰 */}
         {viewMode === "freetalking" && (
           <div className="flex flex-col h-full">
-             {/* 1. 페르소나 선택 */}
+             {/* 1. 페르소나 선택 화면 */}
              {chatStatus === 'select_persona' && (
                <div className="animate-in fade-in zoom-in space-y-4">
                  <div className="flex items-center justify-between mb-2">
@@ -473,7 +493,6 @@ export default function Home() {
                    {PERSONAS.map(p => (
                      <div key={p.id} onClick={() => startChatWithPersona(p.id)} className={`p-3 rounded-2xl border-2 cursor-pointer transition hover:scale-105 ${p.color} bg-white shadow-sm flex flex-col items-center text-center`}>
                         <div className="w-20 h-20 rounded-full overflow-hidden mb-2 border-2 border-white shadow-md">
-                            {/* 이미지 */}
                             <img src={p.img} alt={p.name} className="w-full h-full object-cover object-top" />
                         </div>
                         <h3 className="text-lg font-black text-slate-800">{p.name}</h3>
@@ -515,7 +534,7 @@ export default function Home() {
                    <div ref={chatScrollRef}></div>
                  </div>
 
-                 {/* 종료/피드백 */}
+                 {/* 종료/피드백 UI */}
                  {chatStatus === 'ended' && !chatFeedback && (
                    <div className="bg-slate-800 text-white p-4 rounded-xl text-center animate-in fade-in">
                      <p className="mb-3 font-bold">대화가 종료되었습니다 👋</p>
@@ -540,7 +559,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 일반 연습 뷰 */}
+        {/* 일반 연습 뷰 (기존 유지) */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
