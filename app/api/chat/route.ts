@@ -12,7 +12,7 @@ const PERSONA_CONFIG: any = {
   hye: { name: '혜선', voice: 'ko-KR-Chirp3-HD-Aoede', style: '고민 상담사', prompt: '40대 심리 상담가. 차분하고 위로가 되는 말투. 감정을 표현하고 위로받는 대화. 공감하는 리액션("그랬군요", "힘드셨겠어요").' },
   woo: { name: '우주', voice: 'ko-KR-Chirp3-HD-Charon', style: '개구쟁이 중학생', prompt: '잘생긴 중학생 남자아이. 축구와 장난을 좋아함. 솔직하고 엉뚱한 질문. 초급 학습자용 쉬운 단어. "요"자를 빼먹는 반말 섞인 말투.' }, 
   hyun: { name: '현성', voice: 'ko-KR-Chirp3-HD-Zubenelgenubi', style: '소설가', prompt: '30대 후반의 작가. 약간은 시니컬하지만 지적인 대화를 즐김. 철학적인 주제나 추리, 문학 이야기. 문어체에 가까운 세련된 어휘 사용.' },
-  sun: { name: '순자 할머니', voice: 'ko-KR-Chirp3-HD-Vindemiatrix', style: '시장통 국밥집 할머니', prompt: '70대 시장 상인. 평소엔 손주 대하듯 아주 다정하고 느릿하게 말하지만, 가끔 욱하거나 목소리가 커짐(츤데레). "아이고, 밥은 먹었능가?", "이눔아!" 같은 구수한 사투리 반말 사용.' } 
+  sun: { name: '순자 할머니', voice: 'ko-KR-Chirp3-HD-Vindemiatrix', style: '시장통 국밥집 할머니', prompt: '70대 시장 상인. 정이 많지만 목소리가 크고 사투리 억양을 씀. 한국의 정 문화와 생활 사투리 체험. 구수한 반말("밥은 먹었어?", "왔능가").' } 
 };
 
 export async function POST(req: Request) {
@@ -20,11 +20,22 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const action = formData.get("action") as string; 
     
-    // API Key 로드
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    // 🔥 [수정] API Key 로드 로직 강화 (여러 변수명 체크)
+    const apiKey = process.env.GOOGLE_API_KEY || 
+                   process.env.GOOGLE_TTS_API_KEY || 
+                   process.env.GEMINI_API_KEY;
+                   
+    // TTS 키가 별도로 없으면 기본 API 키 사용
     const ttsApiKey = process.env.GOOGLE_TTS_API_KEY || apiKey;
 
-    if (!apiKey) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+    // 디버깅용 로그 (배포 환경에서 로그 확인 가능)
+    console.log(`[API Check] Action: ${action}, Key Exists: ${!!apiKey}`);
+
+    if (!apiKey) {
+        return NextResponse.json({ 
+            error: "Server Error: API Key is missing. Please check .env file or Vercel settings." 
+        }, { status: 500 });
+    }
     
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -106,7 +117,8 @@ export async function POST(req: Request) {
           });
           const ttsData = await ttsRes.json();
           if (ttsData.audioContent) audioContent = ttsData.audioContent;
-      } catch (e) { console.error("TTS Error", e); }
+          else console.error("TTS API Error:", ttsData);
+      } catch (e) { console.error("TTS Net Error", e); }
 
       return NextResponse.json({ 
           userText: aiData.userTranscript || "(...)", 
@@ -172,7 +184,7 @@ export async function POST(req: Request) {
         } catch (e) { return NextResponse.json({ error: "Translation failed" }, { status: 500 }); }
     }
 
-    // --- [기능 5] 🔥 단순 TTS (첫 인사용) ---
+    // --- [기능 5] 단순 TTS (첫 인사용) ---
     if (action === "tts_simple") {
         const text = formData.get("text") as string;
         const voiceName = formData.get("voiceName") as string;
@@ -192,6 +204,12 @@ export async function POST(req: Request) {
                     audioConfig: { audioEncoding: "MP3", speakingRate, pitch }
                 })
             });
+            
+            if (!ttsRes.ok) {
+                console.error("Simple TTS API Error:", await ttsRes.text());
+                throw new Error("TTS API call failed");
+            }
+
             const ttsData = await ttsRes.json();
             return NextResponse.json({ audioContent: ttsData.audioContent });
         } catch (e) {
@@ -202,6 +220,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 
   } catch (error: any) {
+    console.error("API Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
