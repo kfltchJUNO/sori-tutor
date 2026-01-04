@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     if (!apiKey) throw new Error("API Key missing");
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const arrayBuffer = await audioFile.arrayBuffer();
     const base64Audio = Buffer.from(arrayBuffer).toString("base64");

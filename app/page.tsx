@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import Login from "./components/Login";
 import HistoryItem from "./components/HistoryItem"; 
+import AdModal from "./components/AdModal"; 
+
 import { db, auth } from "@/lib/firebase"; 
 import { signOut } from "firebase/auth"; 
 import { 
@@ -12,13 +14,44 @@ import {
   Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, Volume2, Info, CheckCircle, Send, MessageCircle, Languages, Crown
 } from 'lucide-react';
 
+// 🔥 [수정] 요청하신 환영 메시지 내용 적용
 const WELCOME_MESSAGE = {
   id: 'welcome-guide',
   from: '소리튜터 운영진',
-  title: "🎉 소리튜터에 오신 것을 환영합니다!",
+  title: "🎉 소리튜터에 오신 것을 환영합니다! (사용 설명서 포함)",
   date: new Date(), 
-  read: false,
-  content: `안녕하세요, 새로운 학습자님! 👋\n\n다양한 한국어 친구들을 만나보세요!\n\n🗣️ 한국어 자유 회화 (Beta): 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요.\n🎙️ 발음 테스트: 정확한 발음을 연습하고 점수를 받아보세요.\n\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요. 화이팅! 💪`
+  read: true, // 로컬 메시지는 항상 읽음 처리 (빨간점 X)
+  content: `안녕하세요, 새로운 학습자님! 👋
+
+한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.
+소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.
+
+🚀 이렇게 시작해보세요!
+🎙️ 발음 테스트: 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)
+🎭 실전 회화 (롤플레잉): '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
+🗣️ 한국어 자유 회화: 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.
+📊 랭킹 도전: 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!
+
+💡 왜 소리튜터인가요?
+* Expert-Led Content: 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
+* High-End AI: 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.) 오프라인 학원 수강료 대비 합리적인 비용으로 24시간 코칭을 받아보세요.
+
+📢 충전 및 이용 안내 (Pre-Launch) 정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
+다소 번거로우시더라도, 수수료 절감분을 더 높은 퀄리티의 AI 모델 유지에 재투자하기 위함이니 양해 부탁드립니다.
+초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.
+(추후 상위 이용자 대상 커피 쿠폰 제공 등의 이벤트 기획중)
+
+🎁 7일 연속 학습 챌린지!
+작심삼일은 이제 그만! 확실한 동기부여를 드립니다.
+* 미션: 7일 동안 매일 5번 이상 연습하기
+* 선물: 미션 성공 시 15 토큰 즉시 지급!
+
+로그인 시 매일 무료 하트 3개가 충전됩니다. 부담없이 사용해 보세요.
+학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요.
+학습이 끝나면 [👋] 아이콘으로 로그아웃 하시면 됩니다.
+당신의 한국어가 유창해지는 그날까지 소리튜터가 함께하겠습니다. 화이팅! 💪
+
+- 소리튜터 운영진 드림 -`
 };
 
 const PERSONAS = [
@@ -58,6 +91,9 @@ export default function Home() {
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [showPersonaRanking, setShowPersonaRanking] = useState(false);
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState<any>(null); 
+  const [showAdModal, setShowAdModal] = useState(false);
 
   const [viewMode, setViewMode] = useState("home"); 
   const [courseType, setCourseType] = useState<"word" | "sentence" | "dialogue" | null>(null);
@@ -72,7 +108,7 @@ export default function Home() {
   const [completedLines, setCompletedLines] = useState<number[]>([]);
   const [rankingList, setRankingList] = useState<any[]>([]);
   const [historyList, setHistoryList] = useState<any[]>([]); 
-  const [historyTab, setHistoryTab] = useState<"all" | "word" | "sentence" | "dialogue">("all");
+  const [historyTab, setHistoryTab] = useState<"all" | "word" | "sentence" | "dialogue" | "free_talking">("all");
   
   const [parsedScript, setParsedScript] = useState<{role: string, text: string}[]>([]);
   const [myRole, setMyRole] = useState<"A" | "B">("A"); 
@@ -140,6 +176,30 @@ export default function Home() {
     setHasNewMail(!snap.empty); 
   };
 
+  // 🔥 [수정] 우체통 열기 (확인한 메시지 빨간 점 제거)
+  const fetchInbox = async () => {
+    if (!currentUser) return;
+    const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
+    const snap = await getDocs(q);
+    const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    // 1. 읽지 않은 메시지 DB 업데이트 (Batch)
+    const unread = dbMsgs.filter((m: any) => !m.read);
+    if (unread.length > 0) {
+      const batch = writeBatch(db);
+      unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
+      await batch.commit(); 
+    }
+
+    // 2. UI 목록 업데이트 (모두 읽음 상태로 표시하여 빨간 점 즉시 제거)
+    const readMsgs = dbMsgs.map((m: any) => ({ ...m, read: true }));
+
+    setInboxList([WELCOME_MESSAGE, ...readMsgs]);
+    setShowInboxModal(true);
+    setInboxTab('received');
+    setHasNewMail(false); // 상단 빨간 점 제거
+  };
+
   const fetchHistory = async () => { 
     if (!currentUser) return; 
     setLoading(true); 
@@ -152,23 +212,6 @@ export default function Home() {
     setHistoryList(safeList); 
     setViewMode("history"); 
     setLoading(false); 
-  };
-
-  const fetchInbox = async () => {
-    if (!currentUser) return;
-    const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
-    const snap = await getDocs(q);
-    const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    setInboxList([WELCOME_MESSAGE, ...dbMsgs]);
-    setShowInboxModal(true);
-    setInboxTab('received');
-    const unread = dbMsgs.filter((m: any) => !m.read);
-    if (unread.length > 0) {
-      const batch = writeBatch(db);
-      unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
-      await batch.commit(); 
-    }
-    setHasNewMail(false);
   };
 
   const handleSendInquiry = async () => {
@@ -211,7 +254,20 @@ export default function Home() {
     } catch (e) { alert("재생 오류"); } finally { setTtsLoading(false); }
   };
 
-  // --- 프리토킹 로직 ---
+  const handleAdReward = async (amount: number) => {
+      setShowAdModal(false); 
+      const userRef = doc(db, "sori_users", currentUser.email);
+      if (userRole === 'guest') {
+           setHearts(prev => prev + amount);
+           await updateDoc(userRef, { free_hearts: increment(amount) });
+           alert(`🎉 축하합니다! 무료 하트 ${amount}개를 획득했습니다!`);
+      } else {
+           setTokens(prev => prev + amount);
+           await updateDoc(userRef, { tokens: increment(amount) });
+           alert(`🎉 축하합니다! 토큰 ${amount}개를 획득했습니다!`);
+      }
+  };
+
   const enterFreeTalking = () => {
     if (tokens < 2 && userRole !== 'guest') { 
         if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true); 
@@ -224,18 +280,22 @@ export default function Home() {
   const startChatWithPersona = (personaId: string) => {
       setSelectedPersona(personaId);
       const persona = PERSONAS.find(p => p.id === personaId);
-      const greeting = `안녕하세요! 저는 ${persona?.name}이에요. 대화할 준비 됐나요?`;
+      
+      const lastChar = persona?.name.charCodeAt(persona.name.length - 1) || 0;
+      const hasBatchim = (lastChar - 0xAC00) % 28 > 0;
+      const suffix = hasBatchim ? "이에요" : "예요";
+
+      const greeting = `안녕하세요! 저는 ${persona?.name}${suffix}. 우리 대화할까요?`;
+      
       setChatHistory([{role: "model", text: greeting}]);
       setChatStatus('active');
       setChatFeedback(null);
-      // 🔥 선택 즉시 음성 재생
+      
       handleGoogleTTS(greeting, null, persona?.voice);
   };
 
   const handleChatSend = async () => {
     if (!audioBlob) return;
-    
-    // 잔액 체크 (차감은 성공 후)
     if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -254,7 +314,6 @@ export default function Home() {
             alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return;
         }
 
-        // 성공 시 토큰 차감 (-2)
         if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
         else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
 
@@ -275,7 +334,6 @@ export default function Home() {
   };
 
   const handleChatFeedback = async () => {
-      // 피드백 비용: 2토큰
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -283,27 +341,30 @@ export default function Home() {
       const formData = new FormData();
       formData.append("action", "feedback");
       formData.append("history", JSON.stringify(chatHistory));
+      formData.append("userName", userAlias || "학습자");
+      formData.append("personaName", PERSONAS.find(p=>p.id===selectedPersona)?.name || "AI");
+
       try {
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           setChatFeedback(data);
           
-          // 토큰 차감 (-2) & 포인트 지급 (+10)
           if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
           updateDoc(doc(db,"sori_users",currentUser.email), { points: increment(10) });
 
-          const feedbackSummary = `[발음] ${data.pronunciation}\n[억양] ${data.intonation}\n[총평] ${data.general}`;
+          const feedbackSummary = `🗣️ 발음: ${data.pronunciation}\n🎭 억양: ${data.intonation}\n💡 총평: ${data.general}`;
+          
           await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
             text: "자유 회화 피드백", score: 0, recognized: "", correct: "",
             feedback: feedbackSummary, advice: data.general, type: "free_talking", date: serverTimestamp()
           });
-          alert("피드백이 저장되었습니다! (+10P)");
       } catch(e) { alert("피드백 생성 실패"); } finally { setLoading(false); }
   };
 
   const handleTranslateFeedback = async () => {
+      if (!chatFeedback && !result) return;
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
       if(!confirm("번역하시겠습니까? (0.5 토큰)")) return;
@@ -311,29 +372,25 @@ export default function Home() {
       setLoading(true);
       const formData = new FormData();
       formData.append("action", "translate");
-      // 현재 보고 있는 결과가 있으면 그것을, 없으면(내기록) 선택된 항목을 번역
-      const textToTrans = chatFeedback 
+      const text = chatFeedback 
         ? `Pronunciation: ${chatFeedback.pronunciation}\nGeneral: ${chatFeedback.general}`
-        : result 
-            ? `Explanation: ${result.explanation}\nAdvice: ${result.advice}`
-            : ""; 
-            // 내 기록에서 호출 시 별도 처리 필요하지만, 현재는 연습/회화 결과창용
-
-      if(!textToTrans) { alert("번역할 내용이 없습니다."); setLoading(false); return; }
-
-      formData.append("text", textToTrans);
+        : `Explanation: ${result.explanation}\nAdvice: ${result.advice}`;
+      formData.append("text", text);
 
       try {
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           setTranslation(data.translatedText);
-          if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
-          else { setTokens(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-1) }); }
+          
+          if (userRole === 'guest') { setHearts(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-0.5) }); }
+          else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
+          
+          if (showTranslateModal === false && viewMode === 'freetalking') setShowTranslateModal(true);
+
       } catch(e) { alert("번역 실패"); } finally { setLoading(false); }
   };
 
-  // 내 기록에서 번역 기능
   const handleHistoryTranslate = async (item: any) => {
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
@@ -351,7 +408,7 @@ export default function Home() {
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
-          alert(`[번역 결과]\n${data.translatedText}`); // 간단히 알림으로 표시
+          alert(`[번역 결과]\n${data.translatedText}`); 
           if (userRole === 'guest') { setHearts(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-0.5) }); }
           else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
       } catch(e) { alert("오류"); } finally { setLoading(false); }
@@ -371,7 +428,6 @@ export default function Home() {
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
-    // 단어: 0.5, 문장/담화: 1 토큰 체크
     const cost = courseType === 'word' ? 0.5 : 1;
     if (userRole === "student" && tokens < cost) return setShowPaymentModal(true);
     
@@ -434,7 +490,10 @@ export default function Home() {
            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
         </div>
         <div className="flex items-center gap-3">
-           <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1"><span className="text-2xl">📮</span>{hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}</button>
+           <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1">
+             <span className="text-2xl">📮</span> 
+             {hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
+           </button>
            <button onClick={handleLogout} className="text-xl hover:scale-110 transition ml-1" title="로그아웃">👋</button>
         </div>
       </header>
@@ -455,10 +514,19 @@ export default function Home() {
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
             {/* Streak Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-               <div><div className="flex items-center gap-2 mb-1"><h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button></div><div className="mt-2"><p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p><div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div></div></div>
+               <div>
+                 <div className="flex items-center gap-2 mb-1">
+                   <h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3>
+                   <button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button>
+                 </div>
+                 <div className="mt-2">
+                    <p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p>
+                    <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div>
+                 </div>
+               </div>
                <div className="text-center bg-orange-50 px-4 py-3 rounded-xl min-w-[80px]"><p className="text-2xl font-black text-orange-500 mb-1">{streak} <span className="text-sm font-bold text-orange-400">일</span></p><p className="text-[10px] text-orange-700 font-bold">연속 학습중</p></div>
             </div>
-            {/* Cards */}
+
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -470,6 +538,7 @@ export default function Home() {
                   <div><div className="text-lg font-bold text-slate-800 group-hover:text-${item.color}-700">{item.t}</div><div className="text-sm text-slate-500">{item.d}</div></div>
                 </button>
               ))}
+              
               <button onClick={enterFreeTalking} className="w-full p-5 rounded-2xl text-left bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm border border-green-100 hover:border-green-500 transition group flex items-center gap-4 relative overflow-hidden">
                   <div className="absolute top-3 right-3 bg-white/80 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-green-700 border border-green-200">🪙 토큰 2개 / 턴</div>
                   <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:scale-110 transition-transform"><MessageCircle /></div>
@@ -479,7 +548,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history ... */}
+        {/* ... category, history views ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -491,19 +560,31 @@ export default function Home() {
           <div className="space-y-4">
              <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 flex items-center gap-1"><ChevronLeft/> 메인으로</button>
              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                {['all', 'word', 'sentence', 'dialogue'].map(tab => (
-                    <button key={tab} onClick={() => setHistoryTab(tab as any)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition border ${historyTab === tab ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{tab === 'all' ? '전체' : tab === 'word' ? '단어' : tab === 'sentence' ? '문장' : '회화'}</button>
+                {['all', 'word', 'sentence', 'dialogue', 'free_talking'].map(tab => (
+                    <button key={tab} onClick={() => setHistoryTab(tab as any)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition border ${historyTab === tab ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{tab === 'all' ? '전체' : tab === 'word' ? '단어' : tab === 'sentence' ? '문장' : tab === 'dialogue' ? '담화' : '자유회화'}</button>
                 ))}
              </div>
              <div className="space-y-3">
-               {/* 내 기록 표시 (번역 버튼 포함) */}
                {historyList.filter(h => historyTab === 'all' || h.type === historyTab || (historyTab === 'dialogue' && h.type === 'free_talking')).map(h => ( 
-                   <div key={h.id} className="relative">
-                       <HistoryItem item={h} userEmail={currentUser.email} userRole={userRole} />
-                       {/* 🔥 내 기록에서 번역 버튼 추가 */}
-                       <button onClick={() => handleHistoryTranslate(h)} className="absolute bottom-4 right-4 text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-2 py-1 rounded hover:bg-slate-200 flex gap-1 items-center">
-                           <Languages size={10}/> 번역 (1🪙)
-                       </button>
+                   <div key={h.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative">
+                       <div className="text-[10px] text-slate-400 mb-1">{h.date?.toDate ? h.date.toDate().toLocaleDateString() : new Date().toLocaleDateString()}</div>
+                       <div className="flex justify-between items-start mb-2">
+                           <h4 className="font-bold text-slate-800 text-lg truncate pr-10">{h.text}</h4>
+                           {h.type !== 'free_talking' && <span className={`text-sm font-black px-2 py-1 rounded ${h.score >= 80 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{h.score}점</span>}
+                       </div>
+                       
+                       <div className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 mb-2 line-clamp-2">
+                           {h.feedback || h.explanation || h.advice || "내용 없음"}
+                       </div>
+                       
+                       <div className="flex justify-end gap-2">
+                           <button onClick={() => setShowFeedbackModal(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
+                               📄 자세히
+                           </button>
+                           <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
+                               <Languages size={10}/> 번역 (0.5🪙)
+                           </button>
+                       </div>
                    </div>
                ))}
                {historyList.length === 0 && <p className="text-center text-slate-400 py-10">기록이 없습니다.</p>}
@@ -537,7 +618,7 @@ export default function Home() {
                </div>
              )}
 
-             {/* 2. 채팅 화면 (기존 코드 유지) */}
+             {/* 2. 채팅 화면 */}
              {chatStatus !== 'select_persona' && (
                <>
                  <div className="flex justify-between items-center mb-4 sticky top-0 bg-slate-50 z-10 py-2">
@@ -570,13 +651,29 @@ export default function Home() {
                  {/* 종료/피드백 UI */}
                  {chatStatus === 'ended' && !chatFeedback && (
                    <div className="bg-slate-800 text-white p-4 rounded-xl text-center animate-in fade-in">
-                     <p className="mb-3 font-bold">대화가 종료되었습니다 👋</p>
-                     <button onClick={handleChatFeedback} className="bg-white text-slate-900 px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-200 transition">📝 종합 피드백 받기</button>
+                     {loading ? (
+                        <div className="flex flex-col items-center gap-2 py-4">
+                            <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            {/* 안내 문구 수정 */}
+                            <p className="text-sm font-bold leading-relaxed text-center opacity-90">
+                                AI가 전체 대화 내용을<br/>
+                                발음, 억양, 문맥 등의 여러 요소를<br/>
+                                고려해서 분석중입니다... 📝
+                            </p>
+                        </div>
+                     ) : (
+                        <>
+                            <p className="mb-3 font-bold">대화가 종료되었습니다 👋</p>
+                            <button onClick={handleChatFeedback} className="bg-white text-slate-900 px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-200 transition">📝 종합 피드백 받기</button>
+                        </>
+                     )}
                    </div>
                  )}
                  {chatFeedback && (
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-lg animate-in slide-in-from-bottom relative">
-                       <button onClick={handleTranslateFeedback} className="absolute top-4 right-4 text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-100 flex items-center gap-1"><Languages size={12}/> 번역 (0.5🪙)</button>
+                       <button onClick={handleTranslateFeedback} className="absolute top-4 right-4 text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-100 flex items-center gap-1">
+                           <Languages size={12}/> {translation ? "번역 내용 보기" : "번역 (0.5🪙)"}
+                       </button>
                        <h3 className="font-bold text-lg mb-3 border-b pb-2">📋 대화 분석 리포트</h3>
                        <div className="space-y-3 text-sm">
                           <div><span className="font-bold text-blue-600 block">🗣️ 발음 및 어휘</span><p className="text-slate-700">{chatFeedback.pronunciation || "내용 없음"}</p></div>
@@ -592,7 +689,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 🔥 [수정] 일반 연습 뷰 (녹음 버튼 위치 개선 및 스크롤 처리) */}
+        {/* 일반 연습 뷰 */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
@@ -603,7 +700,6 @@ export default function Home() {
                </div>
             </div>
             
-            {/* 결과가 있을 때: 스크롤 가능한 컨테이너 */}
             {result ? (
                 <div className="flex flex-col gap-4 h-full">
                    <div className="flex-1 overflow-y-auto pr-1 space-y-4 pb-20">
@@ -617,6 +713,7 @@ export default function Home() {
                            <div><span className="text-xs font-bold text-slate-400 block mb-1">정답 소리</span><div className="text-lg font-bold text-green-600 tracking-wide bg-white p-2 rounded border border-green-100">{result.correct}</div></div>
                        </div>
                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3 relative">
+                           {/* 번역 버튼 */}
                            <button onClick={handleTranslateFeedback} className="absolute top-4 right-4 text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-100 flex items-center gap-1"><Languages size={12}/> 번역 (0.5🪙)</button>
                            <div className="flex items-start gap-2"><CheckCircle size={16} className="text-blue-600 mt-0.5 shrink-0"/><div><span className="text-xs font-bold text-blue-500 block">발음 교정</span><p className="text-sm text-blue-800 font-bold leading-snug">{result.explanation}</p></div></div>
                            {result.advice && (<div className="flex items-start gap-2 pt-2 border-t border-blue-200"><Info size={16} className="text-indigo-500 mt-0.5 shrink-0"/><div><span className="text-xs font-bold text-indigo-500 block">억양 / 감정 Tip</span><p className="text-xs text-indigo-700 leading-relaxed">{result.advice}</p></div></div>)}
@@ -658,12 +755,14 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 녹음 컨트롤 (프리토킹 또는 연습모드에서 결과 없을 때) */}
+      {/* 하단 녹음 컨트롤 */}
       {(viewMode === "freetalking" && chatStatus === 'active') || (viewMode === "practice" && !result) ? (
         <div className="flex-none bg-white border-t p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-3xl z-50">
              <div className="flex flex-col items-center gap-4">
-                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">AI가 생각하고 있어요... 🤔</div>}
-                 {!recording && !audioUrl && !loading && (<button onClick={startRecording} className="w-16 h-16 rounded-full bg-red-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>)}
+                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">
+                    {viewMode === 'freetalking' ? `${PERSONAS.find(p=>p.id===selectedPersona)?.name}이가 생각하고 있어요... 🤔` : 'AI가 소리를 분석 중입니다... 🎧'}
+                 </div>}
+                 {!recording && !audioUrl && !loading && (<button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>)}
                  {recording && (<div className="flex flex-col items-center"><button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100"><div className="w-6 h-6 bg-white rounded-md"></div></button><span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span></div>)}
                  {audioUrl && !recording && !loading && (
                       <div className="flex gap-2 w-full animate-in slide-in-from-bottom">
@@ -678,7 +777,62 @@ export default function Home() {
         </div>
       ) : null}
 
-      {/* --- 모달들 (생략 없음) --- */}
+      {/* --- 모달들 --- */}
+      {/* 🔥 [추가] 광고 모달 */}
+      {showAdModal && (
+          <AdModal 
+              onClose={() => setShowAdModal(false)} 
+              onReward={handleAdReward} 
+          />
+      )}
+
+      {showTranslateModal && translation && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white w-full max-w-sm rounded-3xl p-6 relative shadow-2xl">
+                  <button onClick={() => setShowTranslateModal(false)} className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                  <h2 className="text-lg font-black mb-3 text-purple-700 flex items-center gap-2"><Languages size={18}/> 번역 결과</h2>
+                  <div className="max-h-[60vh] overflow-y-auto text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                      {translation}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showFeedbackModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in-95">
+              <div className="bg-white w-full max-w-sm rounded-3xl p-6 relative shadow-2xl flex flex-col max-h-[80vh]">
+                  <button onClick={() => setShowFeedbackModal(null)} className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                  <h2 className="text-lg font-black mb-4">📝 상세 피드백</h2>
+                  <div className="flex-1 overflow-y-auto text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                      {showFeedbackModal.feedback || showFeedbackModal.explanation || showFeedbackModal.advice}
+                  </div>
+                  <div className="mt-4 pt-3 border-t flex justify-end">
+                      <button onClick={() => { setShowFeedbackModal(null); handleHistoryTranslate(showFeedbackModal); }} className="text-xs bg-slate-100 px-3 py-2 rounded-lg font-bold flex items-center gap-1 hover:bg-slate-200">
+                          <Languages size={12}/> 번역하기 (0.5🪙)
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showPersonaRanking && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white w-full max-w-xs rounded-3xl p-6 relative shadow-2xl">
+                  <button onClick={() => setShowPersonaRanking(false)} className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                  <h2 className="text-xl font-black mb-4 flex items-center gap-2"><Trophy className="text-yellow-500" fill="currentColor"/> 인기 AI 랭킹</h2>
+                  <div className="space-y-3">
+                      {[PERSONAS[0], PERSONAS[1], PERSONAS[3]].map((p, i) => ( 
+                          <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                              <div className={`w-8 h-8 flex items-center justify-center font-black rounded-full ${i===0?'bg-yellow-100 text-yellow-600':i===1?'bg-gray-200 text-gray-600':'bg-orange-100 text-orange-700'}`}>{i+1}</div>
+                              <div className="w-10 h-10 rounded-full overflow-hidden border"><img src={p.img} className="w-full h-full object-cover object-top"/></div>
+                              <div><div className="font-bold text-sm">{p.name}</div><div className="text-[10px] text-slate-500">{p.role}</div></div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      )}
+
       {showNicknameModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl"><h2 className="text-xl font-black mb-1 text-slate-800">닉네임 설정</h2><input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl mb-4 font-bold text-center" value={userAlias} onChange={e => setUserAlias(e.target.value)} placeholder="예: 열공하는개미" /><button onClick={() => saveNickname(userAlias)} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button></div></div>)}
       
       {showInboxModal && (
@@ -722,7 +876,7 @@ export default function Home() {
 
       {showRankingModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm"><div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300"><div className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white relative"><button onClick={() => setShowRankingModal(false)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30"><X size={20} className="text-white"/></button><h3 className="font-bold text-2xl flex items-center gap-2"><Trophy className="text-yellow-300" fill="currentColor"/> 주간 랭킹</h3></div><div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">{rankingList.map((ranker, index) => (<div key={index} className={`flex items-center p-3 rounded-xl border ${ranker.email === currentUser.email ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-100 shadow-sm'}`}><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 ${index < 3 ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div><div className="flex-1"><p className="font-bold text-sm text-slate-800 flex items-center gap-1">{ranker.alias || ranker.name}</p><p className="text-xs text-slate-400">{ranker.streak || 0}일 연속</p></div><div className="font-bold text-indigo-600 text-sm">{(ranker.analysis_count * 10).toLocaleString()} P</div></div>))}</div></div></div>)}
       
-      {showPaymentModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"><div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전 필요</h2></div><div className="p-6"><p className="text-center text-slate-600 mb-6">토큰이 부족합니다.</p><button onClick={() => setShowPaymentModal(false)} className="w-full py-3 bg-slate-100 rounded-xl font-bold">닫기</button></div></div></div>)}
+      {showPaymentModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"><div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전 필요</h2></div><div className="p-6"><p className="text-center text-slate-600 mb-6">토큰이 부족합니다.</p><div className="flex flex-col gap-3"><button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600">📺 광고 보고 무료 충전 (1~3개)</button><button onClick={() => setShowPaymentModal(false)} className="w-full py-3 bg-slate-100 rounded-xl font-bold">닫기</button></div></div></div></div>)}
     </main>
   );
 }
