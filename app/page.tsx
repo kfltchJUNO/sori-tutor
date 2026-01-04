@@ -5,7 +5,7 @@ import Login from "./components/Login";
 import AdModal from "./components/AdModal"; 
 
 import { db, auth } from "@/lib/firebase"; 
-import { signOut } from "firebase/auth"; 
+import { signOut, onAuthStateChanged } from "firebase/auth"; // onAuthStateChanged 추가
 import { 
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
@@ -132,6 +132,18 @@ export default function Home() {
   const chunksRef = useRef<Blob[]>([]);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
+  // 🔥 [보강] 초기 로그인 상태 체크 (새로고침 시에도 유지)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+            handleUserChange(user);
+        } else {
+            setCurrentUser(null);
+        }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleUserChange = async (user: any) => {
     setCurrentUser(user);
     if (user) {
@@ -186,10 +198,11 @@ export default function Home() {
     setHasNewMail(!snap.empty); 
   };
 
-  // 🔥 [수정] 우편함 열기 로직 (에러 발생 시에도 모달은 열리도록 처리)
+  // 🔥 [수정] 우편함 로직 강화 (로그인 체크 + 에러 핸들링 + 강제 모달 오픈)
   const fetchInbox = async () => {
-    if (!currentUser) return;
+    if (!currentUser) return alert("로그인 정보를 불러오는 중입니다. 잠시만 기다려주세요.");
     
+    setLoading(true);
     try {
         const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
         const snap = await getDocs(q);
@@ -205,29 +218,34 @@ export default function Home() {
         setInboxList([WELCOME_MESSAGE, ...readMsgs]);
     } catch (e) {
         console.error("Inbox Error", e);
-        setInboxList([WELCOME_MESSAGE]); // 에러나도 환영메시지는 보여줌
+        // 에러가 나도 기본 환영 메시지는 보여줌
+        setInboxList([WELCOME_MESSAGE]); 
     } finally {
-        setShowInboxModal(true);
+        setLoading(false);
+        setShowInboxModal(true); // 무조건 모달 열기
         setInboxTab('received');
         setHasNewMail(false);
     }
   };
 
-  // 🔥 [수정] 랭킹 열기 로직 (에러 처리 추가)
+  // 🔥 [수정] 랭킹 로직 강화 (로그인 체크 + 에러 핸들링)
   const fetchRanking = async () => { 
-    if (!currentUser) return; 
+    if (!currentUser) return alert("로그인 정보를 불러오는 중입니다."); 
+    setLoading(true);
     try {
         const s = await getDocs(query(collection(db, "sori_users"), orderBy("points", "desc"), limit(10))); 
         setRankingList(s.docs.map(d => d.data())); 
         setShowRankingModal(true); 
     } catch (e) {
         console.error("Ranking Error", e);
-        alert("랭킹을 불러오는데 실패했습니다.");
+        alert("랭킹 정보를 불러오는데 실패했습니다.");
+    } finally {
+        setLoading(false);
     }
   };
 
   const fetchHistory = async () => { 
-    if (!currentUser) return; 
+    if (!currentUser) return alert("로그인 후 이용해주세요."); 
     setLoading(true); 
     try {
         const q = query(collection(db, "sori_users", currentUser.email, "history"), orderBy("date", "desc")); 
@@ -594,7 +612,6 @@ export default function Home() {
             <button onClick={fetchHistory} className="flex items-center gap-1 bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-bold hover:bg-slate-200 transition">내 기록</button>
          </div>
          <div className="flex items-center gap-1 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1 rounded-full border border-slate-200" onClick={() => setShowPaymentModal(true)}>
-            {/* 🔥 [UI 수정] 게스트는 하트 아이콘 3개 표시 (하트 유무에 따라 색상 변경) */}
             {userRole === 'guest' ? (
               <div className="flex items-center gap-1">
                 {[1, 2, 3].map((i) => (
@@ -851,28 +868,6 @@ export default function Home() {
           </div>
         )}
       </div>
-
-      {/* 하단 녹음 컨트롤 */}
-      {(viewMode === "freetalking" && chatStatus === 'active') || (viewMode === "practice" && !result) ? (
-        <div className="flex-none bg-white border-t p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-3xl z-50">
-             <div className="flex flex-col items-center gap-4">
-                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">
-                    {viewMode === 'freetalking' ? `${PERSONAS.find(p=>p.id===selectedPersona)?.name}이가 생각하고 있어요... 🤔` : 'AI가 소리를 분석 중입니다... 🎧'}
-                 </div>}
-                 {!recording && !audioUrl && !loading && (<button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>)}
-                 {recording && (<div className="flex flex-col items-center"><button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100"><div className="w-6 h-6 bg-white rounded-md"></div></button><span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span></div>)}
-                 {audioUrl && !recording && !loading && (
-                      <div className="flex gap-2 w-full animate-in slide-in-from-bottom">
-                          <button onClick={() => {setAudioUrl(null); setAudioBlob(null);}} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">취소</button>
-                          {viewMode === 'freetalking' 
-                            ? <button onClick={handleChatSend} className="flex-[2] py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><Send size={18}/> 전송 (-2🪙)</button>
-                            : <button onClick={analyzeAudio} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md">피드백 받기</button>
-                          }
-                      </div>
-                 )}
-             </div>
-        </div>
-      ) : null}
 
       {/* --- 모달들 --- */}
       {showAdModal && (
