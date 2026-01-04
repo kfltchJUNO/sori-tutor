@@ -153,7 +153,6 @@ export default function Home() {
         
         if (!data.alias) setShowNicknameModal(true);
         
-        // 🔥 [복구] 매일 하트 3개 리셋 로직 (확실하게 적용)
         if (data.last_heart_reset !== today) { 
             await updateDoc(userRef, { free_hearts: 3, last_heart_reset: today }); 
             setHearts(3); 
@@ -274,10 +273,21 @@ export default function Home() {
       }
   };
 
-  // 🔥 [NEW] 이메일 충전 요청 핸들러
-  const handleManualCharge = () => {
+  // 🔥 [수정] 충전 요청 핸들러 (토큰별 선택 기능)
+  const handleManualCharge = (tokenAmount: number, price: string) => {
       const subject = encodeURIComponent("🔋 소리튜터 토큰 충전 요청");
-      const body = encodeURIComponent(`안녕하세요! 토큰 충전을 요청합니다.\n\n📧 계정 ID: ${currentUser.email}\n\n[충전 안내]\n현재 베타 서비스 기간으로, 아래 계좌로 입금 후 이 메일을 보내주시면 확인 후 충전해 드립니다.\n\n🏦 입금 계좌: (예시) 카카오뱅크 3333-xx-xxxxxx\n💰 100 토큰 = 1,000원\n\n입금자명: (여기에 입력)\n요청 금액: (여기에 입력)`);
+      const body = encodeURIComponent(`안녕하세요! 토큰 충전을 요청합니다.
+
+📧 계정 ID: ${currentUser.email}
+
+[충전 안내]
+현재 베타 서비스 기간으로, 아래 계좌로 입금 후 이메일을 보내주시면 확인 후 충전해 드립니다.
+
+🏦 입금 계좌: 카카오뱅크 3333-29-9690780 (오준호)
+💰 100 토큰 = 2,900원 / 250 토큰 = 5,900원
+
+입금자명: (여기에 입력)
+요청 금액: ${tokenAmount} 토큰 (${price})`);
       window.location.href = `mailto:help@soritutor.com?subject=${subject}&body=${body}`;
   };
 
@@ -328,7 +338,6 @@ export default function Home() {
             alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return;
         }
 
-        // 🔥 [수정] 게스트는 무조건 1개 차감
         if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
         else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
 
@@ -396,7 +405,6 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           setChatFeedback(data);
           
-          // 🔥 [수정] 게스트는 1개 차감
           if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
           updateDoc(doc(db,"sori_users",currentUser.email), { points: increment(10) });
@@ -424,7 +432,7 @@ export default function Home() {
       if (!chatFeedback && !result) return;
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
-      if(!confirm("번역하시겠습니까?")) return; // 가격 안내 뺌 (아래에서 차감)
+      if(!confirm("번역하시겠습니까?")) return; 
 
       setLoading(true);
       const formData = new FormData();
@@ -440,7 +448,6 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           setTranslation(data.translatedText);
           
-          // 🔥 [수정] 번역도 게스트는 1개 차감
           if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
           
@@ -468,7 +475,6 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           alert(`[번역 결과]\n${data.translatedText}`); 
           
-          // 🔥 [수정] 내기록 번역도 게스트는 1개 차감
           if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
       } catch(e) { alert("오류"); } finally { setLoading(false); }
@@ -524,7 +530,6 @@ export default function Home() {
         if (todayCount === 4) updates.streak = increment(1);
         if (todayCount === 4) updates.points = increment(earnedPoints + 10); 
 
-        // 🔥 [수정] 게스트는 무조건 1개 차감
         if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = increment(-1); }
         else { setTokens(p=>p-cost); updates.tokens = increment(-cost); }
         
@@ -567,7 +572,20 @@ export default function Home() {
             <button onClick={fetchHistory} className="flex items-center gap-1 bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-bold hover:bg-slate-200 transition">내 기록</button>
          </div>
          <div className="flex items-center gap-1 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1 rounded-full border border-slate-200" onClick={() => setShowPaymentModal(true)}>
-            {userRole === 'guest' ? (<><Heart size={14} className="text-red-500" fill="currentColor"/><span className="font-bold text-slate-700">{hearts.toFixed(1).replace(/\.0$/, '')}</span></>) : (<><Coins size={14} className="text-yellow-500" fill="currentColor"/><span className="font-bold text-slate-700">{tokens.toFixed(1).replace(/\.0$/, '')}</span></>)}
+            {/* 🔥 [UI 수정] 게스트는 하트 아이콘 3개 표시 (하트 유무에 따라 색상 변경) */}
+            {userRole === 'guest' ? (
+              <div className="flex items-center gap-1">
+                {[1, 2, 3].map((i) => (
+                  <Heart
+                    key={i}
+                    size={16}
+                    className={i <= hearts ? "text-red-500 fill-red-500" : "text-slate-300"}
+                  />
+                ))}
+              </div>
+            ) : (
+              <><Coins size={14} className="text-yellow-500" fill="currentColor"/><span className="font-bold text-slate-700">{tokens.toFixed(1).replace(/\.0$/, '')}</span></>
+            )}
          </div>
       </div>
       
@@ -643,7 +661,6 @@ export default function Home() {
                            <button onClick={() => setShowFeedbackModal(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                📄 자세히
                            </button>
-                           {/* 번역 버튼: 게스트 가격은 핸들러 내부에서 하트 1개로 처리됨 (텍스트는 0.5로 표시되나 실제 차감은 로직 따름 - UI 텍스트도 변경 원하시면 아래 0.5를 1로 수정하세요) */}
                            <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                <Languages size={10}/> 번역 (0.5🪙)
                            </button>
@@ -738,7 +755,7 @@ export default function Home() {
                           <div><span className="font-bold text-blue-600 block">🗣️ 발음 및 어휘</span><p className="text-slate-700">{chatFeedback.pronunciation || "내용 없음"}</p></div>
                           <div><span className="font-bold text-purple-600 block">🎭 억양과 감정</span><p className="text-slate-700">{chatFeedback.intonation || "내용 없음"}</p></div>
                           <div><span className="font-bold text-green-600 block">💡 총평</span><p className="text-slate-700">{chatFeedback.general || "내용 없음"}</p></div>
-                          {translation && (<div className="mt-3 pt-3 border-t border-slate-100"><p className="text-xs font-bold text-purple-600">🌏 번역</p><p className="text-xs text-slate-600">{translation}</p></div>)}
+                          {translation && (<div className="mt-3 pt-3 border-t border-slate-100"><p className="text-xs font-bold text-purple-600 mb-1">🌏 번역된 피드백</p><p className="text-xs text-slate-700 whitespace-pre-wrap">{translation}</p></div>)}
                        </div>
                        <button onClick={() => setViewMode('home')} className="w-full mt-4 bg-slate-100 py-3 rounded-xl font-bold text-slate-600">메인으로</button>
                     </div>
@@ -891,48 +908,36 @@ export default function Home() {
 
       {showNicknameModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl"><h2 className="text-xl font-black mb-1 text-slate-800">닉네임 설정</h2><input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl mb-4 font-bold text-center" value={userAlias} onChange={e => setUserAlias(e.target.value)} placeholder="예: 열공하는개미" /><button onClick={() => saveNickname(userAlias)} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button></div></div>)}
       
-      {showInboxModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm">
-              <div className="bg-white w-full h-full sm:h-[600px] sm:max-w-md sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-                  {selectedMessage ? (
-                      <div className="flex flex-col h-full bg-white">
-                          <div className="p-4 border-b flex items-center gap-2 bg-white sticky top-0 z-10"><button onClick={() => setSelectedMessage(null)} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={24}/></button><h3 className="font-bold text-slate-800">상세 내용</h3></div>
-                          <div className="flex-1 overflow-y-auto p-6">
-                              <div className="mb-6 pb-4 border-b border-slate-100"><span className="inline-block px-2 py-1 bg-blue-600 text-white text-xs font-bold rounded mb-2">공지</span><h2 className="text-xl font-bold text-slate-900 leading-snug">{selectedMessage.title}</h2><p className="text-sm text-slate-400 mt-2">{selectedMessage.date instanceof Date ? selectedMessage.date.toLocaleDateString() : selectedMessage.date?.toDate ? selectedMessage.date.toDate().toLocaleDateString() : ""}</p></div>
-                              <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{selectedMessage.content}</div>
-                          </div>
-                          <div className="p-4 border-t"><button onClick={() => setSelectedMessage(null)} className="w-full py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200">목록으로</button></div>
+      {/* 🔥 [수정] 충전 모달 (토큰 선택 기능 추가) */}
+      {showPaymentModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                  <div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전소</h2></div>
+                  <div className="p-6">
+                      <p className="text-center text-slate-600 mb-6 font-bold">원하는 충전 방식을 선택하세요</p>
+                      <div className="flex flex-col gap-3">
+                          {/* 1. 토큰 구매 */}
+                          <button onClick={() => handleManualCharge(100, "2,900원")} className="w-full py-4 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-bold hover:bg-blue-100 flex justify-between px-6">
+                              <span>💎 100 토큰</span><span>2,900원</span>
+                          </button>
+                          <button onClick={() => handleManualCharge(250, "5,900원")} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex justify-between px-6 transform transition hover:scale-[1.02]">
+                              <span>💎 250 토큰</span><span>5,900원 (BEST)</span>
+                          </button>
+                          
+                          <div className="my-2 border-t border-slate-100"></div>
+
+                          {/* 2. 광고 시청 */}
+                          <button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200 text-sm flex items-center justify-center gap-2">
+                              📺 광고 보고 무료 충전 (1~3개)
+                          </button>
+                          
+                          {/* 3. 닫기 */}
+                          <button onClick={() => setShowPaymentModal(false)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 text-sm mt-2">닫기</button>
                       </div>
-                  ) : (
-                      <div className="flex flex-col h-full bg-slate-50">
-                          <div className="bg-white sticky top-0 z-10 shadow-sm">
-                              <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><Mail size={18}/> 소리튜터 우체통</h3><button onClick={() => setShowInboxModal(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={18}/></button></div>
-                              <div className="flex"><button onClick={() => setInboxTab('received')} className={`flex-1 py-3 text-sm font-bold border-b-2 ${inboxTab==='received'?'border-blue-600 text-blue-600':'border-transparent text-slate-400 hover:text-slate-600'}`}>받은 편지함</button><button onClick={() => setInboxTab('write')} className={`flex-1 py-3 text-sm font-bold border-b-2 ${inboxTab==='write'?'border-blue-600 text-blue-600':'border-transparent text-slate-400 hover:text-slate-600'}`}>문의하기</button></div>
-                          </div>
-                          <div className="p-4 overflow-y-auto flex-1">
-                              {inboxTab === 'received' ? (
-                                  <div className="space-y-3">
-                                      {inboxList.map((msg) => (<div key={msg.id} onClick={() => setSelectedMessage(msg)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer active:scale-98 transition relative">{!msg.read && <span className="absolute top-4 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}<span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mb-2 inline-block">{msg.from || "관리자"}</span><h4 className="font-bold text-slate-800 text-sm truncate pr-4">{msg.title}</h4><p className="text-xs text-slate-400 mt-1">{msg.date instanceof Date ? msg.date.toLocaleDateString() : msg.date?.toDate ? msg.date.toDate().toLocaleDateString() : ""}</p></div>))}
-                                      {inboxList.length === 0 && <p className="text-slate-400 text-center py-10">새로운 메시지가 없습니다.</p>}
-                                  </div>
-                              ) : (
-                                  <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4"><p className="text-sm text-blue-800 font-bold mb-1">📬 무엇을 도와드릴까요?</p><p className="text-xs text-blue-600">오류 제보, 기능 건의, 혹은 응원의 메시지도 환영합니다!</p></div>
-                                      <select className="w-full p-3 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={inquiryCategory} onChange={(e) => setInquiryCategory(e.target.value)}><option value="bug">🐛 오류 제보</option><option value="suggestion">💡 기능 건의</option><option value="question">❓ 학습 질문</option><option value="other">💬 기타 문의</option></select>
-                                      <textarea className="w-full h-40 p-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="내용을 자세히 적어주시면 빠르게 확인할 수 있습니다." value={inquiryContent} onChange={(e) => setInquiryContent(e.target.value)}></textarea>
-                                      <button onClick={handleSendInquiry} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700 transition flex items-center justify-center gap-2"><Send size={18} /> 보내기</button>
-                                  </div>
-                              )}
-                          </div>
-                      </div>
-                  )}
+                  </div>
               </div>
           </div>
       )}
-
-      {showRankingModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm"><div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300"><div className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white relative"><button onClick={() => setShowRankingModal(false)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30"><X size={20} className="text-white"/></button><h3 className="font-bold text-2xl flex items-center gap-2"><Trophy className="text-yellow-300" fill="currentColor"/> 주간 랭킹</h3></div><div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">{rankingList.map((ranker, index) => (<div key={index} className={`flex items-center p-3 rounded-xl border ${ranker.email === currentUser.email ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-100 shadow-sm'}`}><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 ${index < 3 ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div><div className="flex-1"><p className="font-bold text-sm text-slate-800 flex items-center gap-1">{ranker.alias || ranker.name}</p><p className="text-xs text-slate-400">{ranker.streak || 0}일 연속</p></div><div className="font-bold text-indigo-600 text-sm">{(ranker.analysis_count * 10).toLocaleString()} P</div></div>))}</div></div></div>)}
-      
-      {showPaymentModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"><div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전 필요</h2></div><div className="p-6"><p className="text-center text-slate-600 mb-6">토큰이 부족합니다.</p><div className="flex flex-col gap-3"><button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600">📺 광고 보고 무료 충전 (1~3개)</button><button onClick={handleManualCharge} className="w-full py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600">💳 프리미엄 충전 (이메일)</button><button onClick={() => setShowPaymentModal(false)} className="w-full py-3 bg-slate-100 rounded-xl font-bold">닫기</button></div></div></div></div>)}
     </main>
   );
 }

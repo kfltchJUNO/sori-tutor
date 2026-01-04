@@ -1,25 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-// Next.js Script 컴포넌트 (필요 시 사용, 이미 layout에 있다면 제외 가능)
 import Script from "next/script"; 
 
 interface AdModalProps {
   onClose: () => void;
-  onReward: (amount: number) => void; // 토큰 개수를 인자로 받음
+  onReward: (amount: number) => void;
 }
 
 export default function AdModal({ onClose, onReward }: AdModalProps) {
-  const [timeLeft, setTimeLeft] = useState(15); // 15초 타이머
+  const [timeLeft, setTimeLeft] = useState(15);
   const adLoaded = useRef(false);
 
   useEffect(() => {
-    // 1. 타이머 작동
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
 
-    // 2. 애드센스 광고 로드 트리거 (컴포넌트 마운트 시 1회 실행)
     if (!adLoaded.current) {
       try {
         // @ts-ignore
@@ -33,15 +30,13 @@ export default function AdModal({ onClose, onReward }: AdModalProps) {
     return () => clearInterval(timer);
   }, []);
 
-  // 보상 받기 버튼 클릭 핸들러 (1~3 랜덤 생성)
   const handleRewardClick = () => {
-    const randomAmount = Math.floor(Math.random() * 3) + 1; // 1, 2, 3 중 하나
+    const randomAmount = Math.floor(Math.random() * 3) + 1; 
     onReward(randomAmount);
   };
 
   return (
     <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center text-white p-4">
-       {/* 1. 안내 문구 수정 */}
        <h2 className="text-xl font-bold mb-2">무료 토큰 충전소</h2>
        <p className="text-sm text-gray-300 mb-6 text-center">
          광고가 끝날 때까지 잠시만 기다려주세요.<br/>
@@ -52,26 +47,32 @@ export default function AdModal({ onClose, onReward }: AdModalProps) {
           ⏳ {timeLeft > 0 ? `${timeLeft}초 남음` : "시청 완료!"}
        </div>
 
-       {/* 2. 구글 애드센스 광고 영역 (리액트 문법 적용) */}
-       <div className="bg-white text-black flex items-center justify-center overflow-hidden rounded-lg mb-6 min-h-[250px] min-w-[300px]">
-          {/* 광고 스크립트 로드 (헤더에 없다면 여기서 로드) */}
-          <Script 
-            async 
-            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4585319125929329"
-            crossOrigin="anonymous"
-            strategy="lazyOnload"
-          />
-          
-          <ins className="adsbygoogle"
-               style={{ display: 'block', width: '300px', height: '250px' }} // 크기 명시 권장
-               data-ad-client="ca-pub-4585319125929329"
-               data-ad-slot="1820723750"
-               data-ad-format="auto"
-               data-full-width-responsive="true">
-          </ins>
+       {/* 🔥 [수정] 광고 영역 배경에 텍스트 추가 (광고가 뜨면 덮어씌워짐) */}
+       <div className="bg-white text-slate-300 flex items-center justify-center overflow-hidden rounded-lg mb-6 min-h-[250px] min-w-[300px] relative border border-slate-700">
+          {/* 광고가 없을 때 보이는 배경 텍스트 */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-0">
+              <span className="font-bold text-lg">광고 준비 중...</span>
+              <span className="text-xs mt-2">잠시만 기다리시면<br/>보상 버튼이 활성화됩니다.</span>
+          </div>
+
+          {/* 광고 스크립트 (z-index로 텍스트 위에 뜸) */}
+          <div className="z-10 w-full h-full">
+              <Script 
+                async 
+                src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4585319125929329"
+                crossOrigin="anonymous"
+                strategy="lazyOnload"
+              />
+              <ins className="adsbygoogle"
+                   style={{ display: 'block', width: '100%', height: '100%' }}
+                   data-ad-client="ca-pub-4585319125929329"
+                   data-ad-slot="1820723750"
+                   data-ad-format="auto"
+                   data-full-width-responsive="true">
+              </ins>
+          </div>
        </div>
 
-       {/* 3. 버튼 영역 */}
        {timeLeft === 0 ? (
          <button 
            onClick={handleRewardClick} 
