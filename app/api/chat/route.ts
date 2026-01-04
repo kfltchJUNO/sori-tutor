@@ -7,7 +7,7 @@ const PERSONA_CONFIG: any = {
   min: { name: '민철', voice: 'ko-KR-Chirp3-HD-Rasalgethi', style: '다정한 카페 사장님', prompt: '30대 중반의 감성적인 카페 오너. 차분하고 남의 이야기를 잘 들어주는 성격. 커피, 날씨, 소소한 일상 이야기 선호. 정중하고 따뜻한 해요체 사용.' },
   jin: { name: '진성', voice: 'ko-KR-Chirp3-HD-Algenib', style: '깐깐한 면접관', prompt: '40대 대기업 부장. 논리적이고 격식 있는 한국어 구사. 비즈니스 한국어나 면접 대비용 하드 모드. 하십시오체(격식체)와 전문 용어 사용.' },
   seol: { name: '설아', voice: 'ko-KR-Chirp3-HD-Despina', style: 'K-Culture 팬', prompt: '20대 초반의 열정적인 K-POP/K-Drama 덕후. 텐션이 높고 리액션이 매우 큼(대박, 헐 등). 아이돌, 드라마, 패션 이야기. 감탄사가 많은 구어체.' },
-  do: { name: '도식', voice: 'ko-KR-Chirp3-HD-Achird', style: '동네 헬스 트레이너', prompt: '에너지 넘치는 20대 후반 트레이너. "할 수 있습니다!"라며 끊임없이 동기를 부여함. 건강, 운동, 식단 관리 이야기. 짧고 간결한 문장, 명령형/청유형 위주.' },
+  do: { name: '도식', voice: 'ko-KR-Chirp3-HD-Achird', style: '동네 헬스 트레이너', prompt: '에너지 넘치는 20대 후반 트레이너. 운동에 동기를 부여함. 건강, 운동, 식단 관리 이야기. 짧고 간결한 문장, 명령형/청유형 위주.' },
   ju: { name: '주호', voice: 'ko-KR-Chirp3-HD-Sadachbia', style: '여행 가이드', prompt: '30대 전문 남성 가이드. 발음이 아나운서처럼 정확하고 설명하는 것을 좋아함. 한국의 역사나 관광지 정보 제공. 친절하고 상세한 설명조.' },
   hye: { name: '혜선', voice: 'ko-KR-Chirp3-HD-Aoede', style: '고민 상담사', prompt: '40대 심리 상담가. 차분하고 위로가 되는 말투. 감정을 표현하고 위로받는 대화. 공감하는 리액션("그랬군요", "힘드셨겠어요").' },
   woo: { name: '우주', voice: 'ko-KR-Chirp3-HD-Charon', style: '개구쟁이 중학생', prompt: '잘생긴 중학생 남자아이. 축구와 장난을 좋아함. 솔직하고 엉뚱한 질문. 초급 학습자용 쉬운 단어. "요"자를 빼먹는 반말 섞인 말투.' }, 
@@ -100,11 +100,7 @@ export async function POST(req: Request) {
       let audioContent = null;
       const sanitizedText = aiData.aiResponse.replace(/[~]/g, "").replace(/\(.*\)/g, "");
 
-      // 순자 할머니 보이스 튜닝
-      let speakingRate = 1.0;
-      let pitch = 0.0;
-      if (personaKey === 'sun') { speakingRate = 0.85; pitch = -1.5; }
-
+      // 🔥 [수정] 순자 할머니 튜닝 제거 (기본값 사용)
       try {
           const ttsRes = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsApiKey}`, {
             method: "POST",
@@ -112,13 +108,12 @@ export async function POST(req: Request) {
             body: JSON.stringify({
                 input: { text: sanitizedText },
                 voice: { languageCode: "ko-KR", name: persona.voice },
-                audioConfig: { audioEncoding: "MP3", speakingRate, pitch }
+                audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0.0 }
             })
           });
           const ttsData = await ttsRes.json();
           if (ttsData.audioContent) audioContent = ttsData.audioContent;
-          else console.error("TTS API Error:", ttsData);
-      } catch (e) { console.error("TTS Net Error", e); }
+      } catch (e) { console.error("TTS Error", e); }
 
       return NextResponse.json({ 
           userText: aiData.userTranscript || "(...)", 
@@ -136,6 +131,7 @@ export async function POST(req: Request) {
         const personaName = formData.get("personaName") as string;
 
         try {
+            // 🔥 [수정됨] 프롬프트: 페르소나 분석 제거 -> 사용자 반응 분석으로 변경
             const feedbackPrompt = `
                 당신은 한국어 교육 전문가입니다.
                 대화 참여자: ${userName}(학습자), ${personaName}(AI)
@@ -143,10 +139,15 @@ export async function POST(req: Request) {
                 [대화 기록]
                 ${history.map((m:any)=>`${m.role==='user'?userName:personaName}: ${m.text}`).join("\n")}
 
-                [출력 포맷 (JSON)]
+                [분석 가이드 - 중요: 학습자(${userName}) 위주로 분석하세요]
+                1. 발음 및 문법: ${userName}님의 발음, 어휘, 문법적 오류를 지적하고 교정해주세요.
+                2. 반응 및 억양: ${personaName}의 말에 대한 ${userName}님의 반응(Reaction)과 대답이 문맥상 자연스러웠는지, 억양은 적절했는지 분석해주세요. (AI의 화법은 분석하지 마세요.)
+                3. 총평: ${userName}님이 대화를 얼마나 잘 이끌어갔는지 평가하세요.
+
+                [출력 포맷 (JSON Only)]
                 {
-                  "pronunciation": "${userName}님의 발음/어휘 평가...",
-                  "intonation": "${personaName}의 말투를 참고한 억양 조언...",
+                  "pronunciation": "${userName}님의 발음 및 어휘 평가 내용...",
+                  "intonation": "${personaName}의 말에 대한 반응 및 억양 분석...",
                   "general": "총평..."
                 }
             `;
@@ -184,16 +185,12 @@ export async function POST(req: Request) {
         } catch (e) { return NextResponse.json({ error: "Translation failed" }, { status: 500 }); }
     }
 
-    // --- [기능 5] 단순 TTS (첫 인사용) ---
+    // --- [기능 5] 단순 TTS ---
     if (action === "tts_simple") {
         const text = formData.get("text") as string;
         const voiceName = formData.get("voiceName") as string;
         
-        // 순자 할머니 예외 처리
-        let speakingRate = 1.0;
-        let pitch = 0.0;
-        if (voiceName.includes("Vindemiatrix")) { speakingRate = 0.85; pitch = -1.5; }
-
+        // 🔥 [수정] 순자 할머니 튜닝 제거 (기본값)
         try {
             const ttsRes = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsApiKey}`, {
                 method: "POST",
@@ -201,15 +198,9 @@ export async function POST(req: Request) {
                 body: JSON.stringify({
                     input: { text },
                     voice: { languageCode: "ko-KR", name: voiceName },
-                    audioConfig: { audioEncoding: "MP3", speakingRate, pitch }
+                    audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0.0 }
                 })
             });
-            
-            if (!ttsRes.ok) {
-                console.error("Simple TTS API Error:", await ttsRes.text());
-                throw new Error("TTS API call failed");
-            }
-
             const ttsData = await ttsRes.json();
             return NextResponse.json({ audioContent: ttsData.audioContent });
         } catch (e) {
@@ -220,7 +211,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 
   } catch (error: any) {
-    console.error("API Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

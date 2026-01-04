@@ -22,14 +22,13 @@ const WELCOME_MESSAGE = {
   content: `안녕하세요, 새로운 학습자님! 👋\n\n다양한 한국어 친구들을 만나보세요!\n\n🗣️ 한국어 자유 회화 (Beta): 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요.\n🎙️ 발음 테스트: 정확한 발음을 연습하고 점수를 받아보세요.\n\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요. 화이팅! 💪`
 };
 
-// 🎭 페르소나 데이터 (voice 속성 포함, png 확장자)
 const PERSONAS = [
   { id: 'su', name: '수경', role: '대학생', desc: '활발한 20대 대학생', color: 'bg-pink-50 border-pink-200', img: '/images/수경.png', voice: 'ko-KR-Chirp3-HD-Zephyr' },
   { id: 'min', name: '민철', role: '카페 사장', desc: '감성적이고 따뜻한 30대 사장님', color: 'bg-amber-50 border-amber-200', img: '/images/민철.png', voice: 'ko-KR-Chirp3-HD-Rasalgethi' },
   { id: 'jin', name: '진성', role: '면접관', desc: '논리적이고 깐깐한 대기업 부장님', color: 'bg-slate-50 border-slate-300', img: '/images/진성.png', voice: 'ko-KR-Chirp3-HD-Algenib' },
   { id: 'seol', name: '설아', role: 'K-Culture 팬', desc: '텐션 높은 K-POP/드라마 덕후', color: 'bg-purple-50 border-purple-200', img: '/images/설아.png', voice: 'ko-KR-Chirp3-HD-Despina' },
   { id: 'do', name: '도식', role: '트레이너', desc: '에너지 넘치는 헬스 트레이너', color: 'bg-blue-50 border-blue-200', img: '/images/도식.png', voice: 'ko-KR-Chirp3-HD-Achird' },
-  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.png', voice: 'ko-KR-Chirp3-HD-Achernar' },
+  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.png', voice: 'ko-KR-Chirp3-HD-Sadachbia' }, // 🔥 변경됨
   { id: 'hye', name: '혜선', role: '상담사', desc: '지친 마음을 위로해주는 심리 상담가', color: 'bg-rose-50 border-rose-200', img: '/images/혜선.png', voice: 'ko-KR-Chirp3-HD-Aoede' },
   { id: 'woo', name: '우주', role: '중학생', desc: '축구와 게임을 좋아하는 개구쟁이', color: 'bg-yellow-50 border-yellow-200', img: '/images/우주.png', voice: 'ko-KR-Chirp3-HD-Charon' },
   { id: 'hyun', name: '현성', role: '소설가', desc: '지적이고 시니컬한 소설 작가', color: 'bg-stone-50 border-stone-200', img: '/images/현성.png', voice: 'ko-KR-Chirp3-HD-Zubenelgenubi' },
@@ -212,6 +211,7 @@ export default function Home() {
     if (ttsLoading) return; 
     try {
       setTtsLoading(true);
+      // 🔥 [수정] API 호출 방식 통일 (FormData)
       const formData = new FormData();
       formData.append("action", "tts_simple");
       formData.append("text", text);
@@ -260,7 +260,6 @@ export default function Home() {
       setChatStatus('active');
       setChatFeedback(null);
       
-      // 🔥 [수정] FormData로 TTS 요청 보내기 (API와 통일)
       handleGoogleTTS(greeting, null, persona?.voice);
   };
 
@@ -358,25 +357,11 @@ export default function Home() {
 
           const feedbackSummary = `🗣️ 발음: ${data.pronunciation}\n🎭 억양: ${data.intonation}\n💡 총평: ${data.general}`;
           
-          // ✨ [수정 후] 받침 확인 로직 적용 (와/과 자동 구분)
           const pName = currentPersona?.name || "AI";
           const lastCharCode = pName.charCodeAt(pName.length - 1);
-          // 한글 유니코드에서 (코드 - 0xAC00) % 28 > 0 이면 받침이 있음 -> '과', 없으면 -> '와'
           const hasBatchim = (lastCharCode - 0xAC00) % 28 > 0; 
           const particle = hasBatchim ? "과" : "와";
-          
           const title = `${pName}${particle}의 대화`; 
-
-          await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
-            text: title, // 수정된 제목 저장 (예: 진성과의 대화)
-            score: 0, 
-            recognized: "", 
-            correct: "",
-            feedback: feedbackSummary, 
-            advice: data.general, 
-            type: "free_talking", 
-            date: serverTimestamp()
-          });
 
           await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
             text: title, score: 0, recognized: "", correct: "",
@@ -517,10 +502,7 @@ export default function Home() {
            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
         </div>
         <div className="flex items-center gap-3">
-           <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1">
-             <span className="text-2xl">📮</span> 
-             {hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
-           </button>
+           <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1"><span className="text-2xl">📮</span>{hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}</button>
            <button onClick={handleLogout} className="text-xl hover:scale-110 transition ml-1" title="로그아웃">👋</button>
         </div>
       </header>
@@ -541,19 +523,10 @@ export default function Home() {
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
             {/* Streak Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-               <div>
-                 <div className="flex items-center gap-2 mb-1">
-                   <h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3>
-                   <button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button>
-                 </div>
-                 <div className="mt-2">
-                    <p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p>
-                    <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div>
-                 </div>
-               </div>
+               <div><div className="flex items-center gap-2 mb-1"><h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button></div><div className="mt-2"><p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p><div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div></div></div>
                <div className="text-center bg-orange-50 px-4 py-3 rounded-xl min-w-[80px]"><p className="text-2xl font-black text-orange-500 mb-1">{streak} <span className="text-sm font-bold text-orange-400">일</span></p><p className="text-[10px] text-orange-700 font-bold">연속 학습중</p></div>
             </div>
-
+            {/* Cards */}
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -565,7 +538,6 @@ export default function Home() {
                   <div><div className="text-lg font-bold text-slate-800 group-hover:text-${item.color}-700">{item.t}</div><div className="text-sm text-slate-500">{item.d}</div></div>
                 </button>
               ))}
-              
               <button onClick={enterFreeTalking} className="w-full p-5 rounded-2xl text-left bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm border border-green-100 hover:border-green-500 transition group flex items-center gap-4 relative overflow-hidden">
                   <div className="absolute top-3 right-3 bg-white/80 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-green-700 border border-green-200">🪙 토큰 2개 / 턴</div>
                   <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:scale-110 transition-transform"><MessageCircle /></div>
@@ -575,7 +547,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history views ... */}
+        {/* ... category, history views (생략 - 위와 동일) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -588,10 +560,11 @@ export default function Home() {
              <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 flex items-center gap-1"><ChevronLeft/> 메인으로</button>
              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {['all', 'word', 'sentence', 'dialogue', 'free_talking'].map(tab => (
-                    <button key={tab} onClick={() => setHistoryTab(tab as any)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition border ${historyTab === tab ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{tab === 'all' ? '전체' : tab === 'word' ? '단어' : tab === 'sentence' ? '문장' : tab === 'dialogue' ? '담화' : '자유회화'}</button>
+                    <button key={tab} onClick={() => setHistoryTab(tab as any)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition border ${historyTab === tab ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{tab === 'all' ? '전체' : tab === 'word' ? '단어' : tab === 'sentence' ? '문장' : '회화'}</button>
                 ))}
              </div>
              <div className="space-y-3">
+               {/* 내 기록 표시 (번역 버튼 포함) */}
                {historyList.filter(h => historyTab === 'all' || h.type === historyTab || (historyTab === 'dialogue' && h.type === 'free_talking')).map(h => ( 
                    <div key={h.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative">
                        <div className="text-[10px] text-slate-400 mb-1">{h.date?.toDate ? h.date.toDate().toLocaleDateString() : new Date().toLocaleDateString()}</div>
@@ -601,6 +574,7 @@ export default function Home() {
                            {h.type !== 'free_talking' && <span className={`text-sm font-black px-2 py-1 rounded ${h.score >= 80 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{h.score}점</span>}
                        </div>
                        
+                       {/* 요약 내용 (2줄 제한) */}
                        <div className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 mb-2 line-clamp-2">
                            {h.feedback || h.explanation || h.advice || "내용 없음"}
                        </div>
