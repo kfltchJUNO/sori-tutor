@@ -21,7 +21,6 @@ const WELCOME_MESSAGE = {
   content: `안녕하세요, 새로운 학습자님! 👋\n\n다양한 한국어 친구들을 만나보세요!\n\n🗣️ 한국어 자유 회화 (Beta): 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요.\n🎙️ 발음 테스트: 정확한 발음을 연습하고 점수를 받아보세요.\n\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요. 화이팅! 💪`
 };
 
-// 10명의 페르소나 데이터 (이미지 경로: public/images/파일명.png)
 const PERSONAS = [
   { id: 'su', name: '수경', role: '대학생', desc: '활발한 20대 대학생', color: 'bg-pink-50 border-pink-200', img: '/images/수경.png', voice: 'ko-KR-Chirp3-HD-Zephyr' },
   { id: 'min', name: '민철', role: '카페 사장', desc: '감성적이고 따뜻한 30대 사장님', color: 'bg-amber-50 border-amber-200', img: '/images/민철.png', voice: 'ko-KR-Chirp3-HD-Rasalgethi' },
@@ -118,7 +117,6 @@ export default function Home() {
         else setHearts(data.free_hearts ?? 3);
         checkNewMail(user.email);
         
-        // 7일 챌린지 성공 체크
         if (data.streak >= 7 && (!data.last_challenge_reward || new Date(data.last_challenge_reward).toDateString() !== today)) {
              await updateDoc(userRef, { tokens: increment(15), last_challenge_reward: today });
              alert("🎉 7일 연속 학습 챌린지 달성! 15 토큰이 지급되었습니다!");
@@ -149,14 +147,7 @@ export default function Home() {
     const s = await getDocs(q); 
     const safeList = s.docs.map(d => {
         const data = d.data();
-        return { 
-            id: d.id, 
-            ...data,
-            recognized: data.recognized || "", 
-            correct: data.correct || "",
-            feedback: data.feedback || data.explanation || "내용 없음",
-            advice: data.advice || ""
-        };
+        return { id: d.id, ...data }; 
     });
     setHistoryList(safeList); 
     setViewMode("history"); 
@@ -213,7 +204,7 @@ export default function Home() {
       formData.append("action", "tts_simple");
       formData.append("text", text);
       formData.append("voiceName", voice || "ko-KR-Chirp3-HD-Zephyr");
-          
+      
       const res = await fetch("/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       if (data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); }
@@ -244,6 +235,7 @@ export default function Home() {
   const handleChatSend = async () => {
     if (!audioBlob) return;
     
+    // 잔액 체크 (차감은 성공 후)
     if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -262,6 +254,7 @@ export default function Home() {
             alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return;
         }
 
+        // 성공 시 토큰 차감 (-2)
         if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
         else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
 
@@ -282,6 +275,7 @@ export default function Home() {
   };
 
   const handleChatFeedback = async () => {
+      // 피드백 비용: 2토큰
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -295,6 +289,7 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           setChatFeedback(data);
           
+          // 토큰 차감 (-2) & 포인트 지급 (+10)
           if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
           updateDoc(doc(db,"sori_users",currentUser.email), { points: increment(10) });
@@ -309,7 +304,6 @@ export default function Home() {
   };
 
   const handleTranslateFeedback = async () => {
-      if (!chatFeedback && !result) return;
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
       if(!confirm("번역하시겠습니까? (0.5 토큰)")) return;
@@ -317,19 +311,50 @@ export default function Home() {
       setLoading(true);
       const formData = new FormData();
       formData.append("action", "translate");
-      const text = chatFeedback 
+      // 현재 보고 있는 결과가 있으면 그것을, 없으면(내기록) 선택된 항목을 번역
+      const textToTrans = chatFeedback 
         ? `Pronunciation: ${chatFeedback.pronunciation}\nGeneral: ${chatFeedback.general}`
-        : `Explanation: ${result.explanation}\nAdvice: ${result.advice}`;
-      formData.append("text", text);
+        : result 
+            ? `Explanation: ${result.explanation}\nAdvice: ${result.advice}`
+            : ""; 
+            // 내 기록에서 호출 시 별도 처리 필요하지만, 현재는 연습/회화 결과창용
+
+      if(!textToTrans) { alert("번역할 내용이 없습니다."); setLoading(false); return; }
+
+      formData.append("text", textToTrans);
 
       try {
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           setTranslation(data.translatedText);
+          if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
+          else { setTokens(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-1) }); }
+      } catch(e) { alert("번역 실패"); } finally { setLoading(false); }
+  };
+
+  // 내 기록에서 번역 기능
+  const handleHistoryTranslate = async (item: any) => {
+      if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
+      if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
+      if (!confirm("이 기록을 번역하시겠습니까? (0.5 토큰)")) return;
+
+      const text = item.feedback || item.explanation || item.advice;
+      if (!text) return alert("내용이 없습니다.");
+
+      setLoading(true);
+      const formData = new FormData();
+      formData.append("action", "translate");
+      formData.append("text", text);
+
+      try {
+          const res = await fetch("/api/chat", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data.error) { alert(data.error); return; }
+          alert(`[번역 결과]\n${data.translatedText}`); // 간단히 알림으로 표시
           if (userRole === 'guest') { setHearts(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-0.5) }); }
           else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
-      } catch(e) { alert("번역 실패"); } finally { setLoading(false); }
+      } catch(e) { alert("오류"); } finally { setLoading(false); }
   };
 
   const selectCourse = async (type: any) => { setCourseType(type); if(type==="word"){ const s=await getDocs(query(collection(db,"sori_curriculum_word"))); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(s.docs.length>0) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); } else { const s=await getDocs(collection(db,`sori_curriculum_${type}`)); const c=new Set<string>(); s.forEach(d=>c.add(d.data().category)); setCategories(Array.from(c).sort()); setViewMode("category"); } setResult(null); };
@@ -346,6 +371,7 @@ export default function Home() {
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
+    // 단어: 0.5, 문장/담화: 1 토큰 체크
     const cost = courseType === 'word' ? 0.5 : 1;
     if (userRole === "student" && tokens < cost) return setShowPaymentModal(true);
     
@@ -360,7 +386,6 @@ export default function Home() {
     formData.append("audio", audioBlob); 
     formData.append("targetText", targetText); 
     formData.append("context", contextInfo);
-    formData.append("userNick", userAlias || "학습자");
     
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
@@ -433,7 +458,7 @@ export default function Home() {
                <div><div className="flex items-center gap-2 mb-1"><h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button></div><div className="mt-2"><p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p><div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div></div></div>
                <div className="text-center bg-orange-50 px-4 py-3 rounded-xl min-w-[80px]"><p className="text-2xl font-black text-orange-500 mb-1">{streak} <span className="text-sm font-bold text-orange-400">일</span></p><p className="text-[10px] text-orange-700 font-bold">연속 학습중</p></div>
             </div>
-            {/* Course Cards */}
+            {/* Cards */}
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -454,7 +479,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history views (기존 유지) ... */}
+        {/* ... category, history ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -471,7 +496,16 @@ export default function Home() {
                 ))}
              </div>
              <div className="space-y-3">
-               {historyList.filter(h => historyTab === 'all' || h.type === historyTab || (historyTab === 'dialogue' && h.type === 'free_talking')).map(h => ( <HistoryItem key={h.id} item={h} userEmail={currentUser.email} userRole={userRole} /> ))}
+               {/* 내 기록 표시 (번역 버튼 포함) */}
+               {historyList.filter(h => historyTab === 'all' || h.type === historyTab || (historyTab === 'dialogue' && h.type === 'free_talking')).map(h => ( 
+                   <div key={h.id} className="relative">
+                       <HistoryItem item={h} userEmail={currentUser.email} userRole={userRole} />
+                       {/* 🔥 내 기록에서 번역 버튼 추가 */}
+                       <button onClick={() => handleHistoryTranslate(h)} className="absolute bottom-4 right-4 text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-2 py-1 rounded hover:bg-slate-200 flex gap-1 items-center">
+                           <Languages size={10}/> 번역 (1🪙)
+                       </button>
+                   </div>
+               ))}
                {historyList.length === 0 && <p className="text-center text-slate-400 py-10">기록이 없습니다.</p>}
              </div>
           </div>
@@ -558,7 +592,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 🔥 [수정] 일반 연습 뷰 (녹음 버튼 위치 개선) */}
+        {/* 🔥 [수정] 일반 연습 뷰 (녹음 버튼 위치 개선 및 스크롤 처리) */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
@@ -568,56 +602,11 @@ export default function Home() {
                  {courseType !== "dialogue" && <button onClick={handleNextProblem} className="px-3 py-1 rounded-lg text-xs font-bold bg-white text-blue-600 border border-blue-200 hover:bg-blue-50">다음 ▶</button>}
                </div>
             </div>
-            {courseType === "dialogue" ? (
-               <div className="space-y-4 pb-20">
-                  <div className="bg-purple-50 p-4 rounded-xl"><h1 className="font-bold text-lg">{currentProblem.title}</h1><p className="text-sm">{currentProblem.translation}</p></div>
-                  {parsedScript.map((line, idx) => (
-                      <div key={idx} onClick={() => { if(line.role===myRole){ setTargetLineIndex(idx); setResult(null); setAudioUrl(null); }}} className={`p-3 border-2 rounded-xl mb-2 ${targetLineIndex===idx?'border-blue-500 bg-blue-50':'border-transparent bg-white'}`}>
-                          <span className="text-xs font-bold block opacity-70 mb-1">{line.role}</span>
-                          {line.text}
-                          <button onClick={(e)=>{e.stopPropagation(); handleGoogleTTS(line.text, currentProblem.audio_paths?.[idx])}} className="ml-2 bg-slate-200 rounded-full p-1"><Volume2 size={10}/></button>
-                      </div>
-                  ))}
-               </div>
-            ) : (
-               <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mb-6 mt-4">
-                  <h1 className="text-3xl font-black text-slate-800 mb-4 break-keep">{currentProblem.text}</h1>
-                  <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
-                  <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">💡 {courseType==="word" ? currentProblem.tip : currentProblem.translation}</div>
-               </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 하단 컨트롤 바 */}
-      {(viewMode === "practice" || (viewMode === "freetalking" && chatStatus === 'active')) && (
-        <div className="flex-none bg-white border-t p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-3xl z-50">
-          
-          {viewMode === "freetalking" ? (
-             <div className="flex flex-col items-center gap-4">
-                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">{PERSONAS.find(p=>p.id===selectedPersona)?.name}이가 생각하고 있어요... 🤔</div>}
-                 {!recording && !loading && (
-                     <button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>
-                 )}
-                 {recording && (
-                     <div className="flex flex-col items-center">
-                         <button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-green-100"><div className="w-6 h-6 bg-white rounded-md"></div></button>
-                         <span className="text-xs text-green-600 font-bold mt-2">말하는 중...</span>
-                     </div>
-                 )}
-                 {audioUrl && !recording && !loading && (
-                      <div className="flex gap-2 w-full animate-in slide-in-from-bottom">
-                          <button onClick={() => {setAudioUrl(null); setAudioBlob(null);}} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">취소</button>
-                          <button onClick={handleChatSend} className="flex-[2] py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><Send size={18}/> 전송 (-2🪙)</button>
-                      </div>
-                 )}
-             </div>
-          ) : (
-            // 🔥 [수정] 결과 화면에서도 녹음 버튼 유지 (스크롤 가능한 결과창)
-            result ? (
-                <div className="flex flex-col gap-4 max-h-[60vh]">
-                   <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+            
+            {/* 결과가 있을 때: 스크롤 가능한 컨테이너 */}
+            {result ? (
+                <div className="flex flex-col gap-4 h-full">
+                   <div className="flex-1 overflow-y-auto pr-1 space-y-4 pb-20">
                        <div className="flex items-center justify-between sticky top-0 bg-white z-10 py-2 border-b">
                            <h3 className="font-bold text-lg text-slate-800">분석 결과</h3>
                            <span className={`text-2xl font-black ${result.score >= 80 ? 'text-green-500' : 'text-orange-500'}`}>{result.score}점</span>
@@ -628,30 +617,66 @@ export default function Home() {
                            <div><span className="text-xs font-bold text-slate-400 block mb-1">정답 소리</span><div className="text-lg font-bold text-green-600 tracking-wide bg-white p-2 rounded border border-green-100">{result.correct}</div></div>
                        </div>
                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3 relative">
-                           {/* 번역 버튼 */}
                            <button onClick={handleTranslateFeedback} className="absolute top-4 right-4 text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-100 flex items-center gap-1"><Languages size={12}/> 번역 (0.5🪙)</button>
                            <div className="flex items-start gap-2"><CheckCircle size={16} className="text-blue-600 mt-0.5 shrink-0"/><div><span className="text-xs font-bold text-blue-500 block">발음 교정</span><p className="text-sm text-blue-800 font-bold leading-snug">{result.explanation}</p></div></div>
                            {result.advice && (<div className="flex items-start gap-2 pt-2 border-t border-blue-200"><Info size={16} className="text-indigo-500 mt-0.5 shrink-0"/><div><span className="text-xs font-bold text-indigo-500 block">억양 / 감정 Tip</span><p className="text-xs text-indigo-700 leading-relaxed">{result.advice}</p></div></div>)}
                            {translation && (<div className="mt-3 pt-3 border-t border-blue-200 animate-in fade-in"><p className="text-xs font-bold text-purple-600 mb-1">🌏 번역된 피드백</p><p className="text-xs text-slate-700 whitespace-pre-wrap">{translation}</p></div>)}
                        </div>
                    </div>
-                   {/* 하단 고정 버튼들 */}
-                   <div className="flex flex-col gap-2 shrink-0">
-                       <button onClick={() => { setResult(null); setAudioUrl(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2"><Mic size={18}/> 다시 녹음하기</button>
-                       <button onClick={() => { setResult(null); setAudioUrl(null); if (courseType !== 'dialogue') handleNextProblem(); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shrink-0">{courseType === "dialogue" ? "확인" : "다음 문제 (랜덤)"}</button>
+                   {/* 하단 고정 버튼 (녹음 + 다음) */}
+                   <div className="flex flex-col gap-2 shrink-0 bg-white pt-2 border-t mt-auto">
+                       <button onClick={() => { setResult(null); setAudioUrl(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition"><Mic size={18}/> 다시 녹음하기</button>
+                       <button onClick={() => { setResult(null); setAudioUrl(null); if (courseType !== 'dialogue') handleNextProblem(); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shrink-0 shadow-lg">{courseType === "dialogue" ? "확인" : "다음 문제 (랜덤)"}</button>
                    </div>
                 </div>
             ) : (
-                <div className="flex flex-col items-center gap-4">
-                   {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">AI가 소리를 분석 중입니다... 🎧</div>}
-                   {!recording && !audioUrl && !loading && (<button onClick={startRecording} className="w-16 h-16 rounded-full bg-red-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>)}
-                   {recording && (<div className="flex flex-col items-center"><button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100"><div className="w-6 h-6 bg-white rounded-md"></div></button><span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span></div>)}
-                   {audioUrl && !recording && !loading && (<div className="w-full space-y-3 animate-in fade-in zoom-in duration-200"><audio src={audioUrl} controls className="w-full h-10 rounded-lg shadow-sm border border-slate-200 bg-slate-50" /><div className="flex gap-2 w-full"><button onClick={() => {setAudioUrl(null); setAudioBlob(null);}} className="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold border">재녹음</button><button onClick={analyzeAudio} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md">피드백 받기</button></div></div>)}
-                </div>
-            )
-          )}
+               // 문제 화면 (결과 없을 때)
+               <div className="flex flex-col h-full">
+                   {courseType === "dialogue" ? (
+                       <div className="space-y-4 flex-1 overflow-y-auto pb-20">
+                          <div className="bg-purple-50 p-4 rounded-xl"><h1 className="font-bold text-lg">{currentProblem.title}</h1><p className="text-sm">{currentProblem.translation}</p></div>
+                          {parsedScript.map((line, idx) => (
+                              <div key={idx} onClick={() => { if(line.role===myRole){ setTargetLineIndex(idx); setResult(null); setAudioUrl(null); }}} className={`p-3 border-2 rounded-xl mb-2 ${targetLineIndex===idx?'border-blue-500 bg-blue-50':'border-transparent bg-white'}`}>
+                                  <span className="text-xs font-bold block opacity-70 mb-1">{line.role}</span>
+                                  {line.text}
+                                  <button onClick={(e)=>{e.stopPropagation(); handleGoogleTTS(line.text, currentProblem.audio_paths?.[idx])}} className="ml-2 bg-slate-200 rounded-full p-1"><Volume2 size={10}/></button>
+                              </div>
+                          ))}
+                       </div>
+                    ) : (
+                       <div className="flex-1 flex flex-col justify-center items-center pb-20">
+                           <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mb-6 w-full">
+                              <h1 className="text-3xl font-black text-slate-800 mb-4 break-keep">{currentProblem.text}</h1>
+                              <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
+                              <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">💡 {courseType==="word" ? currentProblem.tip : currentProblem.translation}</div>
+                           </div>
+                       </div>
+                    )}
+               </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 하단 녹음 컨트롤 (프리토킹 또는 연습모드에서 결과 없을 때) */}
+      {(viewMode === "freetalking" && chatStatus === 'active') || (viewMode === "practice" && !result) ? (
+        <div className="flex-none bg-white border-t p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-3xl z-50">
+             <div className="flex flex-col items-center gap-4">
+                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">AI가 생각하고 있어요... 🤔</div>}
+                 {!recording && !audioUrl && !loading && (<button onClick={startRecording} className="w-16 h-16 rounded-full bg-red-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>)}
+                 {recording && (<div className="flex flex-col items-center"><button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100"><div className="w-6 h-6 bg-white rounded-md"></div></button><span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span></div>)}
+                 {audioUrl && !recording && !loading && (
+                      <div className="flex gap-2 w-full animate-in slide-in-from-bottom">
+                          <button onClick={() => {setAudioUrl(null); setAudioBlob(null);}} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">취소</button>
+                          {viewMode === 'freetalking' 
+                            ? <button onClick={handleChatSend} className="flex-[2] py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><Send size={18}/> 전송 (-2🪙)</button>
+                            : <button onClick={analyzeAudio} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md">피드백 받기</button>
+                          }
+                      </div>
+                 )}
+             </div>
         </div>
-      )}
+      ) : null}
 
       {/* --- 모달들 (생략 없음) --- */}
       {showNicknameModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl"><h2 className="text-xl font-black mb-1 text-slate-800">닉네임 설정</h2><input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl mb-4 font-bold text-center" value={userAlias} onChange={e => setUserAlias(e.target.value)} placeholder="예: 열공하는개미" /><button onClick={() => saveNickname(userAlias)} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button></div></div>)}

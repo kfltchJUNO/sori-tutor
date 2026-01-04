@@ -20,15 +20,17 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const action = formData.get("action") as string; 
     
-    // API Key 로드 (우선순위 체크)
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    
-    // TTS용 키가 별도로 없으면 일반 키 사용
-    const ttsApiKey = process.env.GOOGLE_TTS_API_KEY || apiKey;
+    // API Key 로드 (여러 환경변수 시도)
+    const geminiApiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    // TTS 키가 별도로 없으면 Gemini 키 사용 (Google Cloud 프로젝트가 같을 경우)
+    const ttsApiKey = process.env.GOOGLE_TTS_API_KEY || geminiApiKey;
 
-    if (!apiKey) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+    if (!geminiApiKey) {
+        console.error("❌ [API Error] Gemini API Key not found in environment variables.");
+        return NextResponse.json({ error: "Server Configuration Error: API KEY MISSING" }, { status: 500 });
+    }
     
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // --- [기능 1] 대화 진행 (Chat + STT + TTS) ---
@@ -98,9 +100,14 @@ export async function POST(req: Request) {
                 audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 }
             })
           });
-          const ttsData = await ttsRes.json();
-          if (ttsData.audioContent) audioContent = ttsData.audioContent;
-          else console.error("TTS API Error:", ttsData);
+          
+          if (!ttsRes.ok) {
+              const err = await ttsRes.text();
+              console.error("TTS API Error:", err);
+          } else {
+              const ttsData = await ttsRes.json();
+              if (ttsData.audioContent) audioContent = ttsData.audioContent;
+          }
       } catch (e) { console.error("TTS Net Error", e); }
 
       return NextResponse.json({ 
@@ -151,8 +158,13 @@ export async function POST(req: Request) {
                     audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 }
                 })
             });
+            
+            if (!ttsRes.ok) {
+                console.error("Simple TTS Error:", await ttsRes.text());
+                throw new Error("TTS API call failed");
+            }
+
             const ttsData = await ttsRes.json();
-            if (!ttsData.audioContent) throw new Error("No audio content");
             return NextResponse.json({ audioContent: ttsData.audioContent });
         } catch (e) {
             return NextResponse.json({ error: "TTS failed" }, { status: 500 });
