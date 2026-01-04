@@ -5,7 +5,7 @@ import Login from "./components/Login";
 import AdModal from "./components/AdModal"; 
 
 import { db, auth } from "@/lib/firebase"; 
-import { signOut, onAuthStateChanged } from "firebase/auth"; // onAuthStateChanged 추가
+import { signOut, onAuthStateChanged } from "firebase/auth"; 
 import { 
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
@@ -19,37 +19,7 @@ const WELCOME_MESSAGE = {
   title: "🎉 소리튜터에 오신 것을 환영합니다! (사용 설명서 포함)",
   date: new Date(), 
   read: true, 
-  content: `안녕하세요, 새로운 학습자님! 👋
-
-한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.
-소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.
-
-🚀 이렇게 시작해보세요!
-🎙️ 발음 테스트: 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)
-🎭 실전 회화 (롤플레잉): '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
-🗣️ 한국어 자유 회화: 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.
-📊 랭킹 도전: 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!
-
-💡 왜 소리튜터인가요?
-* Expert-Led Content: 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
-* High-End AI: 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.) 오프라인 학원 수강료 대비 합리적인 비용으로 24시간 코칭을 받아보세요.
-
-📢 충전 및 이용 안내 (Pre-Launch) 정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
-다소 번거로우시더라도, 수수료 절감분을 더 높은 퀄리티의 AI 모델 유지에 재투자하기 위함이니 양해 부탁드립니다.
-초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.
-(추후 상위 이용자 대상 커피 쿠폰 제공 등의 이벤트 기획중)
-
-🎁 7일 연속 학습 챌린지!
-작심삼일은 이제 그만! 확실한 동기부여를 드립니다.
-* 미션: 7일 동안 매일 5번 이상 연습하기
-* 선물: 미션 성공 시 15 토큰 즉시 지급!
-
-로그인 시 매일 무료 하트 3개가 충전됩니다. 부담없이 사용해 보세요.
-학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요.
-학습이 끝나면 [👋] 아이콘으로 로그아웃 하시면 됩니다.
-당신의 한국어가 유창해지는 그날까지 소리튜터가 함께하겠습니다. 화이팅! 💪
-
-- 소리튜터 운영진 드림 -`
+  content: `안녕하세요, 새로운 학습자님! 👋\n\n한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.\n소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.\n\n🚀 이렇게 시작해보세요!\n🎙️ 발음 테스트: 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)\n🎭 실전 회화 (롤플레잉): '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.\n🗣️ 한국어 자유 회화: 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.\n📊 랭킹 도전: 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!\n\n💡 왜 소리튜터인가요?\n* Expert-Led Content: 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다.\n* High-End AI: 구글의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다.\n\n📢 충전 및 이용 안내 (Pre-Launch)\n정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.\n초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.\n\n🎁 7일 연속 학습 챌린지!\n* 미션: 7일 동안 매일 5번 이상 연습하기\n* 선물: 미션 성공 시 15 토큰 즉시 지급!\n\n로그인 시 매일 무료 하트 3개가 충전됩니다.\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요.\n\n- 소리튜터 운영진 드림 -`
 };
 
 const PERSONAS = [
@@ -132,7 +102,6 @@ export default function Home() {
   const chunksRef = useRef<Blob[]>([]);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // 🔥 [보강] 초기 로그인 상태 체크 (새로고침 시에도 유지)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
         if (user) {
@@ -198,9 +167,13 @@ export default function Home() {
     setHasNewMail(!snap.empty); 
   };
 
-  // 🔥 [수정] 우편함 로직 강화 (로그인 체크 + 에러 핸들링 + 강제 모달 오픈)
+  // 🔥 [수정] 우편함: 즉시 모달 오픈 후 데이터 로드
   const fetchInbox = async () => {
-    if (!currentUser) return alert("로그인 정보를 불러오는 중입니다. 잠시만 기다려주세요.");
+    setShowInboxModal(true); 
+    setInboxTab('received');
+    setHasNewMail(false);
+
+    if (!currentUser) return;
     
     setLoading(true);
     try {
@@ -218,27 +191,23 @@ export default function Home() {
         setInboxList([WELCOME_MESSAGE, ...readMsgs]);
     } catch (e) {
         console.error("Inbox Error", e);
-        // 에러가 나도 기본 환영 메시지는 보여줌
         setInboxList([WELCOME_MESSAGE]); 
     } finally {
         setLoading(false);
-        setShowInboxModal(true); // 무조건 모달 열기
-        setInboxTab('received');
-        setHasNewMail(false);
     }
   };
 
-  // 🔥 [수정] 랭킹 로직 강화 (로그인 체크 + 에러 핸들링)
+  // 🔥 [수정] 랭킹: 즉시 모달 오픈 후 데이터 로드
   const fetchRanking = async () => { 
-    if (!currentUser) return alert("로그인 정보를 불러오는 중입니다."); 
+    setShowRankingModal(true); 
+    if (!currentUser) return; 
+    
     setLoading(true);
     try {
         const s = await getDocs(query(collection(db, "sori_users"), orderBy("points", "desc"), limit(10))); 
         setRankingList(s.docs.map(d => d.data())); 
-        setShowRankingModal(true); 
     } catch (e) {
         console.error("Ranking Error", e);
-        alert("랭킹 정보를 불러오는데 실패했습니다.");
     } finally {
         setLoading(false);
     }
@@ -569,7 +538,6 @@ export default function Home() {
         if (todayCount === 4) updates.streak = increment(1);
         if (todayCount === 4) updates.points = increment(earnedPoints + 10); 
 
-        // 🔥 [수정] 게스트는 무조건 1개 차감
         if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = increment(-1); }
         else { setTokens(p=>p-cost); updates.tokens = increment(-cost); }
         
@@ -629,23 +597,15 @@ export default function Home() {
       </div>
       
       <div className="flex-1 overflow-y-auto p-5 scrollbar-hide pb-24">
+        {/* ... (Home, Category, History Views - Same as before) ... */}
         {viewMode === "home" && (
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
             {/* Streak Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-               <div>
-                 <div className="flex items-center gap-2 mb-1">
-                   <h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3>
-                   <button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button>
-                 </div>
-                 <div className="mt-2">
-                    <p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p>
-                    <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div>
-                 </div>
-               </div>
+               <div><div className="flex items-center gap-2 mb-1"><h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button></div><div className="mt-2"><p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p><div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div></div></div>
                <div className="text-center bg-orange-50 px-4 py-3 rounded-xl min-w-[80px]"><p className="text-2xl font-black text-orange-500 mb-1">{streak} <span className="text-sm font-bold text-orange-400">일</span></p><p className="text-[10px] text-orange-700 font-bold">연속 학습중</p></div>
             </div>
-
+            {/* Cards */}
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -657,7 +617,6 @@ export default function Home() {
                   <div><div className="text-lg font-bold text-slate-800 group-hover:text-${item.color}-700">{item.t}</div><div className="text-sm text-slate-500">{item.d}</div></div>
                 </button>
               ))}
-              
               <button onClick={enterFreeTalking} className="w-full p-5 rounded-2xl text-left bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm border border-green-100 hover:border-green-500 transition group flex items-center gap-4 relative overflow-hidden">
                   <div className="absolute top-3 right-3 bg-white/80 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-green-700 border border-green-200">🪙 토큰 2개 / 턴</div>
                   <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:scale-110 transition-transform"><MessageCircle /></div>
@@ -667,7 +626,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history views (생략 - 기존 코드와 동일) ... */}
+        {/* ... (Category, History, Freetalking, Practice Views) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -691,16 +650,13 @@ export default function Home() {
                            <h4 className="font-bold text-slate-800 text-lg truncate pr-10">{h.text}</h4>
                            {h.type !== 'free_talking' && <span className={`text-sm font-black px-2 py-1 rounded ${h.score >= 80 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{h.score}점</span>}
                        </div>
-                       
                        <div className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 mb-2 line-clamp-2">
                            {h.feedback || h.explanation || h.advice || "내용 없음"}
                        </div>
-                       
                        <div className="flex justify-end gap-2">
                            <button onClick={() => setShowFeedbackModal(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                📄 자세히
                            </button>
-                           {/* 번역 버튼: 게스트 가격은 핸들러 내부에서 하트 1개로 처리됨 (텍스트는 0.5로 표시되나 실제 차감은 로직 따름 - UI 텍스트도 변경 원하시면 아래 0.5를 1로 수정하세요) */}
                            <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                <Languages size={10}/> 번역 (0.5🪙)
                            </button>
@@ -712,9 +668,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... (Free Talking, Practice View - 기존 코드와 동일) ... */}
         {viewMode === "freetalking" && (
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full pb-24"> {/* 🔥 pb-24 추가하여 하단 가려짐 방지 */}
              {chatStatus === 'select_persona' && (
                <div className="animate-in fade-in zoom-in space-y-4">
                  <div className="flex items-center justify-between mb-2">
@@ -722,7 +677,7 @@ export default function Home() {
                    <h2 className="text-lg font-bold">대화 상대를 선택하세요</h2>
                    <button onClick={() => setShowPersonaRanking(true)} className="p-2 bg-yellow-100 text-yellow-700 rounded-full font-bold text-xs flex items-center gap-1"><Crown size={14}/> 인기순위</button>
                  </div>
-                 <div className="grid grid-cols-2 gap-3 pb-20">
+                 <div className="grid grid-cols-2 gap-3">
                    {PERSONAS.map(p => (
                      <div key={p.id} onClick={() => startChatWithPersona(p.id)} className={`p-3 rounded-2xl border-2 cursor-pointer transition hover:scale-105 ${p.color} bg-white shadow-sm flex flex-col items-center text-center`}>
                         <div className="w-20 h-20 rounded-full overflow-hidden mb-2 border-2 border-white shadow-md">
@@ -806,7 +761,7 @@ export default function Home() {
         )}
 
         {viewMode === "practice" && currentProblem && (
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full pb-24"> {/* 🔥 pb-24 추가 */}
             <div className="flex justify-between items-center mb-4">
                <button onClick={() => setViewMode("home")}><X size={20}/></button>
                <div className="flex gap-2">
@@ -816,8 +771,8 @@ export default function Home() {
             </div>
             
             {result ? (
-                <div className="flex flex-col gap-4 h-full">
-                   <div className="flex-1 overflow-y-auto pr-1 space-y-4 pb-20">
+                <div className="flex flex-col gap-4 h-full overflow-y-auto"> {/* 🔥 overflow-y-auto 추가 */}
+                   <div className="flex-1 space-y-4">
                        <div className="flex items-center justify-between sticky top-0 bg-white z-10 py-2 border-b">
                            <h3 className="font-bold text-lg text-slate-800">분석 결과</h3>
                            <span className={`text-2xl font-black ${result.score >= 80 ? 'text-green-500' : 'text-orange-500'}`}>{result.score}점</span>
@@ -835,8 +790,8 @@ export default function Home() {
                            {translation && (<div className="mt-3 pt-3 border-t border-blue-200 animate-in fade-in"><p className="text-xs font-bold text-purple-600 mb-1">🌏 번역된 피드백</p><p className="text-xs text-slate-700 whitespace-pre-wrap">{translation}</p></div>)}
                        </div>
                    </div>
-                   {/* 하단 고정 버튼 (녹음 + 다음) */}
-                   <div className="flex flex-col gap-2 shrink-0 bg-white pt-2 border-t mt-auto">
+                   {/* 하단 고정 버튼 (녹음 + 다음) - 여기서는 스크롤 안에 포함 */}
+                   <div className="flex flex-col gap-2 shrink-0 bg-white pt-2 border-t mt-4">
                        <button onClick={() => { setResult(null); setAudioUrl(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition"><Mic size={18}/> 다시 녹음하기</button>
                        <button onClick={() => { setResult(null); setAudioUrl(null); if (courseType !== 'dialogue') handleNextProblem(); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shrink-0 shadow-lg">{courseType === "dialogue" ? "확인" : "다음 문제 (랜덤)"}</button>
                    </div>
@@ -869,7 +824,32 @@ export default function Home() {
         )}
       </div>
 
-      {/* --- 모달들 --- */}
+      {/* 🔥 [수정] 하단 녹음 컨트롤 (고정 위치 보장) */}
+      {((viewMode === "freetalking" && chatStatus === 'active') || (viewMode === "practice" && !result)) && (
+        <div className="flex-none bg-white border-t p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-3xl z-50 fixed bottom-0 left-0 right-0 max-w-lg mx-auto">
+             <div className="flex flex-col items-center gap-4">
+                 {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">
+                    {viewMode === 'freetalking' ? `${PERSONAS.find(p=>p.id===selectedPersona)?.name}이가 생각하고 있어요... 🤔` : 'AI가 소리를 분석 중입니다... 🎧'}
+                 </div>}
+                 {!recording && !audioUrl && !loading && (<button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>)}
+                 {recording && (<div className="flex flex-col items-center"><button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100"><div className="w-6 h-6 bg-white rounded-md"></div></button><span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span></div>)}
+                 {audioUrl && !recording && !loading && (
+                      <div className="flex gap-2 w-full animate-in slide-in-from-bottom">
+                          <button onClick={() => {setAudioUrl(null); setAudioBlob(null);}} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">취소</button>
+                          {viewMode === 'freetalking' 
+                            ? <button onClick={handleChatSend} className="flex-[2] py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><Send size={18}/> 전송 (-2🪙)</button>
+                            : <button onClick={analyzeAudio} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md">피드백 받기</button>
+                          }
+                      </div>
+                 )}
+             </div>
+        </div>
+      )}
+
+      {/* --- 모달들 (기존 코드 유지) --- */}
+      {/* ... AdModal, TranslateModal, FeedbackModal, PersonaRanking, NicknameModal ... */}
+      
+      {/* 🔥 [추가] 광고 모달 */}
       {showAdModal && (
           <AdModal 
               onClose={() => setShowAdModal(false)} 
@@ -926,36 +906,49 @@ export default function Home() {
 
       {showNicknameModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl"><h2 className="text-xl font-black mb-1 text-slate-800">닉네임 설정</h2><input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl mb-4 font-bold text-center" value={userAlias} onChange={e => setUserAlias(e.target.value)} placeholder="예: 열공하는개미" /><button onClick={() => saveNickname(userAlias)} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button></div></div>)}
       
-      {/* 🔥 [수정] 충전 모달 (토큰 선택 기능 추가) */}
-      {showPaymentModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-                  <div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전소</h2></div>
-                  <div className="p-6">
-                      <p className="text-center text-slate-600 mb-6 font-bold">원하는 충전 방식을 선택하세요</p>
-                      <div className="flex flex-col gap-3">
-                          {/* 1. 토큰 구매 */}
-                          <button onClick={() => handleManualCharge(100, "2,900원")} className="w-full py-4 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-bold hover:bg-blue-100 flex justify-between px-6">
-                              <span>💎 100 토큰</span><span>2,900원</span>
-                          </button>
-                          <button onClick={() => handleManualCharge(250, "5,900원")} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex justify-between px-6 transform transition hover:scale-[1.02]">
-                              <span>💎 250 토큰</span><span>5,900원 (BEST)</span>
-                          </button>
-                          
-                          <div className="my-2 border-t border-slate-100"></div>
-
-                          {/* 2. 광고 시청 */}
-                          <button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200 text-sm flex items-center justify-center gap-2">
-                              📺 광고 보고 무료 충전 (1~3개)
-                          </button>
-                          
-                          {/* 3. 닫기 */}
-                          <button onClick={() => setShowPaymentModal(false)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 text-sm mt-2">닫기</button>
+      {/* ... (Inbox Modal) ... */}
+      {showInboxModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm">
+              <div className="bg-white w-full h-full sm:h-[600px] sm:max-w-md sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+                  {selectedMessage ? (
+                      <div className="flex flex-col h-full bg-white">
+                          <div className="p-4 border-b flex items-center gap-2 bg-white sticky top-0 z-10"><button onClick={() => setSelectedMessage(null)} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={24}/></button><h3 className="font-bold text-slate-800">상세 내용</h3></div>
+                          <div className="flex-1 overflow-y-auto p-6">
+                              <div className="mb-6 pb-4 border-b border-slate-100"><span className="inline-block px-2 py-1 bg-blue-600 text-white text-xs font-bold rounded mb-2">공지</span><h2 className="text-xl font-bold text-slate-900 leading-snug">{selectedMessage.title}</h2><p className="text-sm text-slate-400 mt-2">{selectedMessage.date instanceof Date ? selectedMessage.date.toLocaleDateString() : selectedMessage.date?.toDate ? selectedMessage.date.toDate().toLocaleDateString() : ""}</p></div>
+                              <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{selectedMessage.content}</div>
+                          </div>
+                          <div className="p-4 border-t"><button onClick={() => setSelectedMessage(null)} className="w-full py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200">목록으로</button></div>
                       </div>
-                  </div>
+                  ) : (
+                      <div className="flex flex-col h-full bg-slate-50">
+                          <div className="bg-white sticky top-0 z-10 shadow-sm">
+                              <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><Mail size={18}/> 소리튜터 우체통</h3><button onClick={() => setShowInboxModal(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={18}/></button></div>
+                              <div className="flex"><button onClick={() => setInboxTab('received')} className={`flex-1 py-3 text-sm font-bold border-b-2 ${inboxTab==='received'?'border-blue-600 text-blue-600':'border-transparent text-slate-400 hover:text-slate-600'}`}>받은 편지함</button><button onClick={() => setInboxTab('write')} className={`flex-1 py-3 text-sm font-bold border-b-2 ${inboxTab==='write'?'border-blue-600 text-blue-600':'border-transparent text-slate-400 hover:text-slate-600'}`}>문의하기</button></div>
+                          </div>
+                          <div className="p-4 overflow-y-auto flex-1">
+                              {inboxTab === 'received' ? (
+                                  <div className="space-y-3">
+                                      {inboxList.map((msg) => (<div key={msg.id} onClick={() => setSelectedMessage(msg)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer active:scale-98 transition relative">{!msg.read && <span className="absolute top-4 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}<span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mb-2 inline-block">{msg.from || "관리자"}</span><h4 className="font-bold text-slate-800 text-sm truncate pr-4">{msg.title}</h4><p className="text-xs text-slate-400 mt-1">{msg.date instanceof Date ? msg.date.toLocaleDateString() : msg.date?.toDate ? msg.date.toDate().toLocaleDateString() : ""}</p></div>))}
+                                      {inboxList.length === 0 && <p className="text-slate-400 text-center py-10">새로운 메시지가 없습니다.</p>}
+                                  </div>
+                              ) : (
+                                  <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4"><p className="text-sm text-blue-800 font-bold mb-1">📬 무엇을 도와드릴까요?</p><p className="text-xs text-blue-600">오류 제보, 기능 건의, 혹은 응원의 메시지도 환영합니다!</p></div>
+                                      <select className="w-full p-3 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={inquiryCategory} onChange={(e) => setInquiryCategory(e.target.value)}><option value="bug">🐛 오류 제보</option><option value="suggestion">💡 기능 건의</option><option value="question">❓ 학습 질문</option><option value="other">💬 기타 문의</option></select>
+                                      <textarea className="w-full h-40 p-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="내용을 자세히 적어주시면 빠르게 확인할 수 있습니다." value={inquiryContent} onChange={(e) => setInquiryContent(e.target.value)}></textarea>
+                                      <button onClick={handleSendInquiry} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700 transition flex items-center justify-center gap-2"><Send size={18} /> 보내기</button>
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
       )}
+
+      {showRankingModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm"><div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300"><div className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white relative"><button onClick={() => setShowRankingModal(false)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30"><X size={20} className="text-white"/></button><h3 className="font-bold text-2xl flex items-center gap-2"><Trophy className="text-yellow-300" fill="currentColor"/> 주간 랭킹</h3></div><div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">{rankingList.map((ranker, index) => (<div key={index} className={`flex items-center p-3 rounded-xl border ${ranker.email === currentUser.email ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-100 shadow-sm'}`}><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 ${index < 3 ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div><div className="flex-1"><p className="font-bold text-sm text-slate-800 flex items-center gap-1">{ranker.alias || ranker.name}</p><p className="text-xs text-slate-400">{ranker.streak || 0}일 연속</p></div><div className="font-bold text-indigo-600 text-sm">{(ranker.analysis_count * 10).toLocaleString()} P</div></div>))}</div></div></div>)}
+      
+      {showPaymentModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"><div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전 필요</h2></div><div className="p-6"><p className="text-center text-slate-600 mb-6">토큰이 부족합니다.</p><div className="flex flex-col gap-3"><button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600">📺 광고 보고 무료 충전 (1~3개)</button><button onClick={() => handleManualCharge(100, "2,900원")} className="w-full py-4 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-bold hover:bg-blue-100 flex justify-between px-6"><span>💎 100 토큰</span><span>2,900원</span></button><button onClick={() => handleManualCharge(250, "5,900원")} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex justify-between px-6 transform transition hover:scale-[1.02]"><span>💎 250 토큰</span><span>5,900원 (BEST)</span></button><button onClick={() => setShowPaymentModal(false)} className="w-full py-3 bg-slate-100 rounded-xl font-bold">닫기</button></div></div></div></div>)}
     </main>
   );
 }
