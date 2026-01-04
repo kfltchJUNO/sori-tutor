@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import Login from "./components/Login";
-import HistoryItem from "./components/HistoryItem"; 
 import AdModal from "./components/AdModal"; 
 
 import { db, auth } from "@/lib/firebase"; 
@@ -14,46 +13,16 @@ import {
   Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, Volume2, Info, CheckCircle, Send, MessageCircle, Languages, Crown
 } from 'lucide-react';
 
-// 🔥 [수정] 요청하신 환영 메시지 내용 적용
 const WELCOME_MESSAGE = {
   id: 'welcome-guide',
   from: '소리튜터 운영진',
-  title: "🎉 소리튜터에 오신 것을 환영합니다! (사용 설명서 포함)",
+  title: "🎉 소리튜터에 오신 것을 환영합니다!",
   date: new Date(), 
-  read: true, // 로컬 메시지는 항상 읽음 처리 (빨간점 X)
-  content: `안녕하세요, 새로운 학습자님! 👋
-
-한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.
-소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.
-
-🚀 이렇게 시작해보세요!
-🎙️ 발음 테스트: 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)
-🎭 실전 회화 (롤플레잉): '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.
-🗣️ 한국어 자유 회화: 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.
-📊 랭킹 도전: 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!
-
-💡 왜 소리튜터인가요?
-* Expert-Led Content: 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다. 앱 하나로 계속 늘어나는 학습 자료를 평생 만나보세요.
-* High-End AI: 무료 혹은 저가형 모델이 아닌, 구글의 고비용의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다. (커피 한 잔 값으로 개인 튜터를 고용하는 효과를 누려보세요.) 오프라인 학원 수강료 대비 합리적인 비용으로 24시간 코칭을 받아보세요.
-
-📢 충전 및 이용 안내 (Pre-Launch) 정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.
-다소 번거로우시더라도, 수수료 절감분을 더 높은 퀄리티의 AI 모델 유지에 재투자하기 위함이니 양해 부탁드립니다.
-초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.
-(추후 상위 이용자 대상 커피 쿠폰 제공 등의 이벤트 기획중)
-
-🎁 7일 연속 학습 챌린지!
-작심삼일은 이제 그만! 확실한 동기부여를 드립니다.
-* 미션: 7일 동안 매일 5번 이상 연습하기
-* 선물: 미션 성공 시 15 토큰 즉시 지급!
-
-로그인 시 매일 무료 하트 3개가 충전됩니다. 부담없이 사용해 보세요.
-학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요.
-학습이 끝나면 [👋] 아이콘으로 로그아웃 하시면 됩니다.
-당신의 한국어가 유창해지는 그날까지 소리튜터가 함께하겠습니다. 화이팅! 💪
-
-- 소리튜터 운영진 드림 -`
+  read: false,
+  content: `안녕하세요, 새로운 학습자님! 👋\n\n다양한 한국어 친구들을 만나보세요!\n\n🗣️ 한국어 자유 회화 (Beta): 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요.\n🎙️ 발음 테스트: 정확한 발음을 연습하고 점수를 받아보세요.\n\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요. 화이팅! 💪`
 };
 
+// 🎭 페르소나 데이터 (voice 속성 포함, png 확장자)
 const PERSONAS = [
   { id: 'su', name: '수경', role: '대학생', desc: '활발한 20대 대학생', color: 'bg-pink-50 border-pink-200', img: '/images/수경.png', voice: 'ko-KR-Chirp3-HD-Zephyr' },
   { id: 'min', name: '민철', role: '카페 사장', desc: '감성적이고 따뜻한 30대 사장님', color: 'bg-amber-50 border-amber-200', img: '/images/민철.png', voice: 'ko-KR-Chirp3-HD-Rasalgethi' },
@@ -77,6 +46,8 @@ export default function Home() {
   
   const [streak, setStreak] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
+  const [sharedMemory, setSharedMemory] = useState("");
+  const [chatCount, setChatCount] = useState(0);
 
   const [inboxList, setInboxList] = useState<any[]>([]);
   const [showInboxModal, setShowInboxModal] = useState(false);
@@ -132,7 +103,6 @@ export default function Home() {
   const chunksRef = useRef<Blob[]>([]);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // --- 유저 로드 ---
   const handleUserChange = async (user: any) => {
     setCurrentUser(user);
     if (user) {
@@ -146,6 +116,9 @@ export default function Home() {
         setTokens(data.tokens || 0);
         setUserAlias(data.alias || "");
         setStreak(data.streak || 0);
+        setSharedMemory(data.shared_memory || ""); 
+        setChatCount(data.chat_count || 0);
+
         if (data.last_access_date === today) setTodayCount(data.today_count || 0);
         else setTodayCount(0);
         if (!data.alias) setShowNicknameModal(true);
@@ -163,7 +136,8 @@ export default function Home() {
           email: user.email, name: user.displayName, role: "guest",
           free_hearts: 3, tokens: 0, last_heart_reset: today, joined_at: serverTimestamp(), 
           error_count: 0, analysis_count: 0, alias: "",
-          streak: 0, today_count: 0, last_access_date: today 
+          streak: 0, today_count: 0, last_access_date: today,
+          shared_memory: "", chat_count: 0
         });
         setUserRole("guest"); setHearts(3); setShowNicknameModal(true);
       }
@@ -176,28 +150,23 @@ export default function Home() {
     setHasNewMail(!snap.empty); 
   };
 
-  // 🔥 [수정] 우체통 열기 (확인한 메시지 빨간 점 제거)
   const fetchInbox = async () => {
     if (!currentUser) return;
     const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
     const snap = await getDocs(q);
     const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     
-    // 1. 읽지 않은 메시지 DB 업데이트 (Batch)
     const unread = dbMsgs.filter((m: any) => !m.read);
     if (unread.length > 0) {
       const batch = writeBatch(db);
       unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
       await batch.commit(); 
     }
-
-    // 2. UI 목록 업데이트 (모두 읽음 상태로 표시하여 빨간 점 즉시 제거)
     const readMsgs = dbMsgs.map((m: any) => ({ ...m, read: true }));
-
     setInboxList([WELCOME_MESSAGE, ...readMsgs]);
     setShowInboxModal(true);
     setInboxTab('received');
-    setHasNewMail(false); // 상단 빨간 점 제거
+    setHasNewMail(false);
   };
 
   const fetchHistory = async () => { 
@@ -291,6 +260,7 @@ export default function Home() {
       setChatStatus('active');
       setChatFeedback(null);
       
+      // 🔥 [수정] FormData로 TTS 요청 보내기 (API와 통일)
       handleGoogleTTS(greeting, null, persona?.voice);
   };
 
@@ -305,6 +275,7 @@ export default function Home() {
     formData.append("audio", audioBlob);
     formData.append("history", JSON.stringify(chatHistory));
     formData.append("persona", selectedPersona); 
+    formData.append("sharedMemory", sharedMemory);
 
     try {
         const res = await fetch("/api/chat", { method: "POST", body: formData });
@@ -333,6 +304,35 @@ export default function Home() {
     finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
   };
 
+  const handleMemoryUpdate = async (dialog: string) => {
+    try {
+       const newCount = chatCount + 1;
+       let newMemory = sharedMemory;
+       const mode = newCount % 5 === 0 ? 'compress' : 'append';
+       
+       const formData = new FormData();
+       formData.append("action", "memory_sync");
+       formData.append("currentMemory", sharedMemory);
+       formData.append("newDialog", dialog);
+       formData.append("mode", mode);
+
+       const res = await fetch("/api/chat", { method: "POST", body: formData });
+       const data = await res.json();
+       
+       if (data.summary && data.summary !== "정보 없음") {
+           if (mode === 'compress') newMemory = data.summary;
+           else newMemory += " " + data.summary;
+           
+           setSharedMemory(newMemory);
+           await updateDoc(doc(db, "sori_users", currentUser.email), { 
+               shared_memory: newMemory,
+               chat_count: newCount 
+           });
+           setChatCount(newCount);
+       }
+    } catch(e) { console.error("Memory sync fail", e); }
+  };
+
   const handleChatFeedback = async () => {
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
@@ -341,8 +341,10 @@ export default function Home() {
       const formData = new FormData();
       formData.append("action", "feedback");
       formData.append("history", JSON.stringify(chatHistory));
+      
+      const currentPersona = PERSONAS.find(p=>p.id===selectedPersona);
       formData.append("userName", userAlias || "학습자");
-      formData.append("personaName", PERSONAS.find(p=>p.id===selectedPersona)?.name || "AI");
+      formData.append("personaName", currentPersona?.name || "AI");
 
       try {
           const res = await fetch("/api/chat", { method: "POST", body: formData });
@@ -356,10 +358,17 @@ export default function Home() {
 
           const feedbackSummary = `🗣️ 발음: ${data.pronunciation}\n🎭 억양: ${data.intonation}\n💡 총평: ${data.general}`;
           
+          // 🔥 [수정] 제목에 페르소나 이름 포함
+          const title = `${currentPersona?.name || 'AI'}와의 대화`;
+
           await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
-            text: "자유 회화 피드백", score: 0, recognized: "", correct: "",
+            text: title, score: 0, recognized: "", correct: "",
             feedback: feedbackSummary, advice: data.general, type: "free_talking", date: serverTimestamp()
           });
+          
+          const fullDialog = chatHistory.map(m => `${m.role}:${m.text}`).join("\n");
+          handleMemoryUpdate(fullDialog);
+
       } catch(e) { alert("피드백 생성 실패"); } finally { setLoading(false); }
   };
 
@@ -442,6 +451,7 @@ export default function Home() {
     formData.append("audio", audioBlob); 
     formData.append("targetText", targetText); 
     formData.append("context", contextInfo);
+    formData.append("userNick", userAlias || "학습자");
     
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
@@ -569,6 +579,7 @@ export default function Home() {
                    <div key={h.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative">
                        <div className="text-[10px] text-slate-400 mb-1">{h.date?.toDate ? h.date.toDate().toLocaleDateString() : new Date().toLocaleDateString()}</div>
                        <div className="flex justify-between items-start mb-2">
+                           {/* 🔥 [수정] 제목이 페르소나 이름으로 저장되므로 그대로 표시 */}
                            <h4 className="font-bold text-slate-800 text-lg truncate pr-10">{h.text}</h4>
                            {h.type !== 'free_talking' && <span className={`text-sm font-black px-2 py-1 rounded ${h.score >= 80 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{h.score}점</span>}
                        </div>
@@ -727,7 +738,6 @@ export default function Home() {
                    </div>
                 </div>
             ) : (
-               // 문제 화면 (결과 없을 때)
                <div className="flex flex-col h-full">
                    {courseType === "dialogue" ? (
                        <div className="space-y-4 flex-1 overflow-y-auto pb-20">
@@ -778,7 +788,6 @@ export default function Home() {
       ) : null}
 
       {/* --- 모달들 --- */}
-      {/* 🔥 [추가] 광고 모달 */}
       {showAdModal && (
           <AdModal 
               onClose={() => setShowAdModal(false)} 

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 🎭 10명 페르소나 설정 (순자 할머니 프롬프트 강화)
+// 🎭 10명 페르소나 설정 (음성 ID 고정)
 const PERSONA_CONFIG: any = {
-  su: { name: '수경', voice: 'ko-KR-Chirp3-HD-Zephyr', style: '친근한 대학생', prompt: '활발하고 호기심 많은 20대 대학생. 유행어(밈)나 신조어를 적절히 섞어 쓰며, 대학 생활, 알바, 연애 등을 주제로 대화. 해요체와 반말을 섞어서 사용.' },
+  su: { name: '수경', voice: 'ko-KR-Chirp3-HD-Zephyr', style: '친근한 대학생', prompt: '활발하고 호기심 많은 20대 대학생. 유행어(밈)나 신조어를 적절히 섞어 쓰며, 대학 생활, 알바, 연애 등을 주제로 대화. 해요체(부드러운 존댓말)와 반말을 상황에 따라 섞어 씀.' },
   min: { name: '민철', voice: 'ko-KR-Chirp3-HD-Rasalgethi', style: '다정한 카페 사장님', prompt: '30대 중반의 감성적인 카페 오너. 차분하고 남의 이야기를 잘 들어주는 성격. 커피, 날씨, 소소한 일상 이야기 선호. 정중하고 따뜻한 해요체 사용.' },
   jin: { name: '진성', voice: 'ko-KR-Chirp3-HD-Algenib', style: '깐깐한 면접관', prompt: '40대 대기업 부장. 논리적이고 격식 있는 한국어 구사. 비즈니스 한국어나 면접 대비용 하드 모드. 하십시오체(격식체)와 전문 용어 사용.' },
   seol: { name: '설아', voice: 'ko-KR-Chirp3-HD-Despina', style: 'K-Culture 팬', prompt: '20대 초반의 열정적인 K-POP/K-Drama 덕후. 텐션이 높고 리액션이 매우 큼(대박, 헐 등). 아이돌, 드라마, 패션 이야기. 감탄사가 많은 구어체.' },
@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const action = formData.get("action") as string; 
     
+    // API Key 로드
     const apiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     const ttsApiKey = process.env.GOOGLE_TTS_API_KEY || apiKey;
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
       const audioFile = formData.get("audio") as Blob;
       const historyStr = formData.get("history") as string;
       const personaKey = formData.get("persona") as string;
-      const sharedMemory = formData.get("sharedMemory") as string || ""; // 🔥 공유 기억 받기
+      const sharedMemory = formData.get("sharedMemory") as string || ""; 
       const history = JSON.parse(historyStr || "[]");
 
       if (!audioFile) return NextResponse.json({ error: "Audio missing" }, { status: 400 });
@@ -48,18 +49,13 @@ export async function POST(req: Request) {
         [페르소나]: ${persona.style}, ${persona.prompt}
         
         🔥 [기억 공유 설정]
-        당신은 이 앱의 다른 9명의 페르소나(수경, 민철, 진성 등)와 모두 절친한 사이입니다.
-        사용자에 대해 **공유된 기억**이 있다면 대화에 자연스럽게 녹여내세요.
-        (사용자가 "어떻게 알았어?"라고 물으면 "아, 우리끼리 다 친해서 이야기 들었지~"라고 능청스럽게 해명하세요.)
+        당신은 이 앱의 다른 9명의 페르소나와 친구입니다.
+        [공유된 기억]: "${sharedMemory}"
         
-        [현재 사용자에 대한 공유 기억]: "${sharedMemory}"
-
         [수행 역할]
         1. **STT**: 사용자의 오디오를 듣고 한국어 텍스트로 적으세요. (오타/발음 보정)
         2. **대화**: 페르소나에 맞춰 답변하세요.
-        3. **규칙**:
-           - **앵무새 화법 금지**: 꼬리 질문을 하세요.
-           - 감탄사('오!', '아하!')와 물결표(~) 사용 금지.
+        3. **규칙**: 앵무새 화법 금지, 감탄사('오!', '아하!') 금지.
         
         [종료 규칙]
         - 상대방이 단답을 3회 이상 하거나 대화 의지가 없으면 종료하세요(ended: true).
@@ -93,7 +89,7 @@ export async function POST(req: Request) {
       let audioContent = null;
       const sanitizedText = aiData.aiResponse.replace(/[~]/g, "").replace(/\(.*\)/g, "");
 
-      // 🔥 순자 할머니 목소리 튜닝 (느리고 낮게)
+      // 순자 할머니 보이스 튜닝
       let speakingRate = 1.0;
       let pitch = 0.0;
       if (personaKey === 'sun') { speakingRate = 0.85; pitch = -1.5; }
@@ -148,33 +144,22 @@ export async function POST(req: Request) {
         } catch (e) { return NextResponse.json({ error: "피드백 실패" }, { status: 500 }); }
     }
 
-    // --- [기능 3] 🔥 기억 동기화 (요약/압축) ---
+    // --- [기능 3] 기억 동기화 ---
     if (action === "memory_sync") {
-        const currentMemory = formData.get("currentMemory") as string; // 기존 기억
-        const newDialog = formData.get("newDialog") as string; // 이번 대화
-        const mode = formData.get("mode") as string; // 'append' or 'compress'
+        const currentMemory = formData.get("currentMemory") as string; 
+        const newDialog = formData.get("newDialog") as string; 
+        const mode = formData.get("mode") as string; 
 
         let prompt = "";
         if (mode === 'compress') {
-             prompt = `
-                아래는 사용자에 대한 누적된 정보입니다. 
-                중복되거나 중요하지 않은 정보는 삭제하고, 핵심 정보(이름, 직업, 취미, 성격, 주요 사건) 위주로 300자 이내로 요약/정리해주세요.
-                
-                [현재 기억]: ${currentMemory}
-             `;
+             prompt = `[기억 압축 요청] 아래 정보를 300자 이내로 핵심만 요약하세요.\n${currentMemory}`;
         } else {
-             prompt = `
-                아래는 사용자와의 새로운 대화입니다. 
-                기존 기억에 추가할 만한 사용자의 핵심 정보(취미, 스타일, 고민 등)가 있다면 요약해서 한두 문장으로 추출해주세요. 없다면 "정보 없음"이라고 하세요.
-                
-                [새로운 대화]: ${newDialog}
-             `;
+             prompt = `[기억 추출 요청] 아래 대화에서 사용자의 특징(이름, 취미, 성격 등)을 한 문장으로 요약하세요. 없으면 "정보 없음".\n${newDialog}`;
         }
 
         try {
             const result = await model.generateContent(prompt);
-            const summary = result.response.text();
-            return NextResponse.json({ summary });
+            return NextResponse.json({ summary: result.response.text() });
         } catch (e) { return NextResponse.json({ error: "Memory sync failed" }, { status: 500 }); }
     }
 
@@ -187,13 +172,15 @@ export async function POST(req: Request) {
         } catch (e) { return NextResponse.json({ error: "Translation failed" }, { status: 500 }); }
     }
 
-    // --- [기능 5] 단순 TTS ---
+    // --- [기능 5] 🔥 단순 TTS (첫 인사용) ---
     if (action === "tts_simple") {
         const text = formData.get("text") as string;
         const voiceName = formData.get("voiceName") as string;
-        // 할머니일 경우 예외 처리
-        let speakingRate = 1.0; 
-        if (voiceName.includes("Vindemiatrix")) speakingRate = 0.85;
+        
+        // 순자 할머니 예외 처리
+        let speakingRate = 1.0;
+        let pitch = 0.0;
+        if (voiceName.includes("Vindemiatrix")) { speakingRate = 0.85; pitch = -1.5; }
 
         try {
             const ttsRes = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsApiKey}`, {
@@ -202,7 +189,7 @@ export async function POST(req: Request) {
                 body: JSON.stringify({
                     input: { text },
                     voice: { languageCode: "ko-KR", name: voiceName },
-                    audioConfig: { audioEncoding: "MP3", speakingRate }
+                    audioConfig: { audioEncoding: "MP3", speakingRate, pitch }
                 })
             });
             const ttsData = await ttsRes.json();
