@@ -186,37 +186,60 @@ export default function Home() {
     setHasNewMail(!snap.empty); 
   };
 
+  // 🔥 [수정] 우편함 열기 로직 (에러 발생 시에도 모달은 열리도록 처리)
   const fetchInbox = async () => {
     if (!currentUser) return;
-    const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
-    const snap = await getDocs(q);
-    const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     
-    const unread = dbMsgs.filter((m: any) => !m.read);
-    if (unread.length > 0) {
-      const batch = writeBatch(db);
-      unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
-      await batch.commit(); 
+    try {
+        const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
+        const snap = await getDocs(q);
+        const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        const unread = dbMsgs.filter((m: any) => !m.read);
+        if (unread.length > 0) {
+          const batch = writeBatch(db);
+          unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
+          await batch.commit(); 
+        }
+        const readMsgs = dbMsgs.map((m: any) => ({ ...m, read: true }));
+        setInboxList([WELCOME_MESSAGE, ...readMsgs]);
+    } catch (e) {
+        console.error("Inbox Error", e);
+        setInboxList([WELCOME_MESSAGE]); // 에러나도 환영메시지는 보여줌
+    } finally {
+        setShowInboxModal(true);
+        setInboxTab('received');
+        setHasNewMail(false);
     }
-    const readMsgs = dbMsgs.map((m: any) => ({ ...m, read: true }));
-    setInboxList([WELCOME_MESSAGE, ...readMsgs]);
-    setShowInboxModal(true);
-    setInboxTab('received');
-    setHasNewMail(false);
+  };
+
+  // 🔥 [수정] 랭킹 열기 로직 (에러 처리 추가)
+  const fetchRanking = async () => { 
+    if (!currentUser) return; 
+    try {
+        const s = await getDocs(query(collection(db, "sori_users"), orderBy("points", "desc"), limit(10))); 
+        setRankingList(s.docs.map(d => d.data())); 
+        setShowRankingModal(true); 
+    } catch (e) {
+        console.error("Ranking Error", e);
+        alert("랭킹을 불러오는데 실패했습니다.");
+    }
   };
 
   const fetchHistory = async () => { 
     if (!currentUser) return; 
     setLoading(true); 
-    const q = query(collection(db, "sori_users", currentUser.email, "history"), orderBy("date", "desc")); 
-    const s = await getDocs(q); 
-    const safeList = s.docs.map(d => {
-        const data = d.data();
-        return { id: d.id, ...data }; 
-    });
-    setHistoryList(safeList); 
-    setViewMode("history"); 
-    setLoading(false); 
+    try {
+        const q = query(collection(db, "sori_users", currentUser.email, "history"), orderBy("date", "desc")); 
+        const s = await getDocs(q); 
+        const safeList = s.docs.map(d => {
+            const data = d.data();
+            return { id: d.id, ...data }; 
+        });
+        setHistoryList(safeList); 
+        setViewMode("history"); 
+    } catch(e) { console.error("History Error", e); }
+    finally { setLoading(false); }
   };
 
   const handleSendInquiry = async () => {
@@ -240,7 +263,6 @@ export default function Home() {
 
   const handleLogout = async () => { if (confirm("로그아웃 하시겠습니까?")) { await signOut(auth); window.location.reload(); } };
   const saveNickname = async (n: string) => { if (!n.trim()) return alert("닉네임 입력"); if (currentUser) { await updateDoc(doc(db, "sori_users", currentUser.email), { alias: n }); setUserAlias(n); setShowNicknameModal(false); alert(`환영합니다, ${n}님!`); } };
-  const fetchRanking = async () => { const s = await getDocs(query(collection(db, "sori_users"), orderBy("points", "desc"), limit(10))); setRankingList(s.docs.map(d => d.data())); setShowRankingModal(true); };
 
   const handleGoogleTTS = async (text: string, path: string | null = null, voice: string | null = null) => {
     if (!text && !path) return alert("텍스트 없음");
@@ -273,7 +295,6 @@ export default function Home() {
       }
   };
 
-  // 🔥 [수정] 충전 요청 핸들러 (토큰별 선택 기능)
   const handleManualCharge = (tokenAmount: number, price: string) => {
       const subject = encodeURIComponent("🔋 소리튜터 토큰 충전 요청");
       const body = encodeURIComponent(`안녕하세요! 토큰 충전을 요청합니다.
@@ -530,6 +551,7 @@ export default function Home() {
         if (todayCount === 4) updates.streak = increment(1);
         if (todayCount === 4) updates.points = increment(earnedPoints + 10); 
 
+        // 🔥 [수정] 게스트는 무조건 1개 차감
         if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = increment(-1); }
         else { setTokens(p=>p-cost); updates.tokens = increment(-cost); }
         
@@ -661,6 +683,7 @@ export default function Home() {
                            <button onClick={() => setShowFeedbackModal(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                📄 자세히
                            </button>
+                           {/* 번역 버튼: 게스트 가격은 핸들러 내부에서 하트 1개로 처리됨 (텍스트는 0.5로 표시되나 실제 차감은 로직 따름 - UI 텍스트도 변경 원하시면 아래 0.5를 1로 수정하세요) */}
                            <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                <Languages size={10}/> 번역 (0.5🪙)
                            </button>
