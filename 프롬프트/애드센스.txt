@@ -10,3 +10,18 @@
 <script>
      (adsbygoogle = window.adsbygoogle || []).push({});
 </script>
+
+
+
+
+헤드 코드
+<head>
+        {<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4585319125929329"
+     crossorigin="anonymous"></script>}
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4585319125929329"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+      </head>

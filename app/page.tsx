@@ -358,8 +358,25 @@ export default function Home() {
 
           const feedbackSummary = `🗣️ 발음: ${data.pronunciation}\n🎭 억양: ${data.intonation}\n💡 총평: ${data.general}`;
           
-          // 🔥 [수정] 제목에 페르소나 이름 포함
-          const title = `${currentPersona?.name || 'AI'}와의 대화`;
+          // ✨ [수정 후] 받침 확인 로직 적용 (와/과 자동 구분)
+          const pName = currentPersona?.name || "AI";
+          const lastCharCode = pName.charCodeAt(pName.length - 1);
+          // 한글 유니코드에서 (코드 - 0xAC00) % 28 > 0 이면 받침이 있음 -> '과', 없으면 -> '와'
+          const hasBatchim = (lastCharCode - 0xAC00) % 28 > 0; 
+          const particle = hasBatchim ? "과" : "와";
+          
+          const title = `${pName}${particle}의 대화`; 
+
+          await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
+            text: title, // 수정된 제목 저장 (예: 진성과의 대화)
+            score: 0, 
+            recognized: "", 
+            correct: "",
+            feedback: feedbackSummary, 
+            advice: data.general, 
+            type: "free_talking", 
+            date: serverTimestamp()
+          });
 
           await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
             text: title, score: 0, recognized: "", correct: "",
