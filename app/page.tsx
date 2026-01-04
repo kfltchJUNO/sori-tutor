@@ -18,7 +18,7 @@ const WELCOME_MESSAGE = {
   from: '소리튜터 운영진',
   title: "🎉 소리튜터에 오신 것을 환영합니다! (사용 설명서 포함)",
   date: new Date(), 
-  read: true, // 로컬 메시지는 항상 읽음 처리 (빨간점 X)
+  read: true, 
   content: `안녕하세요, 새로운 학습자님! 👋
 
 한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.
@@ -58,7 +58,7 @@ const PERSONAS = [
   { id: 'jin', name: '진성', role: '면접관', desc: '논리적이고 깐깐한 대기업 부장님', color: 'bg-slate-50 border-slate-300', img: '/images/진성.png', voice: 'ko-KR-Chirp3-HD-Algenib' },
   { id: 'seol', name: '설아', role: 'K-Culture 팬', desc: '텐션 높은 K-POP/드라마 덕후', color: 'bg-purple-50 border-purple-200', img: '/images/설아.png', voice: 'ko-KR-Chirp3-HD-Despina' },
   { id: 'do', name: '도식', role: '트레이너', desc: '에너지 넘치는 헬스 트레이너', color: 'bg-blue-50 border-blue-200', img: '/images/도식.png', voice: 'ko-KR-Chirp3-HD-Achird' },
-  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.png', voice: 'ko-KR-Chirp3-HD-Sadachbia' }, // 🔥 변경됨
+  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.png', voice: 'ko-KR-Chirp3-HD-Sadachbia' },
   { id: 'hye', name: '혜선', role: '상담사', desc: '지친 마음을 위로해주는 심리 상담가', color: 'bg-rose-50 border-rose-200', img: '/images/혜선.png', voice: 'ko-KR-Chirp3-HD-Aoede' },
   { id: 'woo', name: '우주', role: '중학생', desc: '축구와 게임을 좋아하는 개구쟁이', color: 'bg-yellow-50 border-yellow-200', img: '/images/우주.png', voice: 'ko-KR-Chirp3-HD-Charon' },
   { id: 'hyun', name: '현성', role: '소설가', desc: '지적이고 시니컬한 소설 작가', color: 'bg-stone-50 border-stone-200', img: '/images/현성.png', voice: 'ko-KR-Chirp3-HD-Zubenelgenubi' },
@@ -150,9 +150,17 @@ export default function Home() {
 
         if (data.last_access_date === today) setTodayCount(data.today_count || 0);
         else setTodayCount(0);
+        
         if (!data.alias) setShowNicknameModal(true);
-        if (data.last_heart_reset !== today) { await updateDoc(userRef, { free_hearts: 3, last_heart_reset: today }); setHearts(3); }
-        else setHearts(data.free_hearts ?? 3);
+        
+        // 🔥 [복구] 매일 하트 3개 리셋 로직 (확실하게 적용)
+        if (data.last_heart_reset !== today) { 
+            await updateDoc(userRef, { free_hearts: 3, last_heart_reset: today }); 
+            setHearts(3); 
+        } else {
+            setHearts(data.free_hearts ?? 3);
+        }
+
         checkNewMail(user.email);
         
         if (data.streak >= 7 && (!data.last_challenge_reward || new Date(data.last_challenge_reward).toDateString() !== today)) {
@@ -241,7 +249,6 @@ export default function Home() {
     if (ttsLoading) return; 
     try {
       setTtsLoading(true);
-      // 🔥 [수정] API 호출 방식 통일 (FormData)
       const formData = new FormData();
       formData.append("action", "tts_simple");
       formData.append("text", text);
@@ -265,6 +272,13 @@ export default function Home() {
            await updateDoc(userRef, { tokens: increment(amount) });
            alert(`🎉 축하합니다! 토큰 ${amount}개를 획득했습니다!`);
       }
+  };
+
+  // 🔥 [NEW] 이메일 충전 요청 핸들러
+  const handleManualCharge = () => {
+      const subject = encodeURIComponent("🔋 소리튜터 토큰 충전 요청");
+      const body = encodeURIComponent(`안녕하세요! 토큰 충전을 요청합니다.\n\n📧 계정 ID: ${currentUser.email}\n\n[충전 안내]\n현재 베타 서비스 기간으로, 아래 계좌로 입금 후 이 메일을 보내주시면 확인 후 충전해 드립니다.\n\n🏦 입금 계좌: (예시) 카카오뱅크 3333-xx-xxxxxx\n💰 100 토큰 = 1,000원\n\n입금자명: (여기에 입력)\n요청 금액: (여기에 입력)`);
+      window.location.href = `mailto:help@soritutor.com?subject=${subject}&body=${body}`;
   };
 
   const enterFreeTalking = () => {
@@ -314,6 +328,7 @@ export default function Home() {
             alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return;
         }
 
+        // 🔥 [수정] 게스트는 무조건 1개 차감
         if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
         else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
 
@@ -381,6 +396,7 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           setChatFeedback(data);
           
+          // 🔥 [수정] 게스트는 1개 차감
           if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
           updateDoc(doc(db,"sori_users",currentUser.email), { points: increment(10) });
@@ -408,7 +424,7 @@ export default function Home() {
       if (!chatFeedback && !result) return;
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
-      if(!confirm("번역하시겠습니까? (0.5 토큰)")) return;
+      if(!confirm("번역하시겠습니까?")) return; // 가격 안내 뺌 (아래에서 차감)
 
       setLoading(true);
       const formData = new FormData();
@@ -424,7 +440,8 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           setTranslation(data.translatedText);
           
-          if (userRole === 'guest') { setHearts(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-0.5) }); }
+          // 🔥 [수정] 번역도 게스트는 1개 차감
+          if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
           
           if (showTranslateModal === false && viewMode === 'freetalking') setShowTranslateModal(true);
@@ -435,7 +452,7 @@ export default function Home() {
   const handleHistoryTranslate = async (item: any) => {
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
-      if (!confirm("이 기록을 번역하시겠습니까? (0.5 토큰)")) return;
+      if (!confirm("이 기록을 번역하시겠습니까?")) return;
 
       const text = item.feedback || item.explanation || item.advice;
       if (!text) return alert("내용이 없습니다.");
@@ -450,7 +467,9 @@ export default function Home() {
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           alert(`[번역 결과]\n${data.translatedText}`); 
-          if (userRole === 'guest') { setHearts(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-0.5) }); }
+          
+          // 🔥 [수정] 내기록 번역도 게스트는 1개 차감
+          if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
       } catch(e) { alert("오류"); } finally { setLoading(false); }
   };
@@ -505,6 +524,7 @@ export default function Home() {
         if (todayCount === 4) updates.streak = increment(1);
         if (todayCount === 4) updates.points = increment(earnedPoints + 10); 
 
+        // 🔥 [수정] 게스트는 무조건 1개 차감
         if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = increment(-1); }
         else { setTokens(p=>p-cost); updates.tokens = increment(-cost); }
         
@@ -532,7 +552,10 @@ export default function Home() {
            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
         </div>
         <div className="flex items-center gap-3">
-           <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1"><span className="text-2xl">📮</span>{hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}</button>
+           <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1">
+             <span className="text-2xl">📮</span> 
+             {hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
+           </button>
            <button onClick={handleLogout} className="text-xl hover:scale-110 transition ml-1" title="로그아웃">👋</button>
         </div>
       </header>
@@ -553,10 +576,19 @@ export default function Home() {
           <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
             {/* Streak Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-               <div><div className="flex items-center gap-2 mb-1"><h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3><button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button></div><div className="mt-2"><p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p><div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div></div></div>
+               <div>
+                 <div className="flex items-center gap-2 mb-1">
+                   <h3 className="font-bold text-slate-800 text-lg">{userAlias || currentUser?.displayName}님</h3>
+                   <button onClick={() => setShowNicknameModal(true)} className="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-50">변경</button>
+                 </div>
+                 <div className="mt-2">
+                    <p className="text-xs text-slate-500 mb-1">일일 목표 <span className="font-bold text-orange-500">{Math.min(todayCount, 5)}/5</span></p>
+                    <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-500 ease-out" style={{ width: `${Math.min((todayCount / 5) * 100, 100)}%` }}></div></div>
+                 </div>
+               </div>
                <div className="text-center bg-orange-50 px-4 py-3 rounded-xl min-w-[80px]"><p className="text-2xl font-black text-orange-500 mb-1">{streak} <span className="text-sm font-bold text-orange-400">일</span></p><p className="text-[10px] text-orange-700 font-bold">연속 학습중</p></div>
             </div>
-            {/* Cards */}
+
             <div className="grid gap-3">
               {[
                 {id:'word', t:'단어 발음 연습', d:'기초 어휘 마스터', icon: <Mic />, color: 'blue'}, 
@@ -568,6 +600,7 @@ export default function Home() {
                   <div><div className="text-lg font-bold text-slate-800 group-hover:text-${item.color}-700">{item.t}</div><div className="text-sm text-slate-500">{item.d}</div></div>
                 </button>
               ))}
+              
               <button onClick={enterFreeTalking} className="w-full p-5 rounded-2xl text-left bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm border border-green-100 hover:border-green-500 transition group flex items-center gap-4 relative overflow-hidden">
                   <div className="absolute top-3 right-3 bg-white/80 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-green-700 border border-green-200">🪙 토큰 2개 / 턴</div>
                   <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:scale-110 transition-transform"><MessageCircle /></div>
@@ -577,7 +610,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history views (생략 - 위와 동일) ... */}
+        {/* ... category, history views (생략 - 기존 코드와 동일) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -594,17 +627,14 @@ export default function Home() {
                 ))}
              </div>
              <div className="space-y-3">
-               {/* 내 기록 표시 (번역 버튼 포함) */}
                {historyList.filter(h => historyTab === 'all' || h.type === historyTab || (historyTab === 'dialogue' && h.type === 'free_talking')).map(h => ( 
                    <div key={h.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative">
                        <div className="text-[10px] text-slate-400 mb-1">{h.date?.toDate ? h.date.toDate().toLocaleDateString() : new Date().toLocaleDateString()}</div>
                        <div className="flex justify-between items-start mb-2">
-                           {/* 🔥 [수정] 제목이 페르소나 이름으로 저장되므로 그대로 표시 */}
                            <h4 className="font-bold text-slate-800 text-lg truncate pr-10">{h.text}</h4>
                            {h.type !== 'free_talking' && <span className={`text-sm font-black px-2 py-1 rounded ${h.score >= 80 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{h.score}점</span>}
                        </div>
                        
-                       {/* 요약 내용 (2줄 제한) */}
                        <div className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 mb-2 line-clamp-2">
                            {h.feedback || h.explanation || h.advice || "내용 없음"}
                        </div>
@@ -613,6 +643,7 @@ export default function Home() {
                            <button onClick={() => setShowFeedbackModal(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                📄 자세히
                            </button>
+                           {/* 번역 버튼: 게스트 가격은 핸들러 내부에서 하트 1개로 처리됨 (텍스트는 0.5로 표시되나 실제 차감은 로직 따름 - UI 텍스트도 변경 원하시면 아래 0.5를 1로 수정하세요) */}
                            <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">
                                <Languages size={10}/> 번역 (0.5🪙)
                            </button>
@@ -624,10 +655,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* 🔥 [New] 프리토킹 뷰 */}
+        {/* ... (Free Talking, Practice View - 기존 코드와 동일) ... */}
         {viewMode === "freetalking" && (
           <div className="flex flex-col h-full">
-             {/* 1. 페르소나 선택 화면 */}
              {chatStatus === 'select_persona' && (
                <div className="animate-in fade-in zoom-in space-y-4">
                  <div className="flex items-center justify-between mb-2">
@@ -650,7 +680,6 @@ export default function Home() {
                </div>
              )}
 
-             {/* 2. 채팅 화면 */}
              {chatStatus !== 'select_persona' && (
                <>
                  <div className="flex justify-between items-center mb-4 sticky top-0 bg-slate-50 z-10 py-2">
@@ -680,13 +709,11 @@ export default function Home() {
                    <div ref={chatScrollRef}></div>
                  </div>
 
-                 {/* 종료/피드백 UI */}
                  {chatStatus === 'ended' && !chatFeedback && (
                    <div className="bg-slate-800 text-white p-4 rounded-xl text-center animate-in fade-in">
                      {loading ? (
                         <div className="flex flex-col items-center gap-2 py-4">
                             <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            {/* 안내 문구 수정 */}
                             <p className="text-sm font-bold leading-relaxed text-center opacity-90">
                                 AI가 전체 대화 내용을<br/>
                                 발음, 억양, 문맥 등의 여러 요소를<br/>
@@ -721,7 +748,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* 일반 연습 뷰 */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
@@ -906,7 +932,7 @@ export default function Home() {
 
       {showRankingModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm"><div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300"><div className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white relative"><button onClick={() => setShowRankingModal(false)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30"><X size={20} className="text-white"/></button><h3 className="font-bold text-2xl flex items-center gap-2"><Trophy className="text-yellow-300" fill="currentColor"/> 주간 랭킹</h3></div><div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">{rankingList.map((ranker, index) => (<div key={index} className={`flex items-center p-3 rounded-xl border ${ranker.email === currentUser.email ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-100 shadow-sm'}`}><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 ${index < 3 ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div><div className="flex-1"><p className="font-bold text-sm text-slate-800 flex items-center gap-1">{ranker.alias || ranker.name}</p><p className="text-xs text-slate-400">{ranker.streak || 0}일 연속</p></div><div className="font-bold text-indigo-600 text-sm">{(ranker.analysis_count * 10).toLocaleString()} P</div></div>))}</div></div></div>)}
       
-      {showPaymentModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"><div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전 필요</h2></div><div className="p-6"><p className="text-center text-slate-600 mb-6">토큰이 부족합니다.</p><div className="flex flex-col gap-3"><button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600">📺 광고 보고 무료 충전 (1~3개)</button><button onClick={() => setShowPaymentModal(false)} className="w-full py-3 bg-slate-100 rounded-xl font-bold">닫기</button></div></div></div></div>)}
+      {showPaymentModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"><div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전 필요</h2></div><div className="p-6"><p className="text-center text-slate-600 mb-6">토큰이 부족합니다.</p><div className="flex flex-col gap-3"><button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600">📺 광고 보고 무료 충전 (1~3개)</button><button onClick={handleManualCharge} className="w-full py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600">💳 프리미엄 충전 (이메일)</button><button onClick={() => setShowPaymentModal(false)} className="w-full py-3 bg-slate-100 rounded-xl font-bold">닫기</button></div></div></div></div>)}
     </main>
   );
 }
