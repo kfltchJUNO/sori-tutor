@@ -10,7 +10,10 @@ import {
   doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
 import { 
-  Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, Volume2, Info, CheckCircle, Send, MessageCircle, Languages, Crown
+  Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, 
+  Volume2, Info, CheckCircle, Send, MessageCircle, Languages, Crown, 
+  // 🔥 아래 3개 아이콘을 추가했습니다.
+  Users, Sparkles, BookOpen 
 } from 'lucide-react';
 
 const WELCOME_MESSAGE = {
@@ -37,6 +40,8 @@ const PERSONAS = [
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true); 
+
   const [userRole, setUserRole] = useState<string>("guest");
   
   const [hearts, setHearts] = useState(3);
@@ -109,6 +114,7 @@ export default function Home() {
         } else {
             setCurrentUser(null);
         }
+        setIsAuthChecking(false); // 확인 완료 후 로딩 해제
     });
     return () => unsubscribe();
   }, []);
@@ -553,7 +559,83 @@ export default function Home() {
 
   const isDialogueFinished = courseType === 'dialogue' && parsedScript.length > 0 && completedLines.length === parsedScript.length;
 
-  if (!currentUser) return <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6"><div className="w-full max-w-sm flex flex-col flex-1 justify-center"><div className="bg-white p-10 rounded-3xl shadow-2xl w-full border border-slate-100 text-center"><div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-black mx-auto mb-4 shadow-lg shadow-blue-200">S</div><h1 className="text-4xl font-black text-slate-800 mb-2">Sori-Tutor</h1><p className="text-slate-500 mb-8 font-medium text-sm">AI와 함께하는 한국어 발음 교정</p><Login onUserChange={handleUserChange} /><p className="text-xs text-slate-400 mt-6">* 구글 로그인 시 무료 체험</p></div></div><footer className="w-full text-center p-4 text-xs text-slate-400">© 2026 Sori-Tutor. All rights reserved.</footer></main>;
+// 🔥 [수정 3] 로그인 안 했을 때 보이는 화면을 '랜딩 페이지'로 전면 교체
+  
+  // 1. 로딩 중일 때 (깜빡임 방지)
+  if (isAuthChecking) return <div className="flex h-screen items-center justify-center bg-slate-50">로딩 중...</div>;
+
+  // 2. 로그인 전 화면 (랜딩 페이지)
+  if (!currentUser) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex flex-col">
+        {/* 상단 네비게이션 */}
+        <nav className="flex justify-between items-center p-6 max-w-5xl mx-auto w-full">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-200">S</div>
+            <span className="font-black text-2xl text-slate-800">Sori-Tutor</span>
+          </div>
+          {/* 로그인 버튼 */}
+          <div><Login onUserChange={handleUserChange} /></div>
+        </nav>
+
+        {/* 메인 히어로 섹션 (서비스 소개) */}
+        <section className="flex-1 flex flex-col justify-center items-center text-center px-6 py-12 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="mb-4 px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold inline-block">✨ AI 기반 한국어 회화 코칭</div>
+          <h1 className="text-4xl md:text-6xl font-black text-slate-900 leading-tight mb-6">
+            한국어, <br className="md:hidden" />이제 <span className="text-blue-600">AI 친구</span>와<br /> 실전처럼 연습하세요.
+          </h1>
+          <p className="text-slate-500 text-lg md:text-xl mb-10 leading-relaxed max-w-2xl">
+            단어 연습부터 프리토킹까지.<br />
+            구글의 최신 AI 기술이 당신의 발음과 억양을<br className="md:hidden" /> 실시간으로 교정해 드립니다.
+          </p>
+          
+          {/* 로그인 카드 (중앙 강조) */}
+          <div className="bg-white p-8 rounded-3xl shadow-2xl border border-slate-100 w-full max-w-sm transform hover:scale-105 transition duration-300">
+             <p className="text-slate-500 mb-6 font-bold text-sm">👇 3초 만에 시작하기</p>
+             <Login onUserChange={handleUserChange} />
+             <p className="text-xs text-slate-400 mt-4">* 회원가입 시 매일 무료 하트 제공</p>
+          </div>
+        </section>
+
+        {/* 기능 소개 섹션 (애드센스가 '콘텐츠'로 인식하는 부분) */}
+        <section className="bg-white py-16 px-6 border-t border-slate-100">
+          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center hover:shadow-lg transition">
+              <div className="w-14 h-14 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4"><Users size={28}/></div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">10명의 AI 페르소나</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                대학생, 츤데레 할머니, 면접관 등 10명의 각기 다른 성격을 가진 AI와 대화하며 다양한 상황을 연습해보세요.
+              </p>
+            </div>
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center hover:shadow-lg transition">
+              <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><Sparkles size={28}/></div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">실시간 정밀 피드백</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                단순한 맞춤법 교정을 넘어, 발음, 억양, 감정 표현까지 분석하여 원어민에 가까운 자연스러운 한국어를 코칭합니다.
+              </p>
+            </div>
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center hover:shadow-lg transition">
+              <div className="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"><BookOpen size={28}/></div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">체계적인 커리큘럼</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                기초 단어부터 문장, 상황별 롤플레잉, 그리고 자유 회화까지 단계별로 실력을 향상시킬 수 있습니다.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 푸터 */}
+        <footer className="bg-slate-50 py-8 text-center text-xs text-slate-400 border-t border-slate-200">
+          <p className="mb-2">© 2026 Sori-Tutor. All rights reserved.</p>
+          <div className="flex justify-center gap-4">
+            <span>이용약관</span>
+            <span>개인정보처리방침</span>
+            <span>문의하기</span>
+          </div>
+        </footer>
+      </main>
+    );
+  }
 
   return (
     <main className="flex h-[100dvh] flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
