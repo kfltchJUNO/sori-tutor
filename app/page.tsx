@@ -21,98 +21,18 @@ const WELCOME_MESSAGE = {
   content: `안녕하세요, 새로운 학습자님! 👋\n\n다양한 한국어 친구들을 만나보세요!\n\n🗣️ 한국어 자유 회화 (Beta): 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요.\n🎙️ 발음 테스트: 정확한 발음을 연습하고 점수를 받아보세요.\n\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요. 화이팅! 💪`
 };
 
-// 🎭 10명의 페르소나 데이터 (voice 속성 추가됨)
+// 10명의 페르소나 데이터 (이미지 경로: public/images/파일명.png)
 const PERSONAS = [
-  { 
-    id: 'su', 
-    name: '수경', 
-    role: '대학생', 
-    desc: '활발하고 호기심 많은 20대 대학생', 
-    color: 'bg-pink-50 border-pink-200', 
-    img: '/images/수경.jpg',
-    voice: 'ko-KR-Chirp3-HD-Zephyr' // 🔥 추가됨
-  },
-  { 
-    id: 'min', 
-    name: '민철', 
-    role: '카페 사장', 
-    desc: '감성적이고 따뜻한 30대 사장님', 
-    color: 'bg-amber-50 border-amber-200', 
-    img: '/images/민철.jpg',
-    voice: 'ko-KR-Chirp3-HD-Rasalgethi' // 🔥 추가됨
-  },
-  { 
-    id: 'jin', 
-    name: '진성', 
-    role: '면접관', 
-    desc: '논리적이고 깐깐한 대기업 부장님', 
-    color: 'bg-slate-50 border-slate-300', 
-    img: '/images/진성.jpg',
-    voice: 'ko-KR-Chirp3-HD-Algenib' // 🔥 추가됨
-  },
-  { 
-    id: 'seol', 
-    name: '설아', 
-    role: 'K-Culture 팬', 
-    desc: '텐션 높은 K-POP/드라마 덕후', 
-    color: 'bg-purple-50 border-purple-200', 
-    img: '/images/설아.jpg',
-    voice: 'ko-KR-Chirp3-HD-Despina' // 🔥 추가됨
-  },
-  { 
-    id: 'do', 
-    name: '도식', 
-    role: '트레이너', 
-    desc: '에너지 넘치는 헬스 트레이너', 
-    color: 'bg-blue-50 border-blue-200', 
-    img: '/images/도식.jpg',
-    voice: 'ko-KR-Chirp3-HD-Achird' // 🔥 추가됨
-  },
-  { 
-    id: 'ju', 
-    name: '주호', 
-    role: '여행 가이드', 
-    desc: '박식하고 친절한 한국 여행 가이드', 
-    color: 'bg-green-50 border-green-200', 
-    img: '/images/주호.jpg',
-    voice: 'ko-KR-Chirp3-HD-Achernar' // 🔥 추가됨
-  },
-  { 
-    id: 'hye', 
-    name: '혜선', 
-    role: '상담사', 
-    desc: '지친 마음을 위로해주는 심리 상담가', 
-    color: 'bg-rose-50 border-rose-200', 
-    img: '/images/혜선.jpg',
-    voice: 'ko-KR-Chirp3-HD-Aoede' // 🔥 추가됨
-  },
-  { 
-    id: 'woo', 
-    name: '우주', 
-    role: '중학생', 
-    desc: '축구와 게임을 좋아하는 개구쟁이', 
-    color: 'bg-yellow-50 border-yellow-200', 
-    img: '/images/우주.jpg',
-    voice: 'ko-KR-Chirp3-HD-Charon' // 🔥 추가됨
-  },
-  { 
-    id: 'hyun', 
-    name: '현성', 
-    role: '소설가', 
-    desc: '지적이고 시니컬한 소설 작가', 
-    color: 'bg-stone-50 border-stone-200', 
-    img: '/images/현성.jpg',
-    voice: 'ko-KR-Chirp3-HD-Zubenelgenubi' // 🔥 추가됨
-  },
-  { 
-    id: 'sun', 
-    name: '순자', 
-    role: '국밥집 할머니', 
-    desc: '구수한 사투리와 정이 넘치는 할머니', 
-    color: 'bg-orange-50 border-orange-200', 
-    img: '/images/순자.jpg',
-    voice: 'ko-KR-Chirp3-HD-Vindemiatrix' // 🔥 추가됨
-  },
+  { id: 'su', name: '수경', role: '대학생', desc: '활발한 20대 대학생', color: 'bg-pink-50 border-pink-200', img: '/images/수경.png', voice: 'ko-KR-Chirp3-HD-Zephyr' },
+  { id: 'min', name: '민철', role: '카페 사장', desc: '감성적이고 따뜻한 30대 사장님', color: 'bg-amber-50 border-amber-200', img: '/images/민철.png', voice: 'ko-KR-Chirp3-HD-Rasalgethi' },
+  { id: 'jin', name: '진성', role: '면접관', desc: '논리적이고 깐깐한 대기업 부장님', color: 'bg-slate-50 border-slate-300', img: '/images/진성.png', voice: 'ko-KR-Chirp3-HD-Algenib' },
+  { id: 'seol', name: '설아', role: 'K-Culture 팬', desc: '텐션 높은 K-POP/드라마 덕후', color: 'bg-purple-50 border-purple-200', img: '/images/설아.png', voice: 'ko-KR-Chirp3-HD-Despina' },
+  { id: 'do', name: '도식', role: '트레이너', desc: '에너지 넘치는 헬스 트레이너', color: 'bg-blue-50 border-blue-200', img: '/images/도식.png', voice: 'ko-KR-Chirp3-HD-Achird' },
+  { id: 'ju', name: '주호', role: '여행 가이드', desc: '박식하고 친절한 한국 여행 가이드', color: 'bg-green-50 border-green-200', img: '/images/주호.png', voice: 'ko-KR-Chirp3-HD-Achernar' },
+  { id: 'hye', name: '혜선', role: '상담사', desc: '지친 마음을 위로해주는 심리 상담가', color: 'bg-rose-50 border-rose-200', img: '/images/혜선.png', voice: 'ko-KR-Chirp3-HD-Aoede' },
+  { id: 'woo', name: '우주', role: '중학생', desc: '축구와 게임을 좋아하는 개구쟁이', color: 'bg-yellow-50 border-yellow-200', img: '/images/우주.png', voice: 'ko-KR-Chirp3-HD-Charon' },
+  { id: 'hyun', name: '현성', role: '소설가', desc: '지적이고 시니컬한 소설 작가', color: 'bg-stone-50 border-stone-200', img: '/images/현성.png', voice: 'ko-KR-Chirp3-HD-Zubenelgenubi' },
+  { id: 'sun', name: '순자', role: '국밥집 할머니', desc: '구수한 사투리와 정이 넘치는 할머니', color: 'bg-orange-50 border-orange-200', img: '/images/순자.png', voice: 'ko-KR-Chirp3-HD-Vindemiatrix' },
 ];
 
 export default function Home() {
@@ -138,7 +58,7 @@ export default function Home() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
-  const [showPersonaRanking, setShowPersonaRanking] = useState(false); // 🔥 인기 AI 랭킹 모달
+  const [showPersonaRanking, setShowPersonaRanking] = useState(false);
 
   const [viewMode, setViewMode] = useState("home"); 
   const [courseType, setCourseType] = useState<"word" | "sentence" | "dialogue" | null>(null);
@@ -167,7 +87,6 @@ export default function Home() {
   const [result, setResult] = useState<any>(null);
   const [translation, setTranslation] = useState<string | null>(null);
 
-  // 한국어 자유 회화 상태
   const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string, audio?: string}[]>([]);
   const [chatStatus, setChatStatus] = useState<'select_persona'|'active'|'ended'>('select_persona');
   const [selectedPersona, setSelectedPersona] = useState<string>('su');
@@ -199,10 +118,8 @@ export default function Home() {
         else setHearts(data.free_hearts ?? 3);
         checkNewMail(user.email);
         
-        // 🔥 7일 챌린지 성공 체크 (다음날 자정 지급 로직)
-        // 실제로는 서버에서 해야 하지만 클라이언트에서 로그인 시 체크
+        // 7일 챌린지 성공 체크
         if (data.streak >= 7 && (!data.last_challenge_reward || new Date(data.last_challenge_reward).toDateString() !== today)) {
-             // 보상 지급 (15토큰)
              await updateDoc(userRef, { tokens: increment(15), last_challenge_reward: today });
              alert("🎉 7일 연속 학습 챌린지 달성! 15 토큰이 지급되었습니다!");
         }
@@ -292,20 +209,13 @@ export default function Home() {
     if (ttsLoading) return; 
     try {
       setTtsLoading(true);
-      const res = await fetch("/api/chat", { 
-        method: "POST", 
-        body: JSON.stringify({ action: "tts_simple", text, voiceName: voice || "ko-KR-Neural2-A" }) 
-      });
-      // *주의: FormData가 아니라 JSON body로 보내야 함 (API 수정에 맞춤)
-      // 하지만 위의 API 코드는 FormData를 받도록 되어 있음. 
-      // 일관성을 위해 FormData로 수정.
       const formData = new FormData();
       formData.append("action", "tts_simple");
       formData.append("text", text);
-      formData.append("voiceName", voice || "ko-KR-Neural2-A");
-      
-      const res2 = await fetch("/api/chat", { method: "POST", body: formData });
-      const data = await res2.json();
+      formData.append("voiceName", voice || "ko-KR-Chirp3-HD-Zephyr");
+          
+      const res = await fetch("/api/chat", { method: "POST", body: formData });
+      const data = await res.json();
       if (data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); }
     } catch (e) { alert("재생 오류"); } finally { setTtsLoading(false); }
   };
@@ -323,21 +233,17 @@ export default function Home() {
   const startChatWithPersona = (personaId: string) => {
       setSelectedPersona(personaId);
       const persona = PERSONAS.find(p => p.id === personaId);
-      const greeting = `안녕하세요! 저는 ${persona?.name}이에요. 우리 대화할까요?`;
+      const greeting = `안녕하세요! 저는 ${persona?.name}이에요. 대화할 준비 됐나요?`;
       setChatHistory([{role: "model", text: greeting}]);
       setChatStatus('active');
       setChatFeedback(null);
-      // 첫 인사 TTS 재생
+      // 🔥 선택 즉시 음성 재생
       handleGoogleTTS(greeting, null, persona?.voice);
-      
-      // 인기 AI 랭킹 집계 (Client-side increment)
-      // *실제로는 별도 컬렉션 'persona_stats'에 카운트 증가 로직 필요. 여기서는 생략하고 로컬에서만 처리하는 척.
   };
 
   const handleChatSend = async () => {
     if (!audioBlob) return;
     
-    // 잔액 체크 (차감은 성공 후에)
     if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -356,7 +262,6 @@ export default function Home() {
             alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return;
         }
 
-        // 성공 시 토큰 차감 (-2)
         if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
         else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
 
@@ -377,7 +282,6 @@ export default function Home() {
   };
 
   const handleChatFeedback = async () => {
-      // 잔액 체크 (피드백 -2 토큰)
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
 
@@ -391,11 +295,8 @@ export default function Home() {
           if (data.error) { alert(data.error); return; }
           setChatFeedback(data);
           
-          // 토큰 차감
           if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
           else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
-
-          // 포인트 지급 (+10점)
           updateDoc(doc(db,"sori_users",currentUser.email), { points: increment(10) });
 
           const feedbackSummary = `[발음] ${data.pronunciation}\n[억양] ${data.intonation}\n[총평] ${data.general}`;
@@ -431,7 +332,6 @@ export default function Home() {
       } catch(e) { alert("번역 실패"); } finally { setLoading(false); }
   };
 
-  // ... (기존 selectCourse, selectCategory, startRecording 등 함수 유지) ...
   const selectCourse = async (type: any) => { setCourseType(type); if(type==="word"){ const s=await getDocs(query(collection(db,"sori_curriculum_word"))); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(s.docs.length>0) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); } else { const s=await getDocs(collection(db,`sori_curriculum_${type}`)); const c=new Set<string>(); s.forEach(d=>c.add(d.data().category)); setCategories(Array.from(c).sort()); setViewMode("category"); } setResult(null); };
   const selectCategory = async (cat: string) => { setSelectedCategory(cat); const q=query(collection(db,`sori_curriculum_${courseType}`),where("category","==",cat)); const s=await getDocs(q); setProblemList(s.docs.map(d=>({id:d.id,...d.data()}))); if(!s.empty) initPractice(s.docs.map(d=>d.data())); setViewMode("practice"); setResult(null); setAudioUrl(null); };
   const initPractice = (list: any[]) => { const r=Math.floor(Math.random()*list.length); updateCurrentProblem(list[r]); setHistoryStack([list[r]]); setHistoryIndex(0); };
@@ -443,11 +343,11 @@ export default function Home() {
   const startRecording = async () => { try { const s=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorderRef.current=new MediaRecorder(s); mediaRecorderRef.current.ondataavailable=e=>{if(e.data.size>0) chunksRef.current.push(e.data)}; mediaRecorderRef.current.onstop=()=>{const b=new Blob(chunksRef.current,{type:"audio/webm"}); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current=[];}; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch(e){ alert("마이크 권한 필요"); }};
   const stopRecording = () => { if(mediaRecorderRef.current&&recording){ mediaRecorderRef.current.stop(); setRecording(false); }};
   
-  // 🔥 [수정] 일반 학습 분석 (토큰/포인트 로직 적용)
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
-    if (userRole === "student" && tokens <= 0.5) return setShowPaymentModal(true); // 최소 0.5 필요
+    const cost = courseType === 'word' ? 0.5 : 1;
+    if (userRole === "student" && tokens < cost) return setShowPaymentModal(true);
     
     setLoading(true); setResult(null); setTranslation(null);
     let targetText = currentProblem.text; let contextInfo = ""; 
@@ -460,6 +360,7 @@ export default function Home() {
     formData.append("audio", audioBlob); 
     formData.append("targetText", targetText); 
     formData.append("context", contextInfo);
+    formData.append("userNick", userAlias || "학습자");
     
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
@@ -469,25 +370,19 @@ export default function Home() {
         const userRef = doc(db, "sori_users", currentUser.email);
         const today = new Date().toDateString();
         let newStreak = streak;
-        if (todayCount === 4) newStreak = streak + 1; // 5번째 수행 시 스트릭 증가
+        if (todayCount === 4) newStreak = streak + 1;
         
-        // 포인트 계산 (단어:2, 문장/담화:3)
         const earnedPoints = courseType === 'word' ? 2 : 3;
-        // 토큰 차감 (단어:0.5, 문장/담화:1)
-        const cost = courseType === 'word' ? 0.5 : 1;
-
         const updates: any = { 
             analysis_count: increment(1), 
             last_access_date: today, 
             today_count: increment(1),
-            points: increment(earnedPoints) // 포인트 지급
+            points: increment(earnedPoints)
         };
         if (todayCount === 4) updates.streak = increment(1);
-        
-        // 스트릭 보너스 (5회 이상부터 매일 10점 추가? -> 로직상 5회 달성 시점에 10점 한 번 주거나, 매회 줄지 결정 필요. 여기선 5회 달성 시 10점 1회 지급으로 구현)
         if (todayCount === 4) updates.points = increment(earnedPoints + 10); 
 
-        if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = increment(-1); } // 게스트는 하트만 차감 (값은 1로 고정)
+        if (userRole === "guest") { setHearts(p=>p-1); updates.free_hearts = increment(-1); }
         else { setTokens(p=>p-cost); updates.tokens = increment(-cost); }
         
         await updateDoc(userRef, updates);
@@ -559,7 +454,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... category, history views (생략 - 위와 동일) ... */}
+        {/* ... category, history views (기존 유지) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
@@ -597,7 +492,6 @@ export default function Home() {
                    {PERSONAS.map(p => (
                      <div key={p.id} onClick={() => startChatWithPersona(p.id)} className={`p-3 rounded-2xl border-2 cursor-pointer transition hover:scale-105 ${p.color} bg-white shadow-sm flex flex-col items-center text-center`}>
                         <div className="w-20 h-20 rounded-full overflow-hidden mb-2 border-2 border-white shadow-md">
-                            {/* 이미지 경로: /images/이름.jpg (확대 효과 적용) */}
                             <img src={p.img} alt={p.name} className="w-full h-full object-cover object-top" />
                         </div>
                         <h3 className="text-lg font-black text-slate-800">{p.name}</h3>
@@ -664,7 +558,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 일반 연습 뷰 (기존 유지) */}
+        {/* 🔥 [수정] 일반 연습 뷰 (녹음 버튼 위치 개선) */}
         {viewMode === "practice" && currentProblem && (
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
@@ -720,9 +614,10 @@ export default function Home() {
                  )}
              </div>
           ) : (
+            // 🔥 [수정] 결과 화면에서도 녹음 버튼 유지 (스크롤 가능한 결과창)
             result ? (
-                <div className="animate-in slide-in-from-bottom duration-300 flex flex-col max-h-[60vh]">
-                   <div className="flex-1 overflow-y-auto pr-1 mb-4 space-y-4">
+                <div className="flex flex-col gap-4 max-h-[60vh]">
+                   <div className="flex-1 overflow-y-auto pr-1 space-y-4">
                        <div className="flex items-center justify-between sticky top-0 bg-white z-10 py-2 border-b">
                            <h3 className="font-bold text-lg text-slate-800">분석 결과</h3>
                            <span className={`text-2xl font-black ${result.score >= 80 ? 'text-green-500' : 'text-orange-500'}`}>{result.score}점</span>
@@ -740,7 +635,11 @@ export default function Home() {
                            {translation && (<div className="mt-3 pt-3 border-t border-blue-200 animate-in fade-in"><p className="text-xs font-bold text-purple-600 mb-1">🌏 번역된 피드백</p><p className="text-xs text-slate-700 whitespace-pre-wrap">{translation}</p></div>)}
                        </div>
                    </div>
-                   <button onClick={() => { setResult(null); setAudioUrl(null); if (courseType !== 'dialogue') handleNextProblem(); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shrink-0">{courseType === "dialogue" ? "확인" : "다음 문제 (랜덤)"}</button>
+                   {/* 하단 고정 버튼들 */}
+                   <div className="flex flex-col gap-2 shrink-0">
+                       <button onClick={() => { setResult(null); setAudioUrl(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2"><Mic size={18}/> 다시 녹음하기</button>
+                       <button onClick={() => { setResult(null); setAudioUrl(null); if (courseType !== 'dialogue') handleNextProblem(); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shrink-0">{courseType === "dialogue" ? "확인" : "다음 문제 (랜덤)"}</button>
+                   </div>
                 </div>
             ) : (
                 <div className="flex flex-col items-center gap-4">

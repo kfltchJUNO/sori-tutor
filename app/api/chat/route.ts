@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 🎭 10명 페르소나 설정 (요청하신 음성 ID 고정)
+// 🎭 10명 페르소나 설정 (음성 ID 고정)
 const PERSONA_CONFIG: any = {
   su: { name: '수경', voice: 'ko-KR-Chirp3-HD-Zephyr', style: '친근한 대학생', prompt: '활발하고 호기심 많은 20대 대학생. 유행어(밈)나 신조어를 적절히 섞어 쓰며, 대학 생활, 알바, 연애 등을 주제로 대화. 해요체(부드러운 존댓말)와 반말을 상황에 따라 섞어 씀.' },
   min: { name: '민철', voice: 'ko-KR-Chirp3-HD-Rasalgethi', style: '다정한 카페 사장님', prompt: '30대 중반의 감성적인 카페 오너. 차분하고 남의 이야기를 잘 들어주는 성격. 커피, 날씨, 소소한 일상 이야기 선호. 정중하고 따뜻한 해요체 사용.' },
@@ -20,13 +20,15 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const action = formData.get("action") as string; 
     
-    // API Key 로드
-    const geminiApiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    const ttsApiKey = process.env.GOOGLE_TTS_API_KEY || geminiApiKey;
-
-    if (!geminiApiKey) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+    // API Key 로드 (우선순위 체크)
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    // TTS용 키가 별도로 없으면 일반 키 사용
+    const ttsApiKey = process.env.GOOGLE_TTS_API_KEY || apiKey;
+
+    if (!apiKey) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+    
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // --- [기능 1] 대화 진행 (Chat + STT + TTS) ---
@@ -84,7 +86,6 @@ export async function POST(req: Request) {
 
       // TTS 생성
       let audioContent = null;
-      // 물결표 등 불필요한 기호 제거
       const sanitizedText = aiData.aiResponse.replace(/[~]/g, "").replace(/\(.*\)/g, "");
 
       try {
@@ -99,7 +100,8 @@ export async function POST(req: Request) {
           });
           const ttsData = await ttsRes.json();
           if (ttsData.audioContent) audioContent = ttsData.audioContent;
-      } catch (e) { console.error("TTS Error", e); }
+          else console.error("TTS API Error:", ttsData);
+      } catch (e) { console.error("TTS Net Error", e); }
 
       return NextResponse.json({ 
           userText: aiData.userTranscript || "(...)", 
@@ -150,6 +152,7 @@ export async function POST(req: Request) {
                 })
             });
             const ttsData = await ttsRes.json();
+            if (!ttsData.audioContent) throw new Error("No audio content");
             return NextResponse.json({ audioContent: ttsData.audioContent });
         } catch (e) {
             return NextResponse.json({ error: "TTS failed" }, { status: 500 });

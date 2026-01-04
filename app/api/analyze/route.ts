@@ -6,7 +6,8 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const audioFile = formData.get("audio") as Blob;
     const targetText = formData.get("targetText") as string;
-    const context = formData.get("context") as string; 
+    const context = formData.get("context") as string;
+    const userNick = formData.get("userNick") as string || "학습자"; 
 
     if (!audioFile || !targetText) {
       return NextResponse.json({ error: "오디오 또는 목표 문장이 없습니다." }, { status: 400 });
@@ -23,6 +24,10 @@ export async function POST(req: Request) {
 
     const prompt = `
       당신은 한국어 국립국어원 표준 발음법에 정통한 언어학 교수이자 발음 교정 전문가입니다.
+      
+      🔥 [필수 지침]
+      학습자의 이름은 '${userNick}'입니다.
+      피드백을 시작할 때나 조언을 줄 때 "${userNick}님," 하고 다정하게 이름을 불러주세요.
       
       [분석 대상]
       - 목표 텍스트: "${targetText}"
