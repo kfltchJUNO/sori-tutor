@@ -14,7 +14,7 @@ export default function Privacy() {
       <p className="mb-4">서비스 제공, 회원 관리, 학습 리포트 생성 및 서비스 개선을 위해 활용됩니다.</p>
 
       <h2 className="text-xl font-bold mt-6 mb-2">3. 문의처</h2>
-      <p className="mb-4">이메일: help@soritutor.com</p>
+      <p className="mb-4">이메일: ot.helper7@gmail.com</p>
     </main>
   );
 }

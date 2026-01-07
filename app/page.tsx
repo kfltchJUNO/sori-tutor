@@ -677,7 +677,7 @@ export default function Home() {
           <div className="flex justify-center gap-6">
             <Link href="/terms" className="hover:text-slate-600 underline">이용약관</Link>
             <Link href="/privacy" className="hover:text-slate-600 underline">개인정보처리방침</Link>
-            <a href="mailto:help@soritutor.com" className="hover:text-slate-600 underline">문의하기</a>
+            <a href="mailto:ot.helper7@gmail.com" className="hover:text-slate-600 underline">문의하기</a>
           </div>
         </footer>
       </main>

@@ -70,7 +70,7 @@ export default function AdModal({ onClose, onReward }: AdModalProps) {
               <ins className="adsbygoogle"
                    style={{ display: 'block', width: '100%', height: '100%' }}
                    data-ad-client="ca-pub-4585319125929329"
-                   data-ad-slot="1820723750" // 본인의 광고 단위 ID 확인 필요
+                   data-ad-slot="5896248871" // 본인의 광고 단위 ID 확인 필요
                    data-ad-format="auto"
                    data-full-width-responsive="true">
               </ins>
