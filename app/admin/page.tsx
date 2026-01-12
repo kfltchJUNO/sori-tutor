@@ -11,7 +11,7 @@ import {
   Mic, Upload, RefreshCw, CheckCircle, XCircle, Music, AlertCircle, DollarSign
 } from 'lucide-react';
 
-// --- 성우 옵션 상수 (기존 유지) ---
+// --- 성우 옵션 상수 ---
 const VOICE_OPTIONS = [
   { label: "--- 👩 여성 성우 ---", value: "", disabled: true },
   { label: "👩 Pulcherrima", value: "ko-KR-Chirp3-HD-Pulcherrima" },
@@ -44,7 +44,6 @@ const VOICE_OPTIONS = [
 export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  // 🔥 'store' 탭 추가
   const [activeTab, setActiveTab] = useState<"users" | "word" | "sentence" | "dialogue" | "mail" | "store">("users");
 
   // --- 기존 데이터 상태 ---
@@ -75,13 +74,13 @@ export default function AdminPage() {
   const [newDialogue, setNewDialogue] = useState({ category: "식당", title: "", script: "", translation: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 🔥 [신규] 상점/충전 관련 상태
+  // --- 상점/충전 관련 상태 ---
   const [requests, setRequests] = useState<any[]>([]);
   const [targetEmail, setTargetEmail] = useState("");
   const [manualAmount, setManualAmount] = useState(0);
   const [loadingToken, setLoadingToken] = useState(false);
   
-  // 🔥 [신규] 오디오 파일 업로드 관련 상태
+  // --- 오디오 파일 업로드 관련 상태 ---
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
@@ -90,7 +89,8 @@ export default function AdminPage() {
   // 1. 초기 로드 및 권한 체크
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user && user.email === "ot.helper7@gmail.com") { // 관리자 이메일 확인
+      // 관리자 이메일 확인 (필요시 본인 이메일로 수정)
+      if (user && user.email === "ot.helper7@gmail.com") { 
         setIsAdmin(true);
         await fetchAllData();
       } else {
@@ -102,7 +102,7 @@ export default function AdminPage() {
     return () => unsubscribe();
   }, []);
 
-  // 2. [신규] 실시간 충전 요청 리스너
+  // 2. 실시간 충전 요청 리스너
   useEffect(() => {
     if (!isAdmin) return;
     const q = query(
@@ -136,31 +136,47 @@ export default function AdminPage() {
     setFunc(s.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
-  // --- 기존 로직들 (TTS, 오디오 재생, 삭제 등) ---
+  // 🔥 [수정됨] 단어/문장 TTS 생성 (중복 fetch 삭제로 500 에러 해결)
   const handleGenerateSingleTTS = async (item: any, type: "word" | "sentence") => {
     if (!item.text) return alert("텍스트가 없습니다.");
+    
     let textToSpeak = item.text;
-    if (type === "word" && item.pronunciation) { textToSpeak = item.pronunciation.replace(/[\[\]]/g, ""); }
-    const voiceLabel = VOICE_OPTIONS.find(v => v.value === castSingle)?.label;
+    if (type === "word" && item.pronunciation) { 
+        textToSpeak = item.pronunciation.replace(/[\[\]]/g, ""); 
+    }
+    
     if (!confirm(`'${item.text}' 생성?\n(읽는 내용: "${textToSpeak}")`)) return;
     setGeneratingId(item.id);
+
     try {
+        // ✅ [수정 완료] FormData 방식만 사용
         const formData = new FormData();
         formData.append("action", "tts_simple");
         formData.append("text", textToSpeak);
         formData.append("voiceName", castSingle);
+        
         const res = await fetch("/api/chat", { method: "POST", body: formData });
         const data = await res.json();
+        
         if (data.error) throw new Error(data.error);
+        
         const storageRef = ref(storage, `curriculum/${type}/${item.id}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
+        
         const colName = type === "word" ? "sori_curriculum_word" : "sori_curriculum_sentence";
         await updateDoc(doc(db, colName, item.id), { audio_path: url, has_audio: true, voice: castSingle });
+        
         alert("생성 완료!");
         if (type === "word") fetchData("sori_curriculum_word", setProblems);
         else fetchData("sori_curriculum_sentence", setSentences);
-    } catch (e: any) { alert("실패: " + e.message); } finally { setGeneratingId(null); }
+        
+    } catch (e: any) { 
+        alert("실패: " + e.message); 
+        console.error(e);
+    } finally { 
+        setGeneratingId(null); 
+    }
   };
 
   const handleGenerateDialogueTTS = async (dialogue: any) => {
@@ -177,12 +193,15 @@ export default function AdminPage() {
         const { role, text } = lines[i];
         if (!text) { audioUrls.push(""); continue; }
         const selectedVoice = role === "A" ? castA : castB;
+        
         const formData = new FormData();
         formData.append("action", "tts_simple");
         formData.append("text", text);
         formData.append("voiceName", selectedVoice);
+        
         const res = await fetch("/api/chat", { method: "POST", body: formData });
         const data = await res.json();
+        
         const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
         await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
         const url = await getDownloadURL(storageRef);
@@ -232,7 +251,7 @@ export default function AdminPage() {
   const startEdit = (item: any, type: any) => { setEditingId(item.id); setActiveTab(type); window.scrollTo({top:0, behavior:"smooth"}); if(type==="word") setNewWord({...item}); else if(type==="sentence") setNewSentence({...item}); else setNewDialogue({...item}); };
   const cancelEdit = () => { setEditingId(null); setNewWord({category:"비음화", text:"", pronunciation:"", tip:""}); setNewSentence({category:"인사", text:"", pronunciation:"", translation:""}); setNewDialogue({category:"식당", title:"", script:"", translation:""}); };
 
-  // 🔥 [신규] 충전 승인 처리
+  // --- 상점/충전/오디오 업로드 핸들러 ---
   const handleApprove = async (req: any) => {
     if (!confirm(`[${req.depositor}]님의 ${req.amount} 토큰 충전을 승인하시겠습니까?`)) return;
     try {
@@ -252,7 +271,6 @@ export default function AdminPage() {
     } catch (e) { alert(`오류: ${e}`); }
   };
 
-  // 🔥 [신규] 충전 거절 처리
   const handleReject = async (req: any) => {
       const reason = prompt(`거절 사유 입력 (취소 시 중단)`, "입금 내역 확인 불가");
       if (reason === null) return; 
@@ -262,7 +280,6 @@ export default function AdminPage() {
       } catch (e) { alert("오류 발생"); }
   };
 
-  // 🔥 [신규] 관리자 토큰 수동 조절
   const handleManualTokenUpdate = async () => {
       if (!targetEmail || manualAmount === 0) return alert("정보를 모두 입력하세요.");
       if (!confirm(`${targetEmail} / ${manualAmount} 토큰을 적용합니까?`)) return;
@@ -275,7 +292,6 @@ export default function AdminPage() {
       } catch (e) { alert("유저가 존재하지 않거나 오류가 발생했습니다."); } finally { setLoadingToken(false); }
   };
 
-  // 🔥 [신규] 오디오 파일 업로드
   const handleFileUpload = async () => {
     if (!audioFile) return alert("파일을 선택해주세요.");
     setUploadingFile(true);
@@ -382,7 +398,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 🔥 [신규] 상점 탭 (충전/업로드/토큰관리) */}
+      {/* --- 상점 탭 --- */}
       {activeTab === "store" && (
         <div className="grid md:grid-cols-2 gap-8">
           {/* 섹션 1: 충전 요청 관리 */}

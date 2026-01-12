@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       const audioFile = formData.get("audio") as Blob;
 
       const history = JSON.parse(historyStr || "[]");
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // 최신 모델 사용 권장
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // 최신 모델 사용 권장
 
       let userText = "";
 
