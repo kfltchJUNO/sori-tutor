@@ -113,17 +113,33 @@ export default function Home() {
     return hasBatchim ? '이' : '가';
   };
 
+  // 🔥 [수정] 인앱 브라우저 감지 및 크롬 강제 실행 (안드로이드 자동, iOS 안내)
   useEffect(() => {
+    // 1. Firebase Auth 리스너 (기존 코드 유지)
     const unsubscribe = onAuthStateChanged(auth, (user) => {
         if (user) { handleUserChange(user); } 
         else { setCurrentUser(null); }
         setIsAuthChecking(false);
     });
     
-    // 인앱 브라우저 체크
+    // 2. 인앱 브라우저 탈출 로직
     const userAgent = navigator.userAgent.toLowerCase();
-    if (userAgent.match(/kakaotalk|naver/i)) {
-      alert("원활한 구글 로그인을 위해\n우측 하단(또는 상단) 메뉴에서\n'다른 브라우저로 열기'를 선택해주세요! 🙏");
+    const targetUrl = window.location.href;
+
+    // 카카오톡, 네이버, 라인, 인스타그램, 페이스북, 틱톡 등 인앱 브라우저 식별
+    const isInApp = userAgent.match(/kakaotalk|naver|line|instagram|facebook|tiktok/i);
+
+    if (isInApp) {
+      if (userAgent.match(/android/i)) {
+        // [안드로이드] : 크롬으로 '강제' 자동 이동 (intent 스킴 사용)
+        // package=com.android.chrome을 명시하여 크롬을 우선적으로 띄움
+        const intentUrl = `intent://${targetUrl.replace(/https?:\/\//i, '')}#Intent;scheme=https;package=com.android.chrome;end;`;
+        window.location.href = intentUrl;
+      } else {
+        // [아이폰/아이패드] : 강제 이동 불가능 -> 안내 메시지 띄우기
+        // (아이폰은 스크립트로 사파리를 열 수 없게 막혀있음)
+        alert("🔒 보안을 위해 구글 로그인은 \n'크롬'이나 '사파리'에서만 가능합니다.\n\n우측 상단/하단 메뉴 [⋮] 또는 [share] 버튼을 눌러\n'다른 브라우저로 열기'를 선택해주세요!");
+      }
     }
 
     return () => unsubscribe();
@@ -296,10 +312,32 @@ export default function Home() {
       }
   };
 
-  const handleManualCharge = (tokenAmount: number, price: string) => {
-      const subject = encodeURIComponent("🔋 소리튜터 토큰 충전 요청");
-      const body = encodeURIComponent(`안녕하세요! 토큰 충전을 요청합니다.\n\n📧 계정 ID: ${currentUser.email}\n\n[충전 안내]\n현재 베타 서비스 기간으로, 아래 계좌로 입금 후 이 메일을 보내주시면 확인 후 충전해 드립니다.\n\n🏦 입금 계좌: 카카오뱅크 3333-29-9690780 (오준호)\n💰 100 토큰 = 2,900원 / 250 토큰 = 5,900원\n\n입금자명: (여기에 입력)\n요청 금액: ${tokenAmount} 토큰 (${price})`);
-      window.location.href = `mailto:help@soritutor.com?subject=${subject}&body=${body}`;
+  // 🔥 [수정] 이메일 발송 대신 DB에 충전 요청 저장
+  const handleManualCharge = async (tokenAmount: number, price: string) => {
+      // 1. 입금자명 입력 받기 (간단하게 prompt 사용)
+      const depositorName = prompt(`[${price}] 입금을 진행하실 분의 성함을 입력해주세요.`);
+      if (!depositorName || depositorName.trim() === "") return;
+
+      if (!confirm(`${depositorName}님 명의로 충전을 요청하시겠습니까?\n(계좌 입금 확인 후 운영진이 토큰을 지급해 드립니다)`)) return;
+
+      try {
+          // 2. DB에 요청 저장 (sori_charge_requests 컬렉션)
+          await addDoc(collection(db, "sori_charge_requests"), {
+              userId: currentUser.email,       // 요청한 유저 이메일 (ID)
+              userAlias: userAlias || "이름없음", // 닉네임 (관리자 식별용)
+              amount: tokenAmount,             // 충전할 토큰 양
+              price: price,                    // 가격 텍스트
+              depositor: depositorName,        // 입금자명
+              status: "pending",               // 상태: 대기중
+              createdAt: serverTimestamp()     // 요청 시간
+          });
+
+          alert(`✅ 요청이 접수되었습니다!\n\n아래 계좌로 입금해주시면 확인 후 충전됩니다.\n\n🏦 카카오뱅크 3333-29-9690780 (오준호)`);
+          setShowPaymentModal(false); // 모달 닫기
+      } catch (e) {
+          console.error("Charge Request Error", e);
+          alert("요청 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      }
   };
 
   const enterFreeTalking = () => {
