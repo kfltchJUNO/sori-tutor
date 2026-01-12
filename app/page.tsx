@@ -671,6 +671,51 @@ export default function Home() {
             </div>
         </section>
 
+        {/* 🔥 [추가] 학습 가이드 섹션 (구글 봇을 위한 텍스트 보강) */}
+        <section className="bg-white py-16 px-6 border-t border-slate-100">
+            <div className="max-w-4xl mx-auto">
+                <h2 className="text-2xl font-black text-slate-900 text-center mb-10">💡 한국어 마스터를 위한 학습 가이드</h2>
+                
+                <div className="grid md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 p-6 rounded-2xl">
+                            <h3 className="font-bold text-lg text-blue-700 mb-2">1. 쉐도잉(Shadowing)의 중요성</h3>
+                            <p className="text-slate-600 text-sm leading-relaxed">
+                                한국어를 빨리 배우는 가장 좋은 방법은 원어민의 목소리를 듣고 즉시 따라 하는 것입니다. 
+                                소리튜터의 AI 음성을 듣고, 억양과 속도까지 똑같이 따라 하려고 노력해 보세요. 
+                                뇌가 소리를 기억하는 가장 빠른 방법입니다.
+                            </p>
+                        </div>
+                        <div className="bg-slate-50 p-6 rounded-2xl">
+                            <h3 className="font-bold text-lg text-blue-700 mb-2">2. 자신의 목소리 녹음하기</h3>
+                            <p className="text-slate-600 text-sm leading-relaxed">
+                                내가 말하는 소리가 실제로 어떻게 들리는지 객관적으로 듣는 것은 어렵습니다. 
+                                앱의 녹음 기능을 통해 자신의 발음을 확인하고, AI가 지적해 주는 발음 교정 피드백을 꼼꼼히 확인하세요.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 p-6 rounded-2xl">
+                            <h3 className="font-bold text-lg text-blue-700 mb-2">3. 상황별 회화 연습</h3>
+                            <p className="text-slate-600 text-sm leading-relaxed">
+                                단어만 외우는 것은 실제 대화에서 큰 도움이 되지 않습니다. 
+                                카페 주문, 길 묻기, 자기소개 등 구체적인 상황 속에서 문장 단위로 말하는 연습이 필요합니다. 
+                                롤플레잉 모드를 적극 활용해 보세요.
+                            </p>
+                        </div>
+                        <div className="bg-slate-50 p-6 rounded-2xl">
+                            <h3 className="font-bold text-lg text-blue-700 mb-2">4. 매일 꾸준한 습관</h3>
+                            <p className="text-slate-600 text-sm leading-relaxed">
+                                언어 학습의 핵심은 빈도입니다. 일주일에 한 번 3시간 공부하는 것보다, 매일 10분씩 
+                                꾸준히 대화하는 것이 훨씬 효과적입니다. 연속 학습일(Streak)을 유지하며 습관을 만들어보세요.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         {/* 푸터 */}
         <footer className="bg-slate-50 py-8 text-center text-xs text-slate-400 border-t border-slate-200">
           <p className="mb-4">© 2026 Sori-Tutor. All rights reserved.</p>
