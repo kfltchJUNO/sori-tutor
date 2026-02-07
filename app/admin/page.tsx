@@ -76,6 +76,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // 관리자 이메일 확인 (본인 이메일로 변경 필수)
       if (user && user.email === "ot.helper7@gmail.com") { 
         setIsAdmin(true);
         await fetchAllData();

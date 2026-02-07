@@ -7,8 +7,9 @@ import AdModal from "./components/AdModal";
 
 import { db, auth } from "@/lib/firebase"; 
 import { signOut, onAuthStateChanged } from "firebase/auth"; 
+// 🔥 [수정] setDoc 추가됨
 import { 
-  doc, getDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, setDoc, increment, limit, writeBatch 
+  doc, getDoc, setDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
 import { 
   Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, 
@@ -16,7 +17,6 @@ import {
   Users, Sparkles, BookOpen 
 } from 'lucide-react';
 
-// 환영 메시지 (가입 시 자동 발송)
 const WELCOME_MESSAGE = {
   id: 'welcome-guide',
   from: '소리튜터 운영진',
@@ -103,10 +103,19 @@ export default function Home() {
   const [chatFeedback, setChatFeedback] = useState<any>(null);
 
   const [ttsLoading, setTtsLoading] = useState(false);
+  
+  // VAD(음성 감지) 및 녹음 관련 Ref
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const silenceTimer = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
+  // 조사 처리 함수
   const getSubjectMarker = (name: string) => {
     const lastChar = name.charCodeAt(name.length - 1);
     const hasBatchim = (lastChar - 0xAC00) % 28 > 0;
@@ -120,6 +129,7 @@ export default function Home() {
         setIsAuthChecking(false);
     });
     
+    // 인앱 브라우저 체크 및 탈출 로직
     const userAgent = navigator.userAgent.toLowerCase();
     const targetUrl = window.location.href;
     const isInApp = userAgent.match(/kakaotalk|naver|line|instagram|facebook|tiktok/i);
@@ -136,7 +146,6 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // 🔥 [수정] 로그인 시 스트릭(Streak) 점검 및 초기화 로직 강화
   const handleUserChange = async (user: any) => {
     setCurrentUser(user);
     if (user) {
@@ -149,27 +158,21 @@ export default function Home() {
         let currentStreak = data.streak || 0;
         let currentTodayCount = data.today_count || 0;
 
-        // 접속 날짜가 오늘이 아닌 경우 (새로운 날 접속)
         if (data.last_access_date !== today) {
             const lastDate = new Date(data.last_access_date);
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
 
-            // 어제 접속했는지 확인 (날짜 차이 1일)
             const isConsecutive = lastDate.toDateString() === yesterday.toDateString();
 
             if (isConsecutive) {
-                // 어제 접속은 했지만, 목표(5회)를 달성 못했으면 스트릭 깨짐
                 if (currentTodayCount < 5) {
                     currentStreak = 0;
                 }
-                // 5회 이상 했으면 스트릭 유지 (이미 어제 올라갔음)
             } else {
-                // 하루 이상 결석 시 스트릭 깨짐
                 currentStreak = 0;
             }
 
-            // 오늘 카운트 0으로 리셋 및 날짜 갱신
             await updateDoc(userRef, { 
                 today_count: 0, 
                 last_access_date: today,
@@ -178,7 +181,6 @@ export default function Home() {
             currentTodayCount = 0;
         }
 
-        // 상태 업데이트
         setUserRole(data.role || "guest");
         setTokens(data.tokens || 0);
         setUserAlias(data.alias || "");
@@ -199,6 +201,7 @@ export default function Home() {
         checkNewMail(user.email);
 
       } else {
+        // 🔥 [수정] setDoc 함수 정상 사용 가능 (import 추가됨)
         await setDoc(userRef, {
           email: user.email, name: user.displayName, role: "guest",
           free_hearts: 3, tokens: 0, last_heart_reset: today, joined_at: serverTimestamp(), 
@@ -211,7 +214,6 @@ export default function Home() {
     }
   };
 
-  // 🔥 [신규] 일일 목표(5회) 및 7일 챌린지 자동 보상 처리 함수
   const updateDailyProgress = async () => {
       if (!currentUser) return;
       
@@ -221,17 +223,14 @@ export default function Home() {
       
       let newStreak = streak;
 
-      // 목표 5회 달성 시
       if (newTodayCount === 5) {
           newStreak += 1;
           updates.streak = newStreak;
           
-          // 🏆 7일 연속 학습 달성 시 보상 (정확히 7일째 되는 날)
           if (newStreak === 7) { 
               updates.tokens = increment(15);
-              setTokens(prev => prev + 15); // UI 즉시 반영
+              setTokens(prev => prev + 15);
 
-              // 축하 메시지 발송
               await addDoc(collection(db, "sori_users", currentUser.email, "inbox"), {
                   from: "소리튜터 운영진",
                   title: "🏆 7일 연속 학습 달성 보상!",
@@ -601,8 +600,95 @@ export default function Home() {
     setTargetLineIndex(null); 
   };
   
-  const startRecording = async () => { try { const s=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorderRef.current=new MediaRecorder(s); mediaRecorderRef.current.ondataavailable=e=>{if(e.data.size>0) chunksRef.current.push(e.data)}; mediaRecorderRef.current.onstop=()=>{const b=new Blob(chunksRef.current,{type:"audio/webm"}); setAudioUrl(URL.createObjectURL(b)); setAudioBlob(b); chunksRef.current=[];}; mediaRecorderRef.current.start(); setRecording(true); setResult(null); } catch(e){ alert("마이크 권한 필요"); }};
-  const stopRecording = () => { if(mediaRecorderRef.current&&recording){ mediaRecorderRef.current.stop(); setRecording(false); }};
+  // 🔥 [수정] 녹음 시작 함수 (VAD 로직 추가)
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      chunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        setAudioUrl(URL.createObjectURL(blob));
+        setAudioBlob(blob);
+        chunksRef.current = [];
+        
+        // 녹음 종료 시 스트림 트랙 정지 (마이크 끄기)
+        stream.getTracks().forEach(track => track.stop());
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        if(audioContextRef.current) audioContextRef.current.close();
+      };
+
+      mediaRecorderRef.current.start();
+      setRecording(true);
+      setResult(null);
+
+      // --- VAD (침묵 감지) 로직 시작 ---
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      sourceRef.current = source;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      dataArrayRef.current = dataArray;
+
+      detectSilence(); 
+      // -------------------------------
+
+    } catch (e) {
+      console.error(e);
+      alert("마이크 권한이 필요합니다.");
+    }
+  };
+
+  // 🔥 [신규] 침묵 감지 루프 (타입 오류 수정됨)
+  const detectSilence = () => {
+    if (!analyserRef.current || !dataArrayRef.current) return;
+
+    // 🔥 [수정] as any로 타입 우회
+    analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
+    
+    // 평균 볼륨 계산
+    const average = dataArrayRef.current.reduce((a, b) => a + b) / dataArrayRef.current.length;
+
+    // 임계값 (조용한 환경 기준, 필요시 10~20 사이로 조절)
+    const SILENCE_THRESHOLD = 15; 
+
+    if (average > SILENCE_THRESHOLD) {
+      // 말이 들리면 타이머 리셋
+      if (silenceTimer.current) {
+        clearTimeout(silenceTimer.current);
+        silenceTimer.current = null;
+      }
+    } else {
+      // 말이 없으면 타이머 시작 (1.5초 후 종료)
+      if (!silenceTimer.current) {
+        silenceTimer.current = setTimeout(() => {
+          stopRecording(); // 1.5초 침묵 시 자동 종료
+        }, 1500); 
+      }
+    }
+
+    animationFrameRef.current = requestAnimationFrame(detectSilence);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+      if (silenceTimer.current) clearTimeout(silenceTimer.current);
+    }
+  };
   
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
@@ -774,7 +860,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* ... (나머지 화면들은 이전과 동일하므로 생략 없이 포함된 전체 코드 유지) ... */}
         {viewMode === "category" && (
           <div>
             <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 font-bold flex items-center gap-1 hover:text-blue-600"><ChevronLeft size={20}/> 메인으로</button>
