@@ -7,14 +7,13 @@ import AdModal from "./components/AdModal";
 
 import { db, auth } from "@/lib/firebase"; 
 import { signOut, onAuthStateChanged } from "firebase/auth"; 
-// 🔥 [수정] setDoc 추가됨
 import { 
   doc, getDoc, setDoc, collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, updateDoc, increment, limit, writeBatch 
 } from "firebase/firestore";
 import { 
   Mic, MessageSquare, Trophy, Mail, X, ChevronLeft, Star, Heart, Coins, 
   Volume2, Info, CheckCircle, Send, MessageCircle, Languages, Crown, 
-  Users, Sparkles, BookOpen 
+  Users, Sparkles, BookOpen, Headphones, Save, Bookmark, User, History, PieChart, TrendingDown, TrendingUp
 } from 'lucide-react';
 
 const WELCOME_MESSAGE = {
@@ -23,7 +22,7 @@ const WELCOME_MESSAGE = {
   title: "🎉 소리튜터에 오신 것을 환영합니다! (사용 설명서 포함)",
   date: new Date(), 
   read: true, 
-  content: `안녕하세요, 새로운 학습자님! 👋\n\n한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.\n소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.\n\n🚀 이렇게 시작해보세요!\n🎙️ 발음 테스트: 홈 화면에서 '단어'나 '문장' 카드를 골라보세요. 마이크 버튼을 누르고 따라 읽으면 AI가 즉시 점수를 매겨줍니다. (100점에 도전해보세요!)\n🎭 실전 회화 (롤플레잉): '실전 회화' 메뉴에서는 성우급 AI와 역할을 나눠 대화할 수 있습니다. 내가 주인공이 되어 드라마 속 주인공처럼 연기해보세요.\n🗣️ 한국어 자유 회화: 10명의 다양한 AI 친구들과 대화하며 실력을 키워보세요. 대화가 끝나면 발음, 억양, 감정 표현까지 포함된 '종합 분석 리포트'를 제공해 드립니다.\n📊 랭킹 도전: 매일 꾸준히 학습하면 '연속 학습일(Streak)'이 올라갑니다. 랭킹은 매주 월요일에 초기화되니, 이번 주 랭킹 1위를 노려보세요!\n\n💡 왜 소리튜터인가요?\n* Expert-Led Content: 교육 전문가가 엄선한 데이터를 주기적으로 업데이트합니다.\n* High-End AI: 구글의 최신 유료 AI 모델(Chirp 3 HD, Gemini)을 탑재하여, 실제 사람과 같은 목소리와 정확한 피드백을 제공합니다.\n\n📢 충전 및 이용 안내 (Pre-Launch)\n정식 런칭 전까지 토큰 충전은 개인 통장 입금 방식으로 운영됩니다.\n초기 멤버분들을 위해, 베타 기간 동안 각종 이벤트를 통해 더 넉넉한 혜택을 제공할 예정입니다.\n\n🎁 7일 연속 학습 챌린지!\n* 미션: 7일 동안 매일 5번 이상 연습하기 (자동 체크)\n* 선물: 7일 달성 시 15 토큰 즉시 지급 + 축하 메시지 발송!\n\n로그인 시 매일 무료 하트 3개가 충전됩니다.\n학습 중 오류가 있거나 건의사항이 생기면 상단의 [📮]을 눌러 언제든 알려주세요.\n\n- 소리튜터 운영진 드림 -`
+  content: `안녕하세요, 새로운 학습자님! 👋\n\n한국어 마스터를 향한 첫걸음을 떼신 것을 진심으로 환영합니다.\n소리튜터(Sori-Tutor)는 AI와 함께 즐겁게 발음을 교정하고 회화를 연습하는 공간입니다.`
 };
 
 const PERSONAS = [
@@ -62,7 +61,12 @@ export default function Home() {
   const [inquiryCategory, setInquiryCategory] = useState("bug");
   const [inquiryContent, setInquiryContent] = useState("");
 
+  // 🔥 [수정] 토큰 관련 상태 확장
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [tokenLogs, setTokenLogs] = useState<any[]>([]);
+  const [historyTab, setHistoryTab] = useState<'earn' | 'spend'>('earn');
+  const [showSpendStats, setShowSpendStats] = useState(false);
+
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [showPersonaRanking, setShowPersonaRanking] = useState(false);
@@ -83,7 +87,7 @@ export default function Home() {
   const [completedLines, setCompletedLines] = useState<number[]>([]); 
   const [rankingList, setRankingList] = useState<any[]>([]);
   const [historyList, setHistoryList] = useState<any[]>([]); 
-  const [historyTab, setHistoryTab] = useState<"all" | "word" | "sentence" | "dialogue" | "free_talking">("all");
+  const [historyTabState, setHistoryTabState] = useState<"all" | "word" | "sentence" | "dialogue" | "free_talking">("all");
   
   const [parsedScript, setParsedScript] = useState<{role: string, text: string}[]>([]);
   const [myRole, setMyRole] = useState<"A" | "B">("A"); 
@@ -103,8 +107,11 @@ export default function Home() {
   const [chatFeedback, setChatFeedback] = useState<any>(null);
 
   const [ttsLoading, setTtsLoading] = useState(false);
+
+  const [isShadowingMode, setIsShadowingMode] = useState(false);
+  const [selectedWordData, setSelectedWordData] = useState<any>(null);
+  const [showWordModal, setShowWordModal] = useState(false);
   
-  // VAD(음성 감지) 및 녹음 관련 Ref
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -115,13 +122,6 @@ export default function Home() {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // 조사 처리 함수
-  const getSubjectMarker = (name: string) => {
-    const lastChar = name.charCodeAt(name.length - 1);
-    const hasBatchim = (lastChar - 0xAC00) % 28 > 0;
-    return hasBatchim ? '이' : '가';
-  };
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
         if (user) { handleUserChange(user); } 
@@ -129,7 +129,7 @@ export default function Home() {
         setIsAuthChecking(false);
     });
     
-    // 인앱 브라우저 체크 및 탈출 로직
+    // 인앱 브라우저 체크
     const userAgent = navigator.userAgent.toLowerCase();
     const targetUrl = window.location.href;
     const isInApp = userAgent.match(/kakaotalk|naver|line|instagram|facebook|tiktok/i);
@@ -139,12 +139,21 @@ export default function Home() {
         const intentUrl = `intent://${targetUrl.replace(/https?:\/\//i, '')}#Intent;scheme=https;package=com.android.chrome;end;`;
         window.location.href = intentUrl;
       } else {
-        alert("🔒 보안을 위해 구글 로그인은 \n'크롬'이나 '사파리'에서만 가능합니다.\n\n우측 상단/하단 메뉴 [⋮] 또는 [share] 버튼을 눌러\n'다른 브라우저로 열기'를 선택해주세요!");
+        alert("🔒 보안을 위해 구글 로그인은 \n'크롬'이나 '사파리'에서만 가능합니다.");
       }
     }
 
     return () => unsubscribe();
   }, []);
+
+  // 모달이 열릴 때 자동으로 히스토리 50개 불러오기 (통계를 위해 넉넉히)
+  useEffect(() => {
+    if (showPaymentModal) {
+      fetchTokenLogs();
+      setHistoryTab('earn'); // 기본 탭은 획득
+      setShowSpendStats(false); // 통계 닫힘 상태 초기화
+    }
+  }, [showPaymentModal]);
 
   const handleUserChange = async (user: any) => {
     setCurrentUser(user);
@@ -162,13 +171,10 @@ export default function Home() {
             const lastDate = new Date(data.last_access_date);
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
-
             const isConsecutive = lastDate.toDateString() === yesterday.toDateString();
 
             if (isConsecutive) {
-                if (currentTodayCount < 5) {
-                    currentStreak = 0;
-                }
+                if (currentTodayCount < 5) currentStreak = 0;
             } else {
                 currentStreak = 0;
             }
@@ -190,18 +196,14 @@ export default function Home() {
         setChatCount(data.chat_count || 0);
         
         if (!data.alias) setShowNicknameModal(true);
-        
         if (data.last_heart_reset !== today) { 
             await updateDoc(userRef, { free_hearts: 3, last_heart_reset: today }); 
             setHearts(3); 
         } else {
             setHearts(data.free_hearts ?? 3);
         }
-
         checkNewMail(user.email);
-
       } else {
-        // 🔥 [수정] setDoc 함수 정상 사용 가능 (import 추가됨)
         await setDoc(userRef, {
           email: user.email, name: user.displayName, role: "guest",
           free_hearts: 3, tokens: 0, last_heart_reset: today, joined_at: serverTimestamp(), 
@@ -214,37 +216,66 @@ export default function Home() {
     }
   };
 
+  const logTokenTransaction = async (amount: number, reason: string, type: 'earn' | 'spend') => {
+      if (!currentUser) return;
+      try {
+          const logsRef = collection(db, "sori_users", currentUser.email, "token_logs");
+          await addDoc(logsRef, { type, amount, reason, date: serverTimestamp() });
+      } catch (e) {
+          console.error("Token log error", e);
+      }
+  };
+
+  const fetchTokenLogs = async () => {
+      if (!currentUser) return;
+      try {
+          // 통계를 위해 넉넉히 50개 가져옴
+          const q = query(collection(db, "sori_users", currentUser.email, "token_logs"), orderBy("date", "desc"), limit(50));
+          const snapshot = await getDocs(q);
+          const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setTokenLogs(logs);
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
+  // 🔥 [신규] 지출 통계 계산 함수
+  const getSpendStats = () => {
+      const stats = { word: 0, sentence: 0, chat: 0, etc: 0 };
+      tokenLogs.filter(l => l.type === 'spend').forEach(l => {
+          if (l.reason.includes("단어") || l.reason.includes("Word")) stats.word += l.amount;
+          else if (l.reason.includes("문장") || l.reason.includes("Sentence")) stats.sentence += l.amount;
+          else if (l.reason.includes("회화") || l.reason.includes("프리토킹")) stats.chat += l.amount;
+          else stats.etc += l.amount;
+      });
+      return stats;
+  };
+
   const updateDailyProgress = async () => {
       if (!currentUser) return;
-      
       const userRef = doc(db, "sori_users", currentUser.email);
       const newTodayCount = todayCount + 1;
       const updates: any = { today_count: newTodayCount };
       
       let newStreak = streak;
-
       if (newTodayCount === 5) {
           newStreak += 1;
           updates.streak = newStreak;
-          
           if (newStreak === 7) { 
               updates.tokens = increment(15);
               setTokens(prev => prev + 15);
-
+              logTokenTransaction(15, "7일 연속 학습 보상", "earn");
               await addDoc(collection(db, "sori_users", currentUser.email, "inbox"), {
                   from: "소리튜터 운영진",
                   title: "🏆 7일 연속 학습 달성 보상!",
-                  content: "축하합니다! 👏\n7일 동안 하루도 빠짐없이 5회 이상 학습하셨군요.\n\n그 끈기에 박수를 보내며, 약속드린 **15토큰**을 지급해 드렸습니다.\n앞으로도 꾸준히 함께해요! 화이팅!",
+                  content: "축하합니다! 👏 15토큰이 지급되었습니다.",
                   date: serverTimestamp(),
                   read: false
               });
               setHasNewMail(true);
               alert("🎉 축하합니다! 7일 연속 학습 달성으로 15토큰이 지급되었습니다!");
-          } else {
-              alert("🔥 오늘의 학습 목표(5회)를 달성했습니다! 연속 학습일이 +1 올랐습니다.");
           }
       }
-      
       setTodayCount(newTodayCount);
       setStreak(newStreak);
       await updateDoc(userRef, updates);
@@ -260,44 +291,30 @@ export default function Home() {
     setShowInboxModal(true); 
     setInboxTab('received');
     setHasNewMail(false);
-
     if (!currentUser) return;
-    
     setLoading(true);
     try {
         const q = query(collection(db, "sori_users", currentUser.email, "inbox"), orderBy("date", "desc"));
         const snap = await getDocs(q);
         const dbMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
         const unread = dbMsgs.filter((m: any) => !m.read);
         if (unread.length > 0) {
           const batch = writeBatch(db);
           unread.forEach((m: any) => batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true }));
           await batch.commit(); 
         }
-        const readMsgs = dbMsgs.map((m: any) => ({ ...m, read: true }));
-        setInboxList([WELCOME_MESSAGE, ...readMsgs]);
-    } catch (e) {
-        console.error("Inbox Error", e);
-        setInboxList([WELCOME_MESSAGE]); 
-    } finally {
-        setLoading(false);
-    }
+        setInboxList([WELCOME_MESSAGE, ...dbMsgs.map((m: any) => ({ ...m, read: true }))]);
+    } catch (e) { console.error(e); setInboxList([WELCOME_MESSAGE]); } finally { setLoading(false); }
   };
 
   const fetchRanking = async () => { 
     setShowRankingModal(true); 
     if (!currentUser) return; 
-    
     setLoading(true);
     try {
         const s = await getDocs(query(collection(db, "sori_users"), orderBy("points", "desc"), limit(10))); 
         setRankingList(s.docs.map(d => d.data())); 
-    } catch (e) {
-        console.error("Ranking Error", e);
-    } finally {
-        setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const fetchHistory = async () => { 
@@ -306,14 +323,9 @@ export default function Home() {
     try {
         const q = query(collection(db, "sori_users", currentUser.email, "history"), orderBy("date", "desc")); 
         const s = await getDocs(q); 
-        const safeList = s.docs.map(d => {
-            const data = d.data();
-            return { id: d.id, ...data }; 
-        });
-        setHistoryList(safeList); 
+        setHistoryList(s.docs.map(d => ({ id: d.id, ...d.data() }))); 
         setViewMode("history"); 
-    } catch(e) { console.error("History Error", e); }
-    finally { setLoading(false); }
+    } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
   const handleSendInquiry = async () => {
@@ -342,22 +354,16 @@ export default function Home() {
     if (!text && !path) return alert("재생할 내용이 없습니다.");
     if (path) { try { new Audio(path).play(); } catch(e) { console.error(e); } return; }
     if (ttsLoading) return; 
-    
     try {
       setTtsLoading(true);
-      const cleanText = text.replace(/[\[\]]/g, "");
+      const cleanText = text.replace(/[\[\]]/g, "").replace(/-/g, " ").trim();
       const formData = new FormData();
       formData.append("action", "tts_simple");
       formData.append("text", cleanText);
       formData.append("voiceName", voice || "ko-KR-Chirp3-HD-Zephyr");
-      
       const res = await fetch("/api/chat", { method: "POST", body: formData });
       const data = await res.json();
-      
-      if (data.audioContent) { 
-          const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
-          audio.play();
-      }
+      if (data.audioContent) { const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`); audio.play(); }
     } catch (e) { console.error(e); } finally { setTtsLoading(false); }
   };
 
@@ -367,26 +373,26 @@ export default function Home() {
       if (userRole === 'guest') {
            setHearts(prev => prev + amount);
            await updateDoc(userRef, { free_hearts: increment(amount) });
-           alert(`🎉 축하합니다! 무료 하트 ${amount}개를 획득했습니다!`);
+           alert(`🎉 무료 하트 ${amount}개 획득!`);
       } else {
            setTokens(prev => prev + amount);
            await updateDoc(userRef, { tokens: increment(amount) });
-           alert(`🎉 축하합니다! 토큰 ${amount}개를 획득했습니다!`);
+           logTokenTransaction(amount, "광고 시청 보상", "earn");
+           alert(`🎉 토큰 ${amount}개 획득!`);
       }
   };
 
   const handleManualCharge = async (tokenAmount: number, price: string) => {
       const depositorName = prompt(`[${price}] 입금을 진행하실 분의 성함을 입력해주세요.`);
       if (!depositorName || depositorName.trim() === "") return;
-      if (!confirm(`${depositorName}님 명의로 충전을 요청하시겠습니까?\n(계좌 입금 확인 후 운영진이 토큰을 지급해 드립니다)`)) return;
-
+      if (!confirm(`${depositorName}님 명의로 충전을 요청하시겠습니까?`)) return;
       try {
           await addDoc(collection(db, "sori_charge_requests"), {
               userId: currentUser.email, userAlias: userAlias || "이름없음", amount: tokenAmount, price: price, depositor: depositorName, status: "pending", createdAt: serverTimestamp()     
           });
-          alert(`✅ 요청이 접수되었습니다!\n\n아래 계좌로 입금해주시면 확인 후 충전됩니다.\n\n🏦 카카오뱅크 3333-29-9690780 (오준호)`);
+          alert(`✅ 요청 완료! 입금 확인 후 충전됩니다.\n\n🏦 카카오뱅크 3333-29-9690780 (오준호)`);
           setShowPaymentModal(false); 
-      } catch (e) { console.error("Charge Request Error", e); alert("요청 중 오류가 발생했습니다."); }
+      } catch (e) { console.error(e); alert("요청 오류"); }
   };
 
   const enterFreeTalking = () => {
@@ -401,11 +407,8 @@ export default function Home() {
   const startChatWithPersona = (personaId: string) => {
       setSelectedPersona(personaId);
       const persona = PERSONAS.find(p => p.id === personaId);
-      const lastChar = persona?.name.charCodeAt(persona.name.length - 1) || 0;
-      const hasBatchim = (lastChar - 0xAC00) % 28 > 0;
-      const suffix = hasBatchim ? "이에요" : "예요";
+      const suffix = (persona?.name.charCodeAt(persona.name.length - 1) || 0 - 0xAC00) % 28 > 0 ? "이에요" : "예요";
       const greeting = `안녕하세요! 저는 ${persona?.name}${suffix}. 우리 대화할까요?`;
-      
       setChatHistory([{role: "model", text: greeting}]);
       setChatStatus('active');
       setChatFeedback(null);
@@ -428,52 +431,40 @@ export default function Home() {
     try {
         const res = await fetch("/api/chat", { method: "POST", body: formData });
         const data = await res.json();
+        if (data.error) { alert(data.error); setLoading(false); return; }
 
-        if (data.error) { alert(data.error); setLoading(false); setAudioUrl(null); setAudioBlob(null); return; }
+        if (userRole === 'guest') { 
+            setHearts(p => p-1); 
+            updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); 
+        } else { 
+            setTokens(p => p-2); 
+            updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); 
+            logTokenTransaction(2, "실전 회화 (1턴)", "spend");
+        }
 
-        if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); } 
-        else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
-
-        const newHistory = [
-            ...chatHistory, 
-            {role: 'user', text: data.userText} as any, 
-            {role: 'model', text: data.aiText, audio: data.audioContent ? `data:audio/mp3;base64,${data.audioContent}` : null}
-        ];
+        const newHistory = [...chatHistory, {role: 'user', text: data.userText} as any, {role: 'model', text: data.aiText, audio: data.audioContent ? `data:audio/mp3;base64,${data.audioContent}` : null}];
         setChatHistory(newHistory);
-        
         if (data.audioContent) { new Audio(`data:audio/mp3;base64,${data.audioContent}`).play(); }
         if (data.ended) setChatStatus('ended');
-        
         setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-
-    } catch(e) { alert("통신 오류 발생"); } 
-    finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
+    } catch(e) { alert("통신 오류"); } finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
   };
 
   const handleMemoryUpdate = async (dialog: string) => {
     try {
        const newCount = chatCount + 1;
-       let newMemory = sharedMemory;
        const mode = newCount % 5 === 0 ? 'compress' : 'append';
-       
        const formData = new FormData();
        formData.append("action", "memory_sync");
        formData.append("currentMemory", sharedMemory);
        formData.append("newDialog", dialog);
        formData.append("mode", mode);
-
        const res = await fetch("/api/chat", { method: "POST", body: formData });
        const data = await res.json();
-       
        if (data.summary && data.summary !== "정보 없음") {
-           if (mode === 'compress') newMemory = data.summary;
-           else newMemory += " " + data.summary;
-           
+           const newMemory = mode === 'compress' ? data.summary : sharedMemory + " " + data.summary;
            setSharedMemory(newMemory);
-           await updateDoc(doc(db, "sori_users", currentUser.email), { 
-               shared_memory: newMemory,
-               chat_count: newCount 
-           });
+           await updateDoc(doc(db, "sori_users", currentUser.email), { shared_memory: newMemory, chat_count: newCount });
            setChatCount(newCount);
        }
     } catch(e) { console.error("Memory sync fail", e); }
@@ -482,91 +473,83 @@ export default function Home() {
   const handleChatFeedback = async () => {
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 2) return setShowPaymentModal(true);
-
       setLoading(true);
-      const formData = new FormData();
-      formData.append("action", "feedback");
-      formData.append("history", JSON.stringify(chatHistory));
-      
       try {
+          const formData = new FormData();
+          formData.append("action", "feedback");
+          formData.append("history", JSON.stringify(chatHistory));
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           setChatFeedback(data);
           
-          if (userRole === 'guest') { setHearts(p => p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
-          else { setTokens(p => p-2); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); }
-          
+          if (userRole === 'guest') { 
+              setHearts(p => p-1); 
+              updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); 
+          } else { 
+              setTokens(p => p-2); 
+              updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-2) }); 
+              logTokenTransaction(2, "회화 피드백 분석", "spend");
+          }
           updateDoc(doc(db,"sori_users",currentUser.email), { points: increment(10) });
-
-          // 🔥 회화 완료 시에도 일일 목표(5회) 카운트 증가
           await updateDailyProgress();
 
-          const feedbackSummary = `🗣️ 발음: ${data.pronunciation}\n🎭 억양: ${data.intonation}\n💡 총평: ${data.general}`;
           const currentPersona = PERSONAS.find(p=>p.id===selectedPersona);
           const pName = currentPersona?.name || "AI";
-          const title = `${pName}와의 대화`; 
-
           await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
-            text: title, score: 0, recognized: "", correct: "",
-            feedback: feedbackSummary, advice: data.general, type: "free_talking", date: serverTimestamp()
+            text: `${pName}와의 대화`, score: 0, recognized: "", correct: "",
+            feedback: `🗣️ 발음: ${data.pronunciation}\n🎭 억양: ${data.intonation}\n💡 총평: ${data.general}`, advice: data.general, type: "free_talking", date: serverTimestamp()
           });
-          
           const fullDialog = chatHistory.map(m => `${m.role}:${m.text}`).join("\n");
           handleMemoryUpdate(fullDialog);
-
       } catch(e) { alert("피드백 생성 실패"); } finally { setLoading(false); }
   };
 
   const handleTranslateFeedback = async () => {
-      if (!chatFeedback && !result) return;
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
-      if(!confirm("번역하시겠습니까?")) return; 
-
+      if(!confirm("번역하시겠습니까? (0.5🪙)")) return; 
       setLoading(true);
-      const formData = new FormData();
-      formData.append("action", "translate");
-      const text = chatFeedback 
-        ? `Pronunciation: ${chatFeedback.pronunciation}\nGeneral: ${chatFeedback.general}`
-        : `Explanation: ${result.explanation}\nAdvice: ${result.advice}`;
-      formData.append("text", text);
-
       try {
+          const formData = new FormData();
+          formData.append("action", "translate");
+          const text = chatFeedback ? `Pronunciation: ${chatFeedback.pronunciation}\nGeneral: ${chatFeedback.general}` : `Explanation: ${result.explanation}\nAdvice: ${result.advice}`;
+          formData.append("text", text);
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           setTranslation(data.translatedText);
-          
-          if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
-          else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
-          
-          if (showTranslateModal === false && viewMode === 'freetalking') setShowTranslateModal(true);
-
+          if (userRole === 'guest') { 
+              setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); 
+          } else { 
+              setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); 
+              logTokenTransaction(0.5, "피드백 번역", "spend");
+          }
+          if (!showTranslateModal && viewMode === 'freetalking') setShowTranslateModal(true);
       } catch(e) { alert("번역 실패"); } finally { setLoading(false); }
   };
 
   const handleHistoryTranslate = async (item: any) => {
       if (userRole === 'guest' && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== 'guest' && tokens < 0.5) return setShowPaymentModal(true);
-      if (!confirm("이 기록을 번역하시겠습니까?")) return;
-
+      if (!confirm("이 기록을 번역하시겠습니까? (0.5🪙)")) return;
       const text = item.feedback || item.explanation || item.advice;
       if (!text) return alert("내용이 없습니다.");
-
       setLoading(true);
-      const formData = new FormData();
-      formData.append("action", "translate");
-      formData.append("text", text);
-
       try {
+          const formData = new FormData();
+          formData.append("action", "translate");
+          formData.append("text", text);
           const res = await fetch("/api/chat", { method: "POST", body: formData });
           const data = await res.json();
           if (data.error) { alert(data.error); return; }
           alert(`[번역 결과]\n${data.translatedText}`); 
-          
-          if (userRole === 'guest') { setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); }
-          else { setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); }
+          if (userRole === 'guest') { 
+              setHearts(p=>p-1); updateDoc(doc(db,"sori_users",currentUser.email), { free_hearts: increment(-1) }); 
+          } else { 
+              setTokens(p=>p-0.5); updateDoc(doc(db,"sori_users",currentUser.email), { tokens: increment(-0.5) }); 
+              logTokenTransaction(0.5, "기록 번역", "spend");
+          }
       } catch(e) { alert("오류"); } finally { setLoading(false); }
   };
 
@@ -588,106 +571,88 @@ export default function Home() {
   const handleNextProblem = () => { if(problemList.length>0){ const r=Math.floor(Math.random()*problemList.length); updateCurrentProblem(problemList[r]); }};
   const handlePrevProblem = () => { if(historyIndex>0){ setHistoryIndex(p=>p-1); updateCurrentProblem(historyStack[historyIndex-1]); }};
   const updateCurrentProblem = (prob: any) => { setCurrentProblem(prob); setResult(null); setAudioUrl(null); setCompletedLines([]); setTranslation(null); if(prob.script) parseDialogue(prob.script); };
+  const parseDialogue = (s: string) => { if (!s) { setParsedScript([]); return; } setParsedScript(s.split("|").map(l => { const parts = l.split(":"); return { role: parts[0]?.trim() || "System", text: parts[1]?.trim() || "" }; })); setTargetLineIndex(null); };
   
-  const parseDialogue = (s: string) => {
-    if (!s) { setParsedScript([]); return; }
-    setParsedScript(s.split("|").map(l => {
-        const parts = l.split(":");
-        const role = parts[0]?.trim() || "System";
-        const text = parts[1]?.trim() || ""; 
-        return { role, text };
-    })); 
-    setTargetLineIndex(null); 
+  const handleWordClick = async (word: string, context: string) => {
+      const cleanWord = word.replace(/[.,?!~]/g, "");
+      if (!cleanWord) return;
+      if (userRole !== 'guest' && tokens < 0.5) { alert("단어 검색에는 0.5 토큰이 필요합니다."); setShowPaymentModal(true); return; }
+      setLoading(true);
+      try {
+          const formData = new FormData();
+          formData.append("action", "define");
+          formData.append("word", cleanWord);
+          formData.append("context", context);
+          const res = await fetch("/api/chat", { method: "POST", body: formData });
+          const data = await res.json();
+          if(data.error) throw new Error(data.error);
+          setSelectedWordData(data);
+          setShowWordModal(true);
+          if (userRole !== 'guest') {
+              setTokens(p => p - 0.5);
+              updateDoc(doc(db, "sori_users", currentUser.email), { tokens: increment(-0.5) });
+              logTokenTransaction(0.5, "단어 뜻 검색", "spend");
+              alert("🔍 단어 검색으로 0.5 토큰이 차감되었습니다.");
+          }
+      } catch (e) { alert("단어 정보 로딩 실패"); } finally { setLoading(false); }
   };
-  
-  // 🔥 [수정] 녹음 시작 함수 (VAD 로직 추가)
+
+  const saveVocabulary = async () => {
+      if (!selectedWordData || !currentUser) return;
+      try {
+          await addDoc(collection(db, "sori_users", currentUser.email, "vocabulary"), {
+              word: selectedWordData.word,
+              meaning_kr: selectedWordData.meaning_kr,
+              meaning_en: selectedWordData.meaning_en,
+              example: selectedWordData.example,
+              savedAt: serverTimestamp()
+          });
+          alert("저장되었습니다!"); setShowWordModal(false);
+      } catch (e) { alert("저장 실패"); }
+  };
+
+  const renderClickableMessage = (text: string, role: string) => {
+      const words = text.split(" ");
+      return ( <p className="leading-relaxed"> {words.map((word, idx) => ( <span key={idx} onClick={() => handleWordClick(word, text)} className={`inline-block mr-1 cursor-pointer rounded px-0.5 transition ${role === 'model' ? 'hover:bg-slate-200' : 'hover:bg-blue-500 hover:text-white'}`}> {word} </span> ))} </p> );
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
       chunksRef.current = [];
-
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setAudioUrl(URL.createObjectURL(blob));
-        setAudioBlob(blob);
-        chunksRef.current = [];
-        
-        // 녹음 종료 시 스트림 트랙 정지 (마이크 끄기)
-        stream.getTracks().forEach(track => track.stop());
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        if(audioContextRef.current) audioContextRef.current.close();
-      };
-
+      mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mediaRecorderRef.current.onstop = () => { const blob = new Blob(chunksRef.current, { type: "audio/webm" }); setAudioUrl(URL.createObjectURL(blob)); setAudioBlob(blob); chunksRef.current = []; stream.getTracks().forEach(track => track.stop()); if(animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); if(audioContextRef.current) audioContextRef.current.close(); };
       mediaRecorderRef.current.start();
       setRecording(true);
       setResult(null);
-
-      // --- VAD (침묵 감지) 로직 시작 ---
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const audioContext = new AudioContextClass();
       audioContextRef.current = audioContext;
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
-      
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
       sourceRef.current = source;
-
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       dataArrayRef.current = dataArray;
-
       detectSilence(); 
-      // -------------------------------
-
-    } catch (e) {
-      console.error(e);
-      alert("마이크 권한이 필요합니다.");
-    }
+    } catch (e) { alert("마이크 권한 필요"); }
   };
 
-  // 🔥 [신규] 침묵 감지 루프 (타입 오류 수정됨)
   const detectSilence = () => {
     if (!analyserRef.current || !dataArrayRef.current) return;
-
-    // 🔥 [수정] as any로 타입 우회
     analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
-    
-    // 평균 볼륨 계산
     const average = dataArrayRef.current.reduce((a, b) => a + b) / dataArrayRef.current.length;
-
-    // 임계값 (조용한 환경 기준, 필요시 10~20 사이로 조절)
     const SILENCE_THRESHOLD = 15; 
-
-    if (average > SILENCE_THRESHOLD) {
-      // 말이 들리면 타이머 리셋
-      if (silenceTimer.current) {
-        clearTimeout(silenceTimer.current);
-        silenceTimer.current = null;
-      }
-    } else {
-      // 말이 없으면 타이머 시작 (1.5초 후 종료)
-      if (!silenceTimer.current) {
-        silenceTimer.current = setTimeout(() => {
-          stopRecording(); // 1.5초 침묵 시 자동 종료
-        }, 1500); 
-      }
-    }
-
+    if (average > SILENCE_THRESHOLD) { if (silenceTimer.current) { clearTimeout(silenceTimer.current); silenceTimer.current = null; } } 
+    else { if (!silenceTimer.current) { silenceTimer.current = setTimeout(() => { stopRecording(); }, 1500); } }
     animationFrameRef.current = requestAnimationFrame(detectSilence);
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-      if (silenceTimer.current) clearTimeout(silenceTimer.current);
-    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') { mediaRecorderRef.current.stop(); setRecording(false); if (silenceTimer.current) clearTimeout(silenceTimer.current); }
   };
   
   const analyzeAudio = async () => {
@@ -695,39 +660,22 @@ export default function Home() {
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
     const cost = courseType === 'word' ? 0.5 : 1;
     if (userRole === "student" && tokens < cost) return setShowPaymentModal(true);
-    
     setLoading(true); setResult(null); setTranslation(null);
     let targetText = currentProblem.text; let contextInfo = ""; 
-    if (courseType === "dialogue" && targetLineIndex !== null) { 
-        targetText = parsedScript[targetLineIndex].text; 
-        contextInfo = `상황: ${currentProblem.title}, 역할: ${myRole}`; 
-    }
-    
+    if (courseType === "dialogue" && targetLineIndex !== null) { targetText = parsedScript[targetLineIndex].text; contextInfo = `상황: ${currentProblem.title}, 역할: ${myRole}`; }
     const formData = new FormData(); 
-    formData.append("audio", audioBlob); 
-    formData.append("targetText", targetText); 
-    formData.append("context", contextInfo);
-    formData.append("userNick", userAlias || "학습자");
-    
+    formData.append("audio", audioBlob); formData.append("targetText", targetText); formData.append("context", contextInfo); formData.append("userNick", userAlias || "학습자");
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
       const data = await res.json();
       if (data.error) { alert(data.error); } else {
         setResult(data);
-        
         const userRef = doc(db, "sori_users", currentUser.email);
         const earnedPoints = courseType === 'word' ? 2 : 3;
-        
-        // 차감 및 포인트 지급
         if (userRole === "guest") { setHearts(p=>p-1); await updateDoc(userRef, { free_hearts: increment(-1), points: increment(earnedPoints) }); }
-        else { setTokens(p=>p-cost); await updateDoc(userRef, { tokens: increment(-cost), points: increment(earnedPoints) }); }
-        
-        // 🔥 학습 카운트 증가 및 7일 챌린지 체크
+        else { setTokens(p=>p-cost); await updateDoc(userRef, { tokens: increment(-cost), points: increment(earnedPoints) }); logTokenTransaction(cost, `발음 분석 (${courseType})`, "spend"); }
         await updateDailyProgress();
-
-        if (courseType === "dialogue" && targetLineIndex !== null) { 
-            if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]); 
-        }
+        if (courseType === "dialogue" && targetLineIndex !== null) { if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]); }
         await addDoc(collection(db, "sori_users", currentUser.email, "history"), { text: targetText, score: data.score, recognized: data.recognized, correct: data.correct, feedback: data.explanation, advice: data.advice, type: courseType, date: serverTimestamp() });
       }
     } catch (error) { alert("서버 오류"); } finally { setLoading(false); }
@@ -760,25 +708,6 @@ export default function Home() {
              <p className="text-slate-500 mb-6 font-bold text-sm">👇 3초 만에 시작하기</p>
              <Login onUserChange={handleUserChange} />
              <p className="text-xs text-slate-400 mt-4">* 회원가입 시 매일 무료 하트 제공</p>
-          </div>
-        </section>
-        <section className="bg-white py-16 px-6 border-t border-slate-100">
-          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center hover:shadow-lg transition">
-              <div className="w-14 h-14 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4"><Users size={28}/></div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">10명의 AI 페르소나</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">대학생, 츤데레 할머니, 면접관 등 10명의 각기 다른 성격을 가진 AI와 대화하며 다양한 상황을 연습해보세요.</p>
-            </div>
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center hover:shadow-lg transition">
-              <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><Sparkles size={28}/></div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">실시간 정밀 피드백</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">단순한 맞춤법 교정을 넘어, 발음, 억양, 감정 표현까지 분석하여 원어민에 가까운 자연스러운 한국어를 코칭합니다.</p>
-            </div>
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center hover:shadow-lg transition">
-              <div className="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"><BookOpen size={28}/></div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">체계적인 커리큘럼</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">기초 단어부터 문장, 상황별 롤플레잉, 그리고 자유 회화까지 단계별로 실력을 향상시킬 수 있습니다.</p>
-            </div>
           </div>
         </section>
         <footer className="bg-slate-50 py-8 text-center text-xs text-slate-400 border-t border-slate-200">
@@ -872,11 +801,11 @@ export default function Home() {
              <button onClick={() => setViewMode("home")} className="mb-4 text-slate-500 flex items-center gap-1"><ChevronLeft/> 메인으로</button>
              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {['all', 'word', 'sentence', 'dialogue', 'free_talking'].map(tab => (
-                    <button key={tab} onClick={() => setHistoryTab(tab as any)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition border ${historyTab === tab ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{tab === 'all' ? '전체' : tab === 'word' ? '단어' : tab === 'sentence' ? '문장' : '회화'}</button>
+                    <button key={tab} onClick={() => setHistoryTabState(tab as any)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition border ${historyTabState === tab ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{tab === 'all' ? '전체' : tab === 'word' ? '단어' : tab === 'sentence' ? '문장' : '회화'}</button>
                 ))}
              </div>
              <div className="space-y-3">
-               {historyList.filter(h => historyTab === 'all' || h.type === historyTab || (historyTab === 'dialogue' && h.type === 'free_talking')).map(h => ( 
+               {historyList.filter(h => historyTabState === 'all' || h.type === historyTabState || (historyTabState === 'dialogue' && h.type === 'free_talking')).map(h => ( 
                    <div key={h.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative">
                        <div className="text-[10px] text-slate-400 mb-1">{h.date?.toDate ? h.date.toDate().toLocaleDateString() : new Date().toLocaleDateString()}</div>
                        <div className="flex justify-between items-start mb-2">
@@ -930,10 +859,11 @@ export default function Home() {
                    <div className="w-10"></div>
                  </div>
                  <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+                   <div className="text-center text-xs text-slate-400 my-2">💡 모르는 단어를 클릭하면 뜻을 볼 수 있어요!</div>
                    {chatHistory.map((msg, idx) => (
                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                        <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed relative group ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
-                         {msg.text}
+                         {renderClickableMessage(msg.text, msg.role)}
                          {msg.role === 'model' && msg.audio && (
                            <button onClick={() => new Audio(msg.audio).play()} className="absolute -right-8 top-2 bg-white border border-slate-200 rounded-full p-1.5 shadow-sm text-slate-500 hover:text-blue-600"><Volume2 size={14} /></button>
                          )}
@@ -973,9 +903,21 @@ export default function Home() {
           <div className="flex flex-col h-full pb-24">
             <div className="flex justify-between items-center mb-4">
                <button onClick={() => setViewMode("home")}><X size={20}/></button>
-               {courseType === 'dialogue' && (<div className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">역할: {myRole === 'A' ? 'A (나)' : 'B (나)'}</div>)}
+               {courseType === 'dialogue' && (
+                   <div className="flex gap-2">
+                       <button onClick={() => setMyRole("A")} className={`px-4 py-1.5 rounded-full text-xs font-bold transition shadow-sm ${myRole === "A" ? "bg-blue-600 text-white ring-2 ring-blue-200" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>A (나)</button>
+                       <button onClick={() => setMyRole("B")} className={`px-4 py-1.5 rounded-full text-xs font-bold transition shadow-sm ${myRole === "B" ? "bg-blue-600 text-white ring-2 ring-blue-200" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>B (나)</button>
+                   </div>
+               )}
+               {courseType !== 'dialogue' && (
+                   <div className="flex items-center gap-2">
+                       <span className={`text-xs font-bold ${isShadowingMode ? "text-purple-600" : "text-slate-400"}`}>쉐도잉 모드</span>
+                       <button onClick={() => setIsShadowingMode(!isShadowingMode)} className={`w-10 h-5 rounded-full relative transition ${isShadowingMode ? "bg-purple-600" : "bg-slate-300"}`}>
+                           <div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${isShadowingMode ? "left-6" : "left-1"}`}></div>
+                       </button>
+                   </div>
+               )}
             </div>
-            
             {result ? (
                 <div className="flex flex-col gap-4 h-full overflow-y-auto">
                    <div className="flex-1 space-y-4">
@@ -1002,6 +944,11 @@ export default function Home() {
                 </div>
             ) : (
                <div className="flex flex-col h-full">
+                   {isShadowingMode && courseType !== 'dialogue' && (
+                       <div className="bg-purple-50 text-purple-700 text-xs p-2 rounded-lg mb-4 text-center animate-in fade-in">
+                           🎧 <b>Shadowing:</b> 원어민 음성을 듣고 동시에 따라 말해보세요!<br/>억양과 속도를 맞추는 데 효과적입니다.
+                       </div>
+                   )}
                    {courseType === "dialogue" ? (
                        <div className="space-y-6 flex-1 pb-10">
                           <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
@@ -1014,9 +961,14 @@ export default function Home() {
                                   const isCompleted = completedLines.includes(idx);
                                   return (
                                       <div key={idx} onClick={() => { if(isMe){ setTargetLineIndex(idx); setResult(null); setAudioUrl(null); }}} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                                          <div className={`max-w-[85%] p-3 rounded-2xl relative cursor-pointer border-2 transition-all ${isMe ? (targetLineIndex === idx ? 'bg-blue-100 border-blue-500' : isCompleted ? 'bg-blue-50 border-blue-200 opacity-60' : 'bg-white border-blue-300 shadow-sm') : 'bg-gray-100 border-transparent text-gray-600'} ${isMe ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
+                                          <div className={`max-w-[85%] p-3 rounded-2xl relative cursor-pointer border-2 transition-all 
+                                              ${isMe 
+                                                  ? (targetLineIndex === idx ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-200' : isCompleted ? 'bg-blue-50 border-blue-200 opacity-60' : 'bg-blue-50 border-blue-300 shadow-sm text-slate-800') 
+                                                  : 'bg-white border-gray-200 text-slate-600'} 
+                                              ${isMe ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
+                                              
                                               <span className="text-[10px] font-bold block opacity-50 mb-1">{line.role}</span>
-                                              <p className="text-base font-medium leading-snug">{line.text}</p>
+                                              <p className={`text-base font-medium leading-snug ${isMe ? 'text-slate-900' : 'text-slate-700'}`}>{line.text}</p>
                                               <button onClick={(e)=>{e.stopPropagation(); handleGoogleTTS(line.text, currentProblem.audio_paths?.[idx], null)}} className="absolute -right-2 -bottom-2 bg-white border rounded-full p-1 shadow-sm hover:bg-gray-50"><Volume2 size={12} className="text-gray-500"/></button>
                                               {isMe && isCompleted && (<div className="absolute -left-6 top-1/2 -translate-y-1/2 text-green-500"><CheckCircle size={16}/></div>)}
                                           </div>
@@ -1043,13 +995,31 @@ export default function Home() {
         )}
       </div>
 
-      {/* 녹음 UI (하단 고정) */}
+      {/* 녹음 UI */}
       {((viewMode === "freetalking" && chatStatus === 'active') || (viewMode === "practice" && !result)) && (
         <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t p-5 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-3xl z-50">
              <div className="flex flex-col items-center gap-4">
                  {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">{viewMode === 'freetalking' ? 'AI가 답변을 생각하고 있어요... 🤔' : 'AI가 소리를 분석 중입니다... 🎧'}</div>}
                  
-                 {!recording && !audioUrl && !loading && (
+                 {!recording && !audioUrl && !loading && isShadowingMode && viewMode === 'practice' && courseType !== 'dialogue' && (
+                     <button 
+                        onClick={() => {
+                            const audioPath = currentProblem.audio_path;
+                            if(audioPath) {
+                                new Audio(audioPath).play();
+                                setTimeout(() => startRecording(), 500); 
+                            } else {
+                                handleGoogleTTS(currentProblem.text);
+                                setTimeout(() => startRecording(), 2000);
+                            }
+                        }}
+                        className="w-16 h-16 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center hover:scale-105 transition animate-pulse"
+                     >
+                        <Headphones size={28}/>
+                     </button>
+                 )}
+
+                 {!recording && !audioUrl && !loading && (!isShadowingMode || viewMode !== 'practice' || courseType === 'dialogue') && (
                     <button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32}/></button>
                  )}
                  {recording && (
@@ -1074,7 +1044,73 @@ export default function Home() {
         </div>
       )}
 
-      {/* 모달 컴포넌트들 */}
+      {/* 🌟 충전소(PaymentModal) + 토큰 히스토리 탭 추가 (업그레이드됨) */}
+      {showPaymentModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+                  <div className="bg-slate-900 p-5 text-white text-center flex-none relative">
+                      <h2 className="text-xl font-bold">충전소 & 히스토리</h2>
+                      <button onClick={() => setShowPaymentModal(false)} className="absolute top-5 right-5 text-white/70 hover:text-white"><X size={20}/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                      <div className="mb-6">
+                          <h3 className="text-sm font-bold text-slate-500 mb-3 block">⚡ 토큰 충전</h3>
+                          <div className="grid grid-cols-1 gap-2">
+                              <button onClick={() => handleManualCharge(100, "2,900원")} className="w-full py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-bold hover:bg-blue-100 flex justify-between px-4"><span>💎 100 토큰</span><span>2,900원</span></button>
+                              <button onClick={() => handleManualCharge(250, "5,900원")} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex justify-between px-4"><span>💎 250 토큰</span><span>5,900원</span></button>
+                              <button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200 text-sm flex items-center justify-center gap-2 mt-2">📺 광고 보고 무료 충전</button>
+                          </div>
+                      </div>
+                      
+                      <div className="pt-6 border-t border-slate-100">
+                          <div className="flex justify-between items-center mb-3">
+                              <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1"><History size={14}/> 최근 사용 내역</h3>
+                              <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                                  <button onClick={() => setHistoryTab('earn')} className={`px-3 py-1 text-xs font-bold rounded-md transition ${historyTab === 'earn' ? 'bg-white shadow text-slate-800' : 'text-slate-400'}`}>획득</button>
+                                  <button onClick={() => setHistoryTab('spend')} className={`px-3 py-1 text-xs font-bold rounded-md transition ${historyTab === 'spend' ? 'bg-white shadow text-slate-800' : 'text-slate-400'}`}>차감</button>
+                              </div>
+                          </div>
+
+                          <div className="bg-slate-50 rounded-xl p-1 min-h-[150px] border border-slate-100">
+                              {historyTab === 'spend' && (
+                                  <div className="mb-2 px-2">
+                                      <button onClick={() => setShowSpendStats(!showSpendStats)} className="w-full py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 flex items-center justify-center gap-1 hover:bg-slate-50 mb-2">
+                                          {showSpendStats ? <TrendingDown size={14}/> : <PieChart size={14}/>} {showSpendStats ? "지출 통계 접기" : "지출 유형별 분석 보기"}
+                                      </button>
+                                      {showSpendStats && (
+                                          <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs mb-2 animate-in slide-in-from-top-2">
+                                              <div className="flex justify-between mb-1"><span>단어/문장 연습</span><span className="font-bold">{getSpendStats().word + getSpendStats().sentence} 토큰</span></div>
+                                              <div className="flex justify-between mb-1"><span>실전/자유 회화</span><span className="font-bold">{getSpendStats().chat} 토큰</span></div>
+                                              <div className="flex justify-between border-t pt-1 mt-1"><span>기타(번역 등)</span><span className="font-bold">{getSpendStats().etc} 토큰</span></div>
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
+
+                              <div className="space-y-1 px-2 pb-2">
+                                  {tokenLogs.filter(l => l.type === historyTab).slice(0, 5).map((log) => (
+                                      <div key={log.id} className="flex justify-between items-center p-2 bg-white rounded-lg border border-slate-100 shadow-sm">
+                                          <div>
+                                              <span className="font-bold text-slate-700 text-xs block">{log.reason}</span>
+                                              <span className="text-slate-400 text-[10px]">{log.date?.toDate().toLocaleDateString()}</span>
+                                          </div>
+                                          <span className={`font-bold text-xs ${log.type === 'earn' ? 'text-green-600' : 'text-red-500'}`}>
+                                              {log.type === 'earn' ? '+' : '-'}{log.amount}
+                                          </span>
+                                      </div>
+                                  ))}
+                                  {tokenLogs.filter(l => l.type === historyTab).length === 0 && (
+                                      <p className="text-center text-slate-400 py-8 text-xs">내역이 없습니다.</p>
+                                  )}
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* ... (나머지 모달들 유지) ... */}
       {showAdModal && (<AdModal onClose={() => setShowAdModal(false)} onReward={handleAdReward} />)}
       {showTranslateModal && translation && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -1151,21 +1187,34 @@ export default function Home() {
               </div>
           </div>
       )}
-      {showRankingModal && (<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center sm:p-4 backdrop-blur-sm"><div className="bg-white w-full h-[80vh] sm:h-[600px] sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col absolute bottom-0 sm:relative animate-in slide-in-from-bottom duration-300"><div className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white relative"><button onClick={() => setShowRankingModal(false)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30"><X size={20} className="text-white"/></button><h3 className="font-bold text-2xl flex items-center gap-2"><Trophy className="text-yellow-300" fill="currentColor"/> 주간 랭킹</h3></div><div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">{rankingList.map((ranker, index) => (<div key={index} className={`flex items-center p-3 rounded-xl border ${ranker.email === currentUser.email ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-100 shadow-sm'}`}><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 ${index < 3 ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div><div className="flex-1"><p className="font-bold text-sm text-slate-800 flex items-center gap-1">{ranker.alias || ranker.name}</p><p className="text-xs text-slate-400">{ranker.streak || 0}일 연속</p></div><div className="font-bold text-indigo-600 text-sm">{(ranker.analysis_count * 10).toLocaleString()} P</div></div>))}</div></div></div>)}
-      {showPaymentModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-                  <div className="bg-slate-900 p-6 text-white text-center"><h2 className="text-xl font-bold">충전소</h2></div>
-                  <div className="p-6">
-                      <p className="text-center text-slate-600 mb-6 font-bold">원하는 충전 방식을 선택하세요</p>
-                      <div className="flex flex-col gap-3">
-                          <button onClick={() => handleManualCharge(100, "2,900원")} className="w-full py-4 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-bold hover:bg-blue-100 flex justify-between px-6"><span>💎 100 토큰</span><span>2,900원</span></button>
-                          <button onClick={() => handleManualCharge(250, "5,900원")} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg flex justify-between px-6 transform transition hover:scale-[1.02]"><span>💎 250 토큰</span><span>5,900원 (BEST)</span></button>
-                          <div className="my-2 border-t border-slate-100"></div>
-                          <button onClick={() => { setShowPaymentModal(false); setShowAdModal(true); }} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200 text-sm flex items-center justify-center gap-2">📺 광고 보고 무료 충전 (1~3개)</button>
-                          <button onClick={() => setShowPaymentModal(false)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 text-sm mt-2">닫기</button>
+      {showWordModal && selectedWordData && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in-95">
+              <div className="bg-white w-full max-w-xs rounded-3xl p-6 relative shadow-2xl">
+                  <button onClick={() => setShowWordModal(false)} className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                  
+                  <div className="text-center mb-6">
+                      <h2 className="text-2xl font-black text-slate-800 mb-1">{selectedWordData.word}</h2>
+                      <p className="text-sm text-slate-400">Contextual Dictionary</p>
+                  </div>
+
+                  <div className="space-y-4 mb-6">
+                      <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                          <span className="text-xs font-bold text-blue-500 block mb-1">뜻 (Korean)</span>
+                          <p className="font-bold text-slate-700">{selectedWordData.meaning_kr}</p>
+                      </div>
+                      <div>
+                          <span className="text-xs font-bold text-slate-400 block mb-1">English</span>
+                          <p className="text-sm text-slate-600">{selectedWordData.meaning_en}</p>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                          <span className="text-xs font-bold text-slate-400 block mb-1">예문</span>
+                          <p className="text-sm text-slate-600 italic">"{selectedWordData.example}"</p>
                       </div>
                   </div>
+
+                  <button onClick={saveVocabulary} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-black transition">
+                      <Save size={18}/> 단어장에 저장
+                  </button>
               </div>
           </div>
       )}
