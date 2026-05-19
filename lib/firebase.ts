@@ -1,23 +1,26 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // 🔥 이 줄이 빠졌을 수 있음
+// lib/firebaseAdmin.ts
+// ⚠️ 서버 전용 파일 — 클라이언트 컴포넌트에서 import 금지
+import { initializeApp, getApps, cert, App } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+function getAdminApp(): App {
+  if (getApps().length > 0) return getApps()[0];
 
-// 앱 초기화 (중복 방지)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app); // 🔥 이 부분 확인
-const googleProvider = new GoogleAuthProvider();
+  if (!privateKey || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PROJECT_ID) {
+    throw new Error("Firebase Admin 환경변수가 누락되었습니다.");
+  }
 
-export { auth, db, googleProvider, storage }; // 🔥 export에 storage가 있는지 확인
+  return initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey,
+    }),
+  });
+}
+
+export const adminDb = getFirestore(getAdminApp());
+export const adminAuth = getAuth(getAdminApp());

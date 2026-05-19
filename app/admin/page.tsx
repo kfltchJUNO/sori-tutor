@@ -1,377 +1,714 @@
 "use client";
+// app/admin/page.tsx
+// — 관리자 이메일 하드코딩 제거 (Firestore role 기반)
+// — AI 생성 탭 (묶음 D)
+// — 승인 대기 탭 (묶음 D)
+// — 오디오 직접 업로드 (묶음 D / 16·18·19)
 
 import { useEffect, useState, useRef } from "react";
-import { db, auth, storage } from "@/lib/firebase"; 
-import { 
-  collection, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, writeBatch, onSnapshot, runTransaction, increment, where
-} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { ref, uploadString, getDownloadURL, uploadBytes } from "firebase/storage"; 
-import { 
-  Mic, Upload, RefreshCw, CheckCircle, XCircle, Music, AlertCircle, DollarSign, MessageCircle, Send
-} from 'lucide-react';
+import {
+  collection, getDocs, addDoc, updateDoc, deleteDoc,
+  doc, serverTimestamp, query, where, orderBy, limit,
+  getDoc,
+} from "firebase/firestore";
+import {
+  Sparkles, CheckCircle, XCircle, Upload, Trash2, Plus,
+  ChevronDown, ChevronUp, RefreshCw, Loader2, Music,
+} from "lucide-react";
 
-const VOICE_OPTIONS = [
-  { label: "--- 👩 여성 성우 ---", value: "", disabled: true },
-  { label: "👩 Pulcherrima", value: "ko-KR-Chirp3-HD-Pulcherrima" },
-  { label: "👩 Zephyr", value: "ko-KR-Chirp3-HD-Zephyr" },
-  { label: "👩 Sulafat", value: "ko-KR-Chirp3-HD-Sulafat" },
-  { label: "👩 Despina", value: "ko-KR-Chirp3-HD-Despina" },
-  { label: "👩 Leda", value: "ko-KR-Chirp3-HD-Leda" },
-  { label: "👩 Laomedeia", value: "ko-KR-Chirp3-HD-Laomedeia" },
-  { label: "👩 Kore", value: "ko-KR-Chirp3-HD-Kore" },
-  { label: "👩 Gacrux", value: "ko-KR-Chirp3-HD-Gacrux" },
-  { label: "👩 Aoede", value: "ko-KR-Chirp3-HD-Aoede" },
-  { label: "👩 Vindemiatrix", value: "ko-KR-Chirp3-HD-Vindemiatrix" },
-  { label: "--- 👨 남성 성우 ---", value: "", disabled: true },
-  { label: "👨 Umbriel", value: "ko-KR-Chirp3-HD-Umbriel" },
-  { label: "👨 Rasalgethi", value: "ko-KR-Chirp3-HD-Rasalgethi" },
-  { label: "👨 Sadachibia", value: "ko-KR-Chirp3-HD-Sadachibia" },
-  { label: "👨 Sadaltager", value: "ko-KR-Chirp3-HD-Sadaltager" },
-  { label: "👨 Enceladus", value: "ko-KR-Chirp3-HD-Enceladus" },
-  { label: "👨 Puck", value: "ko-KR-Chirp3-HD-Puck" },
-  { label: "👨 Iapetus", value: "ko-KR-Chirp3-HD-Iapetus" },
-  { label: "👨 Charon", value: "ko-KR-Chirp3-HD-Charon" },
-  { label: "👨 Alnilam", value: "ko-KR-Chirp3-HD-Alnilam" },
-  { label: "👨 Algieba", value: "ko-KR-Chirp3-HD-Algieba" },
-  { label: "👨 Achird", value: "ko-KR-Chirp3-HD-Achird" },
-  { label: "👨 Achernar", value: "ko-KR-Chirp3-HD-Achernar" },
-  { label: "👨 Zubenelgenubi", value: "ko-KR-Chirp3-HD-Zubenelgenubi" },
-  { label: "👨 Algenib", value: "ko-KR-Chirp3-HD-Algenib" }
-];
+// ── 타입 ─────────────────────────────────
+interface Draft {
+  id: string;
+  type: "word" | "sentence" | "dialogue";
+  status: "pending" | "approved" | "rejected";
+  step?: number;
+  unit?: number;
+  category: string;
+  content: any;
+  generated_at: any;
+}
+
+interface CurriculumDoc {
+  id: string;
+  text?: string;
+  title?: string;
+  category: string;
+  has_audio?: boolean;
+  audio_path?: string;
+  audio_paths?: string[];
+  step?: number;
+  unit?: number;
+  source?: string;
+}
+
+// ── 탭 정의 ──────────────────────────────
+type Tab = "curriculum" | "generate" | "drafts" | "audio" | "users" | "charges" | "inquiries";
 
 export default function AdminPage() {
-  const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  // 🔥 'inquiry' 탭 추가
-  const [activeTab, setActiveTab] = useState<"users" | "word" | "sentence" | "dialogue" | "mail" | "store" | "inquiry">("inquiry");
+  const [checking, setChecking] = useState(true);
+  const [idToken, setIdToken] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("generate");
 
-  const [users, setUsers] = useState<any[]>([]);
-  const [problems, setProblems] = useState<any[]>([]);
-  const [sentences, setSentences] = useState<any[]>([]);
-  const [dialogues, setDialogues] = useState<any[]>([]);
-  
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [castA, setCastA] = useState("ko-KR-Chirp3-HD-Kore");
-  const [castB, setCastB] = useState("ko-KR-Chirp3-HD-Puck"); 
-  const [castSingle, setCastSingle] = useState("ko-KR-Chirp3-HD-Kore");
+  // AI 생성 상태
+  const [genType, setGenType] = useState<"word" | "sentence" | "dialogue">("word");
+  const [genStep, setGenStep] = useState(1);
+  const [genUnit, setGenUnit] = useState(1);
+  const [genCategory, setGenCategory] = useState("");
+  const [genCount, setGenCount] = useState(5);
+  const [genGrammar, setGenGrammar] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState<string | null>(null);
 
-  const [mailContent, setMailContent] = useState("");
-  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
-  const [isAllSelected, setIsAllSelected] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [csvPreview, setCsvPreview] = useState<any[]>([]);
-  const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<string>("");
-  
-  const [newWord, setNewWord] = useState({ category: "비음화", text: "", pronunciation: "", tip: "" });
-  const [newSentence, setNewSentence] = useState({ category: "인사", text: "", pronunciation: "", translation: "" });
-  const [newDialogue, setNewDialogue] = useState({ category: "식당", title: "", script: "", translation: "" });
+  // 승인 대기 초안
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
+  const [editingDraft, setEditingDraft] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+
+  // 오디오 업로드 상태
+  const [audioColName, setAudioColName] = useState("sori_curriculum_word");
+  const [audioDocs, setAudioDocs] = useState<CurriculumDoc[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState("");
+  const [audioLineIndex, setAudioLineIndex] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [requests, setRequests] = useState<any[]>([]);
-  // 🔥 문의 내역 상태 추가
-  const [inquiries, setInquiries] = useState<any[]>([]);
+  // 커리큘럼 관리
+  const [curriculumType, setCurriculumType] = useState<"word" | "sentence" | "dialogue">("word");
+  const [curriculumList, setCurriculumList] = useState<CurriculumDoc[]>([]);
+  const [newItem, setNewItem] = useState<any>({});
+  const [editingItem, setEditingItem] = useState<string | null>(null);
 
+  // 사용자/충전 관련
+  const [users, setUsers] = useState<any[]>([]);
+  const [charges, setCharges] = useState<any[]>([]);
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // ── 인증 ───────────────────────────────
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      // 관리자 이메일 확인 (본인 이메일로 변경 필수)
-      if (user && user.email === "ot.helper7@gmail.com") { 
-        setIsAdmin(true);
-        await fetchAllData();
-      } else {
-        alert("관리자 권한이 없습니다."); 
-        window.location.href = "/";
-      }
-      setLoading(false);
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) { setChecking(false); return; }
+      try {
+        const token = await user.getIdToken();
+        setIdToken(token);
+        // Firestore role 검증 (하드코딩 이메일 X)
+        const snap = await getDoc(doc(db, "sori_users", user.email!));
+        if (snap.exists() && snap.data()?.role === "admin") {
+          setIsAdmin(true);
+        }
+      } catch {}
+      setChecking(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  // 충전 요청 리스너
-  useEffect(() => {
-    if (!isAdmin) return;
-    const q = query(collection(db, "sori_charge_requests"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (s) => setRequests(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => unsubscribe();
-  }, [isAdmin]);
+  const authHeader = { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" };
 
-  // 🔥 문의 내역 리스너 (실시간)
-  useEffect(() => {
-    if (!isAdmin) return;
-    const q = query(collection(db, "sori_inquiries"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (s) => setInquiries(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => unsubscribe();
-  }, [isAdmin]);
-
-  const fetchAllData = async () => {
-    await fetchUsers();
-    await fetchData("sori_curriculum_word", setProblems);
-    await fetchData("sori_curriculum_sentence", setSentences);
-    await fetchData("sori_curriculum_dialogue", setDialogues);
-  };
-  const fetchUsers = async () => { const s = await getDocs(query(collection(db, "sori_users"), orderBy("joined_at", "desc"))); setUsers(s.docs.map(d => ({ email: d.id, ...d.data() }))); };
-  const fetchData = async (col: string, setFunc: Function) => { const s = await getDocs(query(collection(db, col), orderBy("category", "asc"))); setFunc(s.docs.map(d => ({ id: d.id, ...d.data() }))); };
-
-  // TTS 생성 (단어/문장)
-  const handleGenerateSingleTTS = async (item: any, type: "word" | "sentence") => {
-    if (!item.text) return alert("텍스트가 없습니다.");
-    let textToSpeak = item.text;
-    if (type === "word" && item.pronunciation) { textToSpeak = item.pronunciation.replace(/[\[\]]/g, ""); }
-    if (!confirm(`'${item.text}' 생성?\n(읽는 내용: "${textToSpeak}")`)) return;
-    setGeneratingId(item.id);
+  // ── AI 생성 ─────────────────────────────
+  const handleGenerate = async () => {
+    if (!genCategory.trim()) return alert("카테고리를 입력하세요.");
+    setGenerating(true);
+    setGenResult(null);
     try {
-        const formData = new FormData();
-        formData.append("action", "tts_simple");
-        formData.append("text", textToSpeak);
-        formData.append("voiceName", castSingle);
-        const res = await fetch("/api/chat", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        const storageRef = ref(storage, `curriculum/${type}/${item.id}.mp3`);
-        await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
-        const url = await getDownloadURL(storageRef);
-        const colName = type === "word" ? "sori_curriculum_word" : "sori_curriculum_sentence";
-        await updateDoc(doc(db, colName, item.id), { audio_path: url, has_audio: true, voice: castSingle });
-        alert("생성 완료!");
-        if (type === "word") fetchData("sori_curriculum_word", setProblems);
-        else fetchData("sori_curriculum_sentence", setSentences);
-    } catch (e: any) { alert("실패: " + e.message); } finally { setGeneratingId(null); }
-  };
-
-  // TTS 생성 (담화)
-  const handleGenerateDialogueTTS = async (dialogue: any) => {
-    if (!dialogue.script) return alert("스크립트가 없습니다.");
-    if (!confirm(`'${dialogue.title}' 생성?`)) return;
-    setGeneratingId(dialogue.id);
-    try {
-      const lines = dialogue.script.split("|").map((line: string) => {
-        const [role, text] = line.split(":");
-        return { role: role?.trim(), text: text?.trim() };
+      const res = await fetch("/api/admin/generate", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({
+          type: genType, step: genStep, unit: genUnit,
+          category: genCategory, count: genCount,
+          grammarHint: genGrammar || undefined,
+        }),
       });
-      const audioUrls = [];
-      for (let i = 0; i < lines.length; i++) {
-        const { role, text } = lines[i];
-        if (!text) { audioUrls.push(""); continue; }
-        const selectedVoice = role === "A" ? castA : castB;
-        const formData = new FormData();
-        formData.append("action", "tts_simple");
-        formData.append("text", text);
-        formData.append("voiceName", selectedVoice);
-        const res = await fetch("/api/chat", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        const storageRef = ref(storage, `dialogues/${dialogue.id}/${i}.mp3`);
-        await uploadString(storageRef, data.audioContent, 'base64', { contentType: 'audio/mp3' });
-        const url = await getDownloadURL(storageRef);
-        audioUrls.push(url);
-      }
-      await updateDoc(doc(db, "sori_curriculum_dialogue", dialogue.id), { audio_paths: audioUrls, has_audio: true, voices: { A: castA, B: castB } });
-      alert("생성 완료!");
-      fetchData("sori_curriculum_dialogue", setDialogues);
-    } catch (e: any) { alert("실패: " + e.message); } finally { setGeneratingId(null); }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setGenResult(`✅ ${data.count}개 초안 생성 완료! 승인 대기 탭에서 확인하세요.`);
+    } catch (e: any) {
+      setGenResult(`❌ 오류: ${e.message}`);
+    } finally {
+      setGenerating(false);
+    }
   };
 
-  const playAudio = (url: string) => { try { new Audio(url).play(); } catch (e) { alert("재생 오류"); } };
-  
-  const handleDelete = async (id: string, type: any) => {
-    if(!confirm("삭제하시겠습니까?")) return;
-    if (type === 'word') setProblems(prev => prev.filter(i => i.id !== id));
-    else if (type === 'sentence') setSentences(prev => prev.filter(i => i.id !== id));
-    else setDialogues(prev => prev.filter(i => i.id !== id));
-    try { await deleteDoc(doc(db, `sori_curriculum_${type}`, id)); } 
-    catch (e: any) { console.warn("DB 삭제 오류 (무시):", e.message); }
+  // ── 승인 대기 초안 로드 ──────────────────
+  const loadDrafts = async () => {
+    setLoadingDrafts(true);
+    try {
+      const snap = await getDocs(
+        query(collection(db, "sori_drafts"), where("status", "==", "pending"),
+          orderBy("generated_at", "desc"), limit(50))
+      );
+      setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Draft));
+    } catch (e) { console.error(e); }
+    setLoadingDrafts(false);
   };
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = () => setIsDragging(false);
-  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) { processFile(e.dataTransfer.files[0]); } };
-  const processFile = (file: File) => { const reader = new FileReader(); reader.onload = (ev: any) => { const rows = ev.target.result.split("\n").slice(1); const parsedData: any[] = []; rows.forEach((row: string) => { const c = row.split(","); if (c.length >= 3) { let d: any = {}; if (activeTab === "word") d = { category: c[0], text: c[1], pronunciation: c[2], tip: c[3] || "" }; else if (activeTab === "sentence") d = { category: c[0], text: c[1], pronunciation: c[2], translation: c[3] || "" }; else d = { category: c[0], title: c[1], script: c[2], translation: c[3] || "" }; if (d.category && (d.text || d.title)) { parsedData.push(d); } } }); const currentList = activeTab === "word" ? problems : activeTab === "sentence" ? sentences : dialogues; const key = activeTab === "dialogue" ? "title" : "text"; const dups = parsedData.filter(newItem => currentList.some((existItem: any) => existItem[key] === newItem[key]) ).length; setCsvPreview(parsedData); setDuplicateCount(dups); setUploadStatus("ready"); }; reader.readAsText(file); };
-  const executeBatchUpload = async () => { if (csvPreview.length === 0) return alert("데이터 없음"); if (!confirm(`${csvPreview.length}개 업로드?`)) return; try { const batch = writeBatch(db); const col = `sori_curriculum_${activeTab}`; csvPreview.forEach(item => { const ref = doc(collection(db, col)); batch.set(ref, { ...item, created_at: serverTimestamp() }); }); await batch.commit(); alert(`완료!`); setCsvPreview([]); setUploadStatus(""); fetchAllData(); } catch (e) { alert("오류"); } };
-  const toggleSelectUser = (email: string) => { setSelectedEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]); };
-  const toggleSelectAll = () => { if (isAllSelected) setSelectedEmails([]); else setSelectedEmails(users.map(u => u.email)); setIsAllSelected(!isAllSelected); };
-  const sendMail = async () => { if (!mailContent.trim() || selectedEmails.length === 0) return alert("내용/대상 확인"); if (!confirm("전송?")) return; try { const batch = writeBatch(db); const msg = { from: "관리자", content: mailContent, date: serverTimestamp(), read: false }; selectedEmails.forEach(e => batch.set(doc(collection(db, "sori_users", e, "inbox")), msg)); await batch.commit(); alert("전송 완료"); setMailContent(""); setSelectedEmails([]); } catch (e) { alert("실패"); } };
-  const handleAddTokens = async (email: string, cur: number) => { const input = prompt("조정할 토큰 수 (음수는 차감)", "0"); if (!input) return; const amt = parseInt(input); if (isNaN(amt)) return alert("숫자만 입력하세요"); if (!confirm(`${amt}개 처리?`)) return; await updateDoc(doc(db, "sori_users", email), { tokens: (cur||0) + amt }); fetchUsers(); };
-  const handleSetAlias = async (email: string, cur: string) => { const n = prompt("새 닉네임", cur); if(n) { await updateDoc(doc(db, "sori_users", email), { alias: n }); fetchUsers(); } };
-  const handleSave = async (e: any, type: any) => { e.preventDefault(); const col = `sori_curriculum_${type}`; const data = type==="word"?newWord : type==="sentence"?newSentence : newDialogue; if (!data.category) return alert("카테고리 필수"); const list = type==="word"?problems : type==="sentence"?sentences : dialogues; const key = type==="dialogue" ? "title" : "text"; if (!editingId && list.some((item: any) => item[key] === (data as any)[key])) return alert("이미 등록됨"); if(editingId) await updateDoc(doc(db, col, editingId), { ...data, updated_at: serverTimestamp() }); else await addDoc(collection(db, col), { ...data, created_at: serverTimestamp() }); cancelEdit(); fetchData(col, type==="word"?setProblems : type==="sentence"?setSentences : setDialogues); alert("저장 완료"); };
-  const startEdit = (item: any, type: any) => { setEditingId(item.id); setActiveTab(type); window.scrollTo({top:0, behavior:"smooth"}); if(type==="word") setNewWord({...item}); else if(type==="sentence") setNewSentence({...item}); else setNewDialogue({...item}); };
-  const cancelEdit = () => { setEditingId(null); setNewWord({category:"비음화", text:"", pronunciation:"", tip:""}); setNewSentence({category:"인사", text:"", pronunciation:"", translation:""}); setNewDialogue({category:"식당", title:"", script:"", translation:""}); };
-  const handleApprove = async (req: any) => { if (!confirm(`승인?`)) return; try { await runTransaction(db, async (t) => { const uRef = doc(db, "sori_users", req.userId); const rRef = doc(db, "sori_charge_requests", req.id); const uSnap = await t.get(uRef); if (!uSnap.exists()) t.set(uRef, { email: req.userId, tokens: req.amount, role: 'student', createdAt: serverTimestamp() }); else t.update(uRef, { tokens: (uSnap.data().tokens||0) + req.amount }); t.update(rRef, { status: "approved", approvedAt: serverTimestamp() }); }); alert(`지급 완료`); } catch (e) { alert(`오류: ${e}`); } };
-  const handleReject = async (req: any) => { const r = prompt(`사유`, "확인 불가"); if (r === null) return; try { await updateDoc(doc(db, "sori_charge_requests", req.id), { status: "rejected", rejectedReason: r, rejectedAt: serverTimestamp() }); alert("거절됨"); } catch (e) { alert("오류"); } };
+  useEffect(() => { if (isAdmin && activeTab === "drafts") loadDrafts(); }, [isAdmin, activeTab]);
 
-  // 🔥 [신규] 문의 답변하기 기능
-  const handleReplyInquiry = async (inquiry: any) => {
-      const reply = prompt(`[${inquiry.userName}]님에게 보낼 답변을 입력하세요.`);
-      if (!reply) return;
-
-      if (!confirm("답변을 보내시겠습니까? (유저 우편함으로 전송됨)")) return;
-
-      try {
-          const batch = writeBatch(db);
-          
-          // 1. 문의 상태 업데이트 (답변 완료)
-          batch.update(doc(db, "sori_inquiries", inquiry.id), {
-              status: "resolved",
-              adminReply: reply,
-              repliedAt: serverTimestamp()
-          });
-
-          // 2. 유저 우편함에 답장 전송
-          const userInboxRef = doc(collection(db, "sori_users", inquiry.userId, "inbox"));
-          batch.set(userInboxRef, {
-              from: "소리튜터 운영진",
-              title: `RE: ${inquiry.content.substring(0, 10)}... 에 대한 답변입니다.`,
-              content: `안녕하세요, ${inquiry.userName}님.\n보내주신 문의에 대해 답변드립니다.\n\n[문의 내용]\n${inquiry.content}\n\n[답변]\n${reply}\n\n감사합니다.`,
-              date: serverTimestamp(),
-              read: false
-          });
-
-          await batch.commit();
-          alert("✅ 답변이 전송되었습니다.");
-      } catch (e) {
-          console.error(e);
-          alert("전송 실패");
-      }
+  const approveDraft = async (draftId: string, editedContent?: any) => {
+    try {
+      const res = await fetch("/api/admin/approve", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({ draftId, editedContent }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDrafts(prev => prev.filter(d => d.id !== draftId));
+      setEditingDraft(null);
+    } catch (e: any) { alert("오류: " + e.message); }
   };
 
-  if (loading) return <div>로딩 중...</div>;
-  if (!isAdmin) return null;
+  const rejectDraft = async (draftId: string) => {
+    if (!confirm("이 초안을 반려하시겠습니까?")) return;
+    try {
+      const res = await fetch("/api/admin/approve", {
+        method: "DELETE",
+        headers: authHeader,
+        body: JSON.stringify({ draftId }),
+      });
+      if (!res.ok) throw new Error("반려 실패");
+      setDrafts(prev => prev.filter(d => d.id !== draftId));
+    } catch (e: any) { alert(e.message); }
+  };
+
+  // ── 오디오 업로드 ─────────────────────────
+  const loadAudioDocs = async () => {
+    try {
+      const snap = await getDocs(collection(db, audioColName));
+      setAudioDocs(snap.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc));
+      setSelectedDocId("");
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => { if (isAdmin && activeTab === "audio") loadAudioDocs(); }, [isAdmin, activeTab, audioColName]);
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedDocId) return alert("파일과 항목을 선택하세요.");
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("docId", selectedDocId);
+      formData.append("colName", audioColName);
+      formData.append("audioType", "answer");
+      if (audioLineIndex) formData.append("lineIndex", audioLineIndex);
+
+      const res = await fetch("/api/admin/audio", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setUploadResult(`✅ 업로드 완료: ${data.url}`);
+      loadAudioDocs();
+    } catch (e: any) {
+      setUploadResult(`❌ 실패: ${e.message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const deleteAudio = async (docId: string, lineIndex?: number) => {
+    if (!confirm("오디오를 삭제하시겠습니까?")) return;
+    try {
+      await fetch("/api/admin/audio", {
+        method: "DELETE",
+        headers: authHeader,
+        body: JSON.stringify({ docId, colName: audioColName, lineIndex }),
+      });
+      loadAudioDocs();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  // ── 커리큘럼 CRUD ─────────────────────────
+  const loadCurriculum = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(collection(db, `sori_curriculum_${curriculumType}`));
+      setCurriculumList(snap.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc));
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { if (isAdmin && activeTab === "curriculum") loadCurriculum(); }, [isAdmin, activeTab, curriculumType]);
+
+  const deleteItem = async (id: string) => {
+    if (!confirm("삭제하시겠습니까?")) return;
+    await deleteDoc(doc(db, `sori_curriculum_${curriculumType}`, id));
+    loadCurriculum();
+  };
+
+  // ── 사용자 관리 ───────────────────────────
+  useEffect(() => {
+    if (!isAdmin || activeTab !== "users") return;
+    setLoading(true);
+    getDocs(collection(db, "sori_users"))
+      .then(s => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+      .finally(() => setLoading(false));
+  }, [isAdmin, activeTab]);
+
+  const grantTokens = async (email: string, amount: number) => {
+    if (!confirm(`${email}에 ${amount}토큰 지급?`)) return;
+    await updateDoc(doc(db, "sori_users", email), { tokens: amount });
+    // 토큰 로그도 서버에서 기록하려면 별도 endpoint 필요 — 여기서는 간단히 직접 추가
+    await addDoc(collection(db, "sori_users", email, "token_logs"), {
+      type: "earn", amount, reason: "관리자 지급", date: serverTimestamp(),
+    });
+    alert("지급 완료");
+  };
+
+  // ── 충전 요청 ─────────────────────────────
+  useEffect(() => {
+    if (!isAdmin || activeTab !== "charges") return;
+    setLoading(true);
+    getDocs(query(collection(db, "sori_charge_requests"), where("status", "==", "pending")))
+      .then(s => setCharges(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+      .finally(() => setLoading(false));
+  }, [isAdmin, activeTab]);
+
+  const approveCharge = async (req: any) => {
+    if (!confirm(`${req.depositor} (${req.amount}토큰) 승인?`)) return;
+    await updateDoc(doc(db, "sori_users", req.userId), { tokens: req.amount });
+    await updateDoc(doc(db, "sori_charge_requests", req.id), { status: "approved" });
+    await addDoc(collection(db, "sori_users", req.userId, "inbox"), {
+      from: "소리튜터 운영진", title: "✅ 충전 완료!",
+      content: `${req.amount}토큰이 충전되었습니다.`,
+      date: serverTimestamp(), read: false,
+    });
+    setCharges(prev => prev.filter(c => c.id !== req.id));
+  };
+
+  // ── 문의 ─────────────────────────────────
+  useEffect(() => {
+    if (!isAdmin || activeTab !== "inquiries") return;
+    setLoading(true);
+    getDocs(query(collection(db, "sori_inquiries"), where("status", "==", "pending")))
+      .then(s => setInquiries(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+      .finally(() => setLoading(false));
+  }, [isAdmin, activeTab]);
+
+  // ── 렌더 ─────────────────────────────────
+  if (checking) return <div className="flex h-screen items-center justify-center text-slate-400">인증 확인 중...</div>;
+  if (!isAdmin) return <div className="flex h-screen items-center justify-center text-red-500 font-bold">관리자 권한이 없습니다.</div>;
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "generate", label: "✨ AI 생성" },
+    { id: "drafts", label: `📋 승인대기 (${drafts.length})` },
+    { id: "audio", label: "🎵 오디오" },
+    { id: "curriculum", label: "📚 커리큘럼" },
+    { id: "users", label: "👥 사용자" },
+    { id: "charges", label: `💳 충전 (${charges.length})` },
+    { id: "inquiries", label: "📬 문의" },
+  ];
 
   return (
-    <main className="p-6 max-w-6xl mx-auto min-h-screen bg-gray-50 text-gray-900">
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-3xl font-bold">👮‍♀️ Admin Dashboard</h1>
-        <div className="flex space-x-1 bg-white p-1 rounded-lg border overflow-x-auto">
-          {["inquiry", "users", "word", "sentence", "dialogue"].map(t => (
-            <button key={t} onClick={() => {setActiveTab(t as any); setEditingId(null);}} className={`px-3 py-2 rounded font-bold capitalize whitespace-nowrap ${activeTab===t?"bg-blue-600 text-white":"text-gray-600"}`}>
-              {t === "inquiry" ? "📞 문의" : t}
-            </button>
-          ))}
-          <button onClick={() => setActiveTab("mail")} className={`px-3 py-2 rounded font-bold whitespace-nowrap ${activeTab==="mail"?"bg-green-600 text-white":"text-green-600"}`}>💌 전체쪽지</button>
-          <button onClick={() => setActiveTab("store")} className={`px-3 py-2 rounded font-bold whitespace-nowrap ${activeTab==="store"?"bg-purple-600 text-white":"text-purple-600"}`}>🏪 상점(충전)</button>
-        </div>
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-slate-900 text-white px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">S</div>
+        <h1 className="text-xl font-black">Sori-Tutor Admin</h1>
+      </header>
+
+      {/* 탭 네비 */}
+      <div className="flex overflow-x-auto bg-white border-b border-slate-200 px-4 gap-1 scrollbar-hide">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition ${
+              activeTab === tab.id
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* 🔥 [신규] 문의 내역 탭 */}
-      {activeTab === "inquiry" && (
-          <div className="space-y-4">
-              <h2 className="text-xl font-bold flex items-center gap-2"><MessageCircle/> 고객 문의 관리</h2>
-              {inquiries.length === 0 ? <p className="text-gray-400 py-10 text-center">접수된 문의가 없습니다.</p> : (
-                  <div className="grid gap-4">
-                      {inquiries.map((inq) => (
-                          <div key={inq.id} className={`bg-white p-5 rounded-xl border ${inq.status === 'resolved' ? 'border-green-200 bg-green-50/30' : 'border-red-200 shadow-sm'}`}>
-                              <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                      <span className={`text-[10px] font-bold px-2 py-1 rounded mb-1 inline-block ${inq.status==='resolved'?'bg-green-100 text-green-700':'bg-red-100 text-red-600'}`}>
-                                          {inq.status === 'resolved' ? '답변완료' : '대기중'}
-                                      </span>
-                                      <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded ml-2">{inq.category}</span>
-                                      <h3 className="font-bold text-lg mt-1">{inq.userName} <span className="text-xs text-gray-400 font-normal">({inq.userId})</span></h3>
-                                  </div>
-                                  <div className="text-xs text-gray-400">{inq.createdAt?.toDate().toLocaleString()}</div>
-                              </div>
-                              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg mb-3">{inq.content}</p>
-                              {inq.adminReply && (
-                                  <div className="text-xs text-green-700 bg-green-50 p-3 rounded-lg border border-green-100 mb-3">
-                                      <strong>↳ 관리자 답변:</strong> {inq.adminReply}
-                                  </div>
-                              )}
-                              {inq.status !== 'resolved' && (
-                                  <button onClick={() => handleReplyInquiry(inq)} className="w-full py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-black flex items-center justify-center gap-2">
-                                      <Send size={16}/> 답변 보내기
-                                  </button>
-                              )}
-                          </div>
-                      ))}
-                  </div>
-              )}
+      <div className="max-w-4xl mx-auto p-6">
+
+        {/* ──── AI 생성 탭 ──── */}
+        {activeTab === "generate" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2">
+              <Sparkles className="text-amber-500" /> AI 커리큘럼 초안 생성
+            </h2>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1">유형</label>
+                <select
+                  value={genType}
+                  onChange={e => setGenType(e.target.value as any)}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="word">단어</option>
+                  <option value="sentence">문장</option>
+                  <option value="dialogue">담화</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1">생성 개수</label>
+                <input
+                  type="number" min={1} max={20} value={genCount}
+                  onChange={e => setGenCount(Number(e.target.value))}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1">Step (1~8)</label>
+                <input
+                  type="number" min={1} max={8} value={genStep}
+                  onChange={e => setGenStep(Number(e.target.value))}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
+                <input
+                  type="number" min={1} value={genUnit}
+                  onChange={e => setGenUnit(Number(e.target.value))}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-500 block mb-1">카테고리 *</label>
+              <input
+                value={genCategory} onChange={e => setGenCategory(e.target.value)}
+                placeholder="예: 음식, 직장 생활, 여행"
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="mb-6">
+              <label className="text-xs font-bold text-slate-500 block mb-1">문법 힌트 (선택)</label>
+              <input
+                value={genGrammar} onChange={e => setGenGrammar(e.target.value)}
+                placeholder="예: -아/어서 (이유), -(으)ㄹ 것 같다"
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-black text-base shadow-lg hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {generating ? <><Loader2 size={20} className="animate-spin" /> 생성 중...</> : <><Sparkles size={20} /> AI 초안 생성</>}
+            </button>
+            {genResult && (
+              <div className={`mt-4 p-4 rounded-xl text-sm font-bold ${genResult.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                {genResult}
+              </div>
+            )}
           </div>
-      )}
+        )}
 
-      {/* 전체 쪽지 발송 */}
-      {activeTab === "mail" && (<div className="bg-green-50 p-6 rounded-lg shadow mb-6"><textarea className="w-full h-32 p-3 border rounded mb-3" placeholder="전체 유저에게 보낼 공지 내용..." value={mailContent} onChange={e => setMailContent(e.target.value)}></textarea><button onClick={sendMail} className="bg-green-600 text-white py-2 px-6 rounded font-bold">전체 전송</button></div>)}
-      
-      {/* 유저 관리 (토큰 조절 포함) */}
-      {activeTab === "users" && (
-        <div className="bg-white shadow rounded-lg overflow-x-auto border">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100"><tr><th className="px-4 py-3"><input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll}/></th><th className="px-4 py-3">유저</th><th className="px-4 py-3">토큰</th><th className="px-4 py-3">관리</th></tr></thead>
-            <tbody>{users.map(u=><tr key={u.email}><td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedEmails.includes(u.email)} onChange={()=>toggleSelectUser(u.email)}/></td><td className="px-4 py-3">{u.alias||u.name}<br/><span className="text-xs text-gray-500">{u.email}</span></td><td className="px-4 py-3">🪙 {u.tokens}<button onClick={()=>handleAddTokens(u.email,u.tokens)} className="ml-2 text-xs bg-blue-100 px-2 py-1 rounded hover:bg-blue-200 font-bold text-blue-700">조정</button></td><td className="px-4 py-3"><button onClick={()=>handleSetAlias(u.email,u.alias)} className="text-xs border px-2 py-1 rounded">닉네임</button></td></tr>)}</tbody>
-          </table>
-        </div>
-      )}
+        {/* ──── 승인 대기 탭 ──── */}
+        {activeTab === "drafts" && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-black">승인 대기 초안</h2>
+              <button onClick={loadDrafts} className="flex items-center gap-1 text-sm bg-white border border-slate-200 px-3 py-2 rounded-lg font-bold hover:bg-slate-50">
+                <RefreshCw size={14} /> 새로고침
+              </button>
+            </div>
+            {loadingDrafts ? (
+              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div>
+            ) : drafts.length === 0 ? (
+              <div className="text-center text-slate-400 py-12 bg-white rounded-2xl border">대기 중인 초안이 없습니다.</div>
+            ) : (
+              <div className="space-y-4">
+                {drafts.map(draft => (
+                  <div key={draft.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 border-b">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${draft.type === "word" ? "bg-blue-100 text-blue-700" : draft.type === "sentence" ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"}`}>
+                          {draft.type === "word" ? "단어" : draft.type === "sentence" ? "문장" : "담화"}
+                        </span>
+                        <span className="text-sm font-bold text-slate-700">{draft.category}</span>
+                        {draft.step && <span className="text-xs text-slate-400">Step {draft.step}-{draft.unit}</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingDraft(draft.id);
+                            setEditContent(JSON.stringify(draft.content, null, 2));
+                          }}
+                          className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-bold hover:bg-slate-50"
+                        >
+                          수정 후 승인
+                        </button>
+                        <button onClick={() => approveDraft(draft.id)} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-green-700 flex items-center gap-1">
+                          <CheckCircle size={12} /> 승인
+                        </button>
+                        <button onClick={() => rejectDraft(draft.id)} className="text-xs bg-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-200 flex items-center gap-1">
+                          <XCircle size={12} /> 반려
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      {editingDraft === draft.id ? (
+                        <div>
+                          <textarea
+                            value={editContent}
+                            onChange={e => setEditContent(e.target.value)}
+                            className="w-full h-48 p-3 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => {
+                                try {
+                                  const parsed = JSON.parse(editContent);
+                                  approveDraft(draft.id, parsed);
+                                } catch { alert("JSON 형식 오류"); }
+                              }}
+                              className="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold text-sm"
+                            >
+                              수정된 내용으로 승인
+                            </button>
+                            <button onClick={() => setEditingDraft(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold text-sm">
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <pre className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl overflow-x-auto border border-slate-100">
+                          {JSON.stringify(draft.content, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* 커리큘럼 관리 (단어/문장/회화) */}
-      {["word", "sentence", "dialogue"].includes(activeTab) && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-           <div className="space-y-6">
-             <div className="bg-white p-6 rounded-lg shadow border">
-               <h3 className="font-bold mb-4">{editingId ? "✏️ 수정" : "➕ 등록"}</h3>
-               <form onSubmit={(e)=>handleSave(e, activeTab)} className="space-y-3">
-                 <input placeholder="Category" className="w-full border p-2 rounded" value={activeTab==="word"?newWord.category:activeTab==="sentence"?newSentence.category:newDialogue.category} onChange={e=>activeTab==="word"?setNewWord({...newWord,category:e.target.value}):activeTab==="sentence"?setNewSentence({...newSentence,category:e.target.value}):setNewDialogue({...newDialogue,category:e.target.value})} />
-                 {activeTab==="word" && <><input placeholder="Text" className="w-full border p-2 rounded" value={newWord.text} onChange={e=>setNewWord({...newWord,text:e.target.value})}/><input placeholder="Pronunciation" className="w-full border p-2 rounded" value={newWord.pronunciation} onChange={e=>setNewWord({...newWord,pronunciation:e.target.value})}/><input placeholder="Tip" className="w-full border p-2 rounded" value={newWord.tip} onChange={e=>setNewWord({...newWord,tip:e.target.value})}/></>}
-                 {activeTab==="sentence" && <><input placeholder="Text" className="w-full border p-2 rounded" value={newSentence.text} onChange={e=>setNewSentence({...newSentence,text:e.target.value})}/><input placeholder="Pronunciation" className="w-full border p-2 rounded" value={newSentence.pronunciation} onChange={e=>setNewSentence({...newSentence,pronunciation:e.target.value})}/><input placeholder="Translation" className="w-full border p-2 rounded" value={newSentence.translation} onChange={e=>setNewSentence({...newSentence,translation:e.target.value})}/></>}
-                 {activeTab==="dialogue" && <><input placeholder="Title" className="w-full border p-2 rounded" value={newDialogue.title} onChange={e=>setNewDialogue({...newDialogue,title:e.target.value})}/><textarea placeholder="Script (A:..|B:..)" className="w-full border p-2 rounded" rows={3} value={newDialogue.script} onChange={e=>setNewDialogue({...newDialogue,script:e.target.value})}/><input placeholder="Translation" className="w-full border p-2 rounded" value={newDialogue.translation} onChange={e=>setNewDialogue({...newDialogue,translation:e.target.value})}/></>}
-                 <div className="flex gap-2"><button className="w-full bg-blue-600 text-white py-2 rounded font-bold">{editingId?"수정":"등록"}</button>{editingId&&<button type="button" onClick={cancelEdit} className="w-1/3 bg-gray-200">취소</button>}</div>
-               </form>
-             </div>
-             
-             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 shadow-sm">
-                <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">🎙️ 보이스 설정</h3>
-                <div className="space-y-3">
-                  {(activeTab === "word" || activeTab === "sentence") && (
-                     <select value={castSingle} onChange={e => setCastSingle(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">
-                        {VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}
-                     </select>
-                  )}
-                  {activeTab === "dialogue" && (
-                    <>
-                      <div><label className="text-xs font-bold text-gray-500">A 역할</label><select value={castA} onChange={e => setCastA(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">{VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}</select></div>
-                      <div><label className="text-xs font-bold text-gray-500">B 역할</label><select value={castB} onChange={e => setCastB(e.target.value)} className="w-full p-2 rounded border bg-white text-sm">{VOICE_OPTIONS.map((v, i) => <option key={i} value={v.value} disabled={v.disabled}>{v.label}</option>)}</select></div>
-                    </>
-                  )}
+        {/* ──── 오디오 업로드 탭 ──── */}
+        {activeTab === "audio" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2">
+              <Music className="text-green-500" /> 정답 발음 오디오 업로드
+            </h2>
+            <p className="text-sm text-slate-500 mb-6 bg-blue-50 p-3 rounded-xl border border-blue-100">
+              💡 ElevenLabs로 생성한 MP3 또는 직접 녹음한 파일을 커리큘럼 항목에 연결합니다.<br />
+              업로드된 파일은 Google TTS 대신 정답 발음으로 재생됩니다.
+            </p>
+
+            {/* 컬렉션 선택 */}
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-500 block mb-1">커리큘럼 유형</label>
+              <select
+                value={audioColName}
+                onChange={e => { setAudioColName(e.target.value); setSelectedDocId(""); }}
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="sori_curriculum_word">단어</option>
+                <option value="sori_curriculum_sentence">문장</option>
+                <option value="sori_curriculum_dialogue">담화</option>
+              </select>
+            </div>
+
+            {/* 항목 선택 */}
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-500 block mb-1">항목 선택</label>
+              <select
+                value={selectedDocId}
+                onChange={e => setSelectedDocId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— 항목을 선택하세요 —</option>
+                {audioDocs.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.text ?? d.title ?? d.id} {d.category ? `(${d.category})` : ""} {d.has_audio ? "🎵" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 담화인 경우 라인 인덱스 */}
+            {audioColName === "sori_curriculum_dialogue" && (
+              <div className="mb-4">
+                <label className="text-xs font-bold text-slate-500 block mb-1">라인 인덱스 (담화 전체면 비워두기)</label>
+                <input
+                  type="number" min={0} value={audioLineIndex}
+                  onChange={e => setAudioLineIndex(e.target.value)}
+                  placeholder="예: 0 (A첫번째줄), 1 (B첫번째줄)"
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {/* 파일 업로드 */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg"
+              onChange={handleAudioUpload}
+              disabled={!selectedDocId || uploading}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!selectedDocId || uploading}
+              className="w-full py-4 bg-green-600 text-white rounded-xl font-black flex items-center justify-center gap-2 hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? <><Loader2 size={20} className="animate-spin" /> 업로드 중...</> : <><Upload size={20} /> MP3 / WAV 파일 업로드</>}
+            </button>
+
+            {uploadResult && (
+              <div className={`mt-4 p-3 rounded-xl text-xs font-bold break-all ${uploadResult.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                {uploadResult}
+              </div>
+            )}
+
+            {/* 현재 오디오 목록 */}
+            <div className="mt-8">
+              <h3 className="font-bold text-slate-700 mb-3">현재 오디오 등록 현황</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {audioDocs.filter(d => d.has_audio || d.audio_path || d.audio_paths?.some(Boolean)).map(d => (
+                  <div key={d.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div>
+                      <p className="font-bold text-sm text-slate-800">{d.text ?? d.title ?? d.id}</p>
+                      <p className="text-xs text-slate-400">{d.category}</p>
+                      {d.audio_path && (
+                        <audio src={d.audio_path} controls className="mt-1 h-8 w-48" />
+                      )}
+                    </div>
+                    <button
+                      onClick={() => deleteAudio(d.id)}
+                      className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                {audioDocs.filter(d => d.has_audio || d.audio_path).length === 0 && (
+                  <p className="text-center text-slate-400 py-6 text-sm">등록된 오디오가 없습니다.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ──── 커리큘럼 탭 ──── */}
+        {activeTab === "curriculum" && (
+          <div>
+            <div className="flex gap-2 mb-4">
+              {(["word", "sentence", "dialogue"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setCurriculumType(t)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition ${curriculumType === t ? "bg-blue-600 text-white" : "bg-white border border-slate-200 text-slate-600"}`}
+                >
+                  {t === "word" ? "단어" : t === "sentence" ? "문장" : "담화"}
+                </button>
+              ))}
+            </div>
+            {loading ? <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div> : (
+              <div className="space-y-2">
+                {curriculumList.map(item => (
+                  <div key={item.id} className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div>
+                      <p className="font-bold text-slate-800">{item.text ?? item.title ?? "—"}</p>
+                      <p className="text-xs text-slate-400">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
+                    </div>
+                    <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                {curriculumList.length === 0 && <p className="text-center text-slate-400 py-10">데이터 없음</p>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ──── 사용자 탭 ──── */}
+        {activeTab === "users" && (
+          <div className="space-y-3">
+            {users.map(u => (
+              <div key={u.id} className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="font-bold text-slate-800">{u.alias || u.name}</p>
+                  <p className="text-xs text-slate-400">{u.id} · {u.role} · 토큰: {u.tokens}</p>
                 </div>
-             </div>
+                <button
+                  onClick={() => {
+                    const amt = Number(prompt("지급할 토큰 수:"));
+                    if (amt > 0) grantTokens(u.id, amt);
+                  }}
+                  className="text-xs bg-blue-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-blue-700"
+                >
+                  토큰 지급
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
-             <div className={`p-6 rounded-lg shadow border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[150px] ${isDragging ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300'}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
-               <input type="file" accept=".csv" ref={fileInputRef} hidden onChange={(e) => e.target.files && processFile(e.target.files[0])} />
-               {uploadStatus === "ready" ? (
-                 <div className="w-full">
-                    <p className="font-bold text-gray-800 mb-2">{csvPreview.length}개 대기</p>
-                    <div className="flex gap-2"><button onClick={(e) => { e.stopPropagation(); executeBatchUpload(); }} className="flex-1 bg-blue-600 text-white py-1 rounded font-bold text-sm">업로드</button><button onClick={(e) => { e.stopPropagation(); setCsvPreview([]); setUploadStatus(""); }} className="px-3 bg-gray-300 text-gray-700 rounded font-bold text-sm">취소</button></div>
-                 </div>
-               ) : (<><div className="text-3xl text-gray-300 mb-1">📂</div><p className="font-bold text-gray-500 text-sm">CSV 업로드</p></>)}
-             </div>
-           </div>
-           
-           <div className="md:col-span-2 bg-white p-6 rounded shadow border overflow-y-auto max-h-[600px]">
-             {(activeTab==="word"?problems:activeTab==="sentence"?sentences:dialogues).map((item:any, index:number)=>(
-               <div key={`${item.id}_${index}`} className="flex justify-between items-center p-3 border-b hover:bg-gray-50">
-                 <div className="flex-1 overflow-hidden"><span className="text-xs font-bold bg-gray-100 px-2 py-0.5 rounded mr-2 align-middle">{item.category}</span><span className="font-bold align-middle truncate">{item.text||item.title}</span></div>
-                 <div className="flex gap-2 items-center shrink-0 ml-2">
-                    {item.has_audio && <button onClick={() => playAudio(item.audio_path || item.audio_paths[0])} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold">▶️</button>}
-                    <button onClick={() => activeTab === "dialogue" ? handleGenerateDialogueTTS(item) : handleGenerateSingleTTS(item, activeTab as any)} disabled={generatingId === item.id} className="text-xs border px-2 py-1 rounded font-bold bg-gray-50">{generatingId === item.id ? "⏳" : "🔊 생성"}</button>
-                    <button onClick={()=>startEdit(item,activeTab)} className="text-blue-600 text-xs border px-2 py-1 rounded">수정</button>
-                    <button onClick={()=>handleDelete(item.id,activeTab)} className="text-red-500 text-xs border px-2 py-1 rounded">삭제</button>
-                 </div>
-               </div>
-             ))}
-           </div>
-        </div>
-      )}
+        {/* ──── 충전 탭 ──── */}
+        {activeTab === "charges" && (
+          <div className="space-y-3">
+            {charges.map(c => (
+              <div key={c.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="font-bold text-slate-800">{c.userAlias} ({c.userId})</p>
+                    <p className="text-sm text-slate-500">입금자: {c.depositor} · {c.price} → {c.amount}토큰</p>
+                    <p className="text-xs text-slate-400">{c.createdAt?.toDate?.().toLocaleString()}</p>
+                  </div>
+                  <button onClick={() => approveCharge(c)} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-green-700 flex items-center gap-1">
+                    <CheckCircle size={14} /> 충전 승인
+                  </button>
+                </div>
+              </div>
+            ))}
+            {charges.length === 0 && <p className="text-center text-slate-400 py-12">대기 중인 충전 요청이 없습니다.</p>}
+          </div>
+        )}
 
-      {/* 상점(충전 요청 관리) 탭 - 불필요한 기능 제거됨 */}
-      {activeTab === "store" && (
-        <div className="grid gap-8">
-          <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800 border-b pb-4"><DollarSign className="text-green-600"/> 충전 요청 관리 <span className="bg-red-100 text-red-600 text-xs px-2 py-1 rounded-full font-black">{requests.length}건</span></h2>
-              {requests.length === 0 ? (<div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400">대기 요청 없음</div>) : (
-                <div className="grid gap-4">{requests.map((req) => (<div key={req.id} className="border border-slate-200 p-5 rounded-xl flex flex-col sm:flex-row justify-between items-center bg-white hover:border-blue-300 transition shadow-sm"><div className="mb-4 sm:mb-0 w-full sm:w-auto"><div className="flex items-center gap-2 mb-1"><span className="font-black text-lg text-slate-800">{req.depositor}</span><span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{req.userAlias}</span></div><div className="text-xs text-slate-400 mb-2 font-mono">{req.userId}</div><div className="flex gap-2"><span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">💎 {req.amount} 토큰</span><span className="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">{req.price}</span></div></div><div className="flex gap-2 w-full sm:w-auto"><button onClick={() => handleReject(req)} className="flex-1 sm:flex-none px-4 py-2 rounded-lg font-bold text-slate-500 bg-slate-100 hover:bg-red-50 hover:text-red-600 hover:border-red-200 border border-transparent transition flex items-center justify-center gap-1"><XCircle size={18}/> 거절</button><button onClick={() => handleApprove(req)} className="flex-1 sm:flex-none px-5 py-2 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg transition flex items-center justify-center gap-1"><CheckCircle size={18}/> 승인</button></div></div>))}</div>
-              )}
-          </section>
-        </div>
-      )}
-    </main>
+        {/* ──── 문의 탭 ──── */}
+        {activeTab === "inquiries" && (
+          <div className="space-y-3">
+            {inquiries.map(i => (
+              <div key={i.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-bold bg-slate-100 px-2 py-1 rounded">{i.category}</span>
+                  <span className="text-xs text-slate-400">{i.createdAt?.toDate?.().toLocaleString()}</span>
+                </div>
+                <p className="font-bold text-sm text-slate-700 mb-1">{i.userName} ({i.userId})</p>
+                <p className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">{i.content}</p>
+                <button
+                  onClick={async () => {
+                    const reply = prompt("답변 내용:");
+                    if (!reply) return;
+                    await updateDoc(doc(db, "sori_inquiries", i.id), { status: "replied", adminReply: reply });
+                    await addDoc(collection(db, "sori_users", i.userId, "inbox"), {
+                      from: "소리튜터 운영진", title: `📬 문의 답변: ${i.category}`,
+                      content: reply, date: serverTimestamp(), read: false,
+                    });
+                    setInquiries(prev => prev.filter(q => q.id !== i.id));
+                  }}
+                  className="mt-3 w-full py-2 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700"
+                >
+                  답변 보내기
+                </button>
+              </div>
+            ))}
+            {inquiries.length === 0 && <p className="text-center text-slate-400 py-12">문의가 없습니다.</p>}
+          </div>
+        )}
+
+      </div>
+    </div>
   );
 }
