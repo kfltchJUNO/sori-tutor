@@ -1,20 +1,49 @@
-// hooks/useFeedbackVoices.ts
-// 점수대별 멘트 MP3 URL을 Firestore에서 가져와 캐싱
-import useSWR from "swr";
-import type { ScoreTier } from "@/lib/scoreSound";
+﻿import useSWR from "swr";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 
-type VoiceMap = Partial<Record<ScoreTier, string>>;
-
-const fetcher = async (): Promise<VoiceMap> => {
-  const res = await fetch("/api/admin/feedback-audio");
-  if (!res.ok) return {};
-  return res.json();
+const fetchAll = async (colName: string) => {
+  const snap = await getDocs(query(collection(db, colName), orderBy("category", "asc")));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
-export function useFeedbackVoices() {
-  const { data } = useSWR<VoiceMap>("feedback-voices", fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 10 * 60 * 1000, // 10분 캐시
-  });
-  return data ?? {};
+const fetchByCategory = async (colName: string, category: string) => {
+  const snap = await getDocs(query(collection(db, colName), where("category", "==", category)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+const fetchCategories = async (colName: string): Promise<string[]> => {
+  const snap = await getDocs(collection(db, colName));
+  const set = new Set<string>();
+  snap.forEach((d) => set.add(d.data().category));
+  return Array.from(set).sort();
+};
+
+export function useWords() {
+  return useSWR("sori_curriculum_word", () => fetchAll("sori_curriculum_word"), { revalidateOnFocus: false, dedupingInterval: 300000 });
+}
+
+export function useSentenceCategories() {
+  return useSWR("sori_curriculum_sentence/categories", () => fetchCategories("sori_curriculum_sentence"), { revalidateOnFocus: false, dedupingInterval: 300000 });
+}
+
+export function useSentencesByCategory(category: string | null) {
+  return useSWR(category ? `sori_curriculum_sentence/${category}` : null, () => fetchByCategory("sori_curriculum_sentence", category!), { revalidateOnFocus: false, dedupingInterval: 300000 });
+}
+
+export function useDialogues() {
+  return useSWR("sori_curriculum_dialogue", () => fetchAll("sori_curriculum_dialogue"), { revalidateOnFocus: false, dedupingInterval: 300000 });
+}
+
+export function useCurriculum(courseType: string | null, category: string | null = null) {
+  const words = useWords();
+  const sentenceCategories = useSentenceCategories();
+  const sentences = useSentencesByCategory(courseType === "sentence" ? category : null);
+  const dialogues = useDialogues();
+
+  if (courseType === "word") return { data: words.data ?? [], isLoading: words.isLoading, error: words.error };
+  if (courseType === "sentence" && !category) return { data: [], categories: sentenceCategories.data ?? [], isLoading: sentenceCategories.isLoading, error: sentenceCategories.error };
+  if (courseType === "sentence" && category) return { data: sentences.data ?? [], isLoading: sentences.isLoading, error: sentences.error };
+  if (courseType === "dialogue") return { data: dialogues.data ?? [], isLoading: dialogues.isLoading, error: dialogues.error };
+  return { data: [], isLoading: false };
 }
