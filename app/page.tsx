@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { useTokenTransaction } from "@/hooks/useTokenTransaction";
 import { useCurriculum } from "@/hooks/useCurriculum";
+import { useFeedbackVoices } from "@/hooks/useFeedbackVoices";
+import { playScoreFeedback, getTier } from "@/lib/scoreSound";
 
 // ────────────────────────────────────────
 const WELCOME_MESSAGE = {
@@ -147,6 +149,7 @@ export default function Home() {
 
   // ── 훅 ────────────────────────────────
   const { spendToken, claimCheckin } = useTokenTransaction();
+  const feedbackVoices = useFeedbackVoices();
 
   // ── E: 딥링크 처리 ──────────────────
   useDeepLink(async (step, unit) => {
@@ -673,6 +676,12 @@ export default function Home() {
       const data = await res.json();
       if (data.error) { alert(data.error); } else {
         setResult(data);
+
+        // 효과음 + 멘트 재생
+        const isSilence = !data.recognized || data.recognized === "(침묵)" || data.recognized === "(잡음)";
+        const tier = getTier(data.score, isSilence);
+        const voiceUrl = feedbackVoices[tier] ?? null;
+        playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
 
         // A: 서버에서 토큰 차감
         const reason = courseType === "word" ? "발음 분석 (word)" : courseType === "sentence" ? "발음 분석 (sentence)" : "발음 분석 (dialogue)";

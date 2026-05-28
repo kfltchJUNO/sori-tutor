@@ -10,10 +10,10 @@ import {
 } from "firebase/firestore";
 import {
   Sparkles, CheckCircle, XCircle, Upload, Trash2,
-  RefreshCw, Loader2, Music, Volume2, Play,
+  RefreshCw, Loader2, Music, Volume2,
 } from "lucide-react";
 
-// ── 타입 ──────────────────────────────────────
+// ── 타입 ──────────────────────────────────────────────────
 interface Draft {
   id: string;
   type: "word" | "sentence" | "dialogue";
@@ -29,7 +29,7 @@ interface CurriculumDoc {
   id: string;
   text?: string;
   title?: string;
-  script?: string;       // 담화 대본 "A: ...|B: ...|A: ..."
+  script?: string;
   category: string;
   has_audio?: boolean;
   audio_path?: string;
@@ -39,14 +39,21 @@ interface CurriculumDoc {
   source?: string;
 }
 
-interface ParsedLine {
-  role: string;
-  text: string;
-}
+interface ParsedLine { role: string; text: string; }
 
-type Tab = "curriculum" | "generate" | "drafts" | "audio" | "users" | "charges" | "inquiries";
+type Tab = "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "users" | "charges" | "inquiries";
 
-// ── 담화 대본 파서 ────────────────────────────
+// ── 점수대 정보 ────────────────────────────────────────────
+const SCORE_TIERS = [
+  { id: "perfect", label: "🎺 완벽 (90~95점)", desc: "한국 사람처럼 발음하셨어요! 정말 훌륭해요!", color: "bg-yellow-50 border-yellow-300" },
+  { id: "great",   label: "✨ 우수 (75~89점)", desc: "정말 잘하셨어요! 조금만 더 다듬으면 완벽할 거 같아요.", color: "bg-green-50 border-green-300" },
+  { id: "good",    label: "👍 양호 (55~74점)", desc: "잘하고 있어요! 한 번 더 해볼까요?", color: "bg-blue-50 border-blue-300" },
+  { id: "okay",    label: "🔔 보통 (30~54점)", desc: "조금 더 연습이 필요해요. 포기하지 마세요!", color: "bg-orange-50 border-orange-300" },
+  { id: "fail",    label: "😅 미흡 (0~29점)",  desc: "괜찮아요, 다시 한번 도전해봐요!", color: "bg-red-50 border-red-300" },
+  { id: "silence", label: "🎙️ 침묵 (0점)",     desc: "소리가 들리지 않았어요. 다시 말해볼까요?", color: "bg-slate-50 border-slate-300" },
+] as const;
+
+// ── 담화 대본 파서 ────────────────────────────────────────
 function parseScript(script: string): ParsedLine[] {
   if (!script) return [];
   return script.split("|").map(l => {
@@ -55,18 +62,13 @@ function parseScript(script: string): ParsedLine[] {
   });
 }
 
-// ── 라인별 업로드 버튼 컴포넌트 ──────────────
-interface LineAudioRowProps {
-  line: ParsedLine;
-  lineIndex: number;
-  docId: string;
-  colName: string;
-  existingUrl: string;
-  idToken: string;
-  onRefresh: () => void;
-}
-
-function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, onRefresh }: LineAudioRowProps) {
+// ── 담화 라인별 업로드 컴포넌트 ──────────────────────────
+function LineAudioRow({
+  line, lineIndex, docId, colName, existingUrl, idToken, onRefresh
+}: {
+  line: ParsedLine; lineIndex: number; docId: string; colName: string;
+  existingUrl: string; idToken: string; onRefresh: () => void;
+}) {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -74,8 +76,7 @@ function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, o
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    setResult(null);
+    setUploading(true); setResult(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -90,8 +91,7 @@ function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, o
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResult("✅");
-      onRefresh();
+      setResult("✅"); onRefresh();
     } catch (e: any) {
       setResult("❌ " + e.message);
     } finally {
@@ -101,7 +101,7 @@ function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, o
   };
 
   const handleDelete = async () => {
-    if (!confirm("이 라인의 오디오를 삭제할까요?")) return;
+    if (!confirm("삭제할까요?")) return;
     await fetch("/api/admin/audio", {
       method: "DELETE",
       headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
@@ -112,12 +112,9 @@ function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, o
 
   return (
     <div className={`flex items-start gap-3 p-3 rounded-xl border ${existingUrl ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
-      {/* 역할 배지 */}
       <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mt-0.5 ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
         {line.role}
       </span>
-
-      {/* 대사 + 오디오 */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-700 mb-1 truncate">{line.text}</p>
         {existingUrl ? (
@@ -130,15 +127,10 @@ function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, o
         )}
         {result && <p className={`text-[10px] font-bold mt-1 ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</p>}
       </div>
-
-      {/* 버튼 */}
       <div className="flex gap-1 shrink-0">
         <input ref={fileRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleUpload} className="hidden" />
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1 text-xs bg-white border border-slate-300 px-2 py-1.5 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 transition"
-        >
+        <button onClick={() => fileRef.current?.click()} disabled={uploading}
+          className="flex items-center gap-1 text-xs bg-white border border-slate-300 px-2 py-1.5 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 transition">
           {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
           {existingUrl ? "교체" : "업로드"}
         </button>
@@ -152,30 +144,20 @@ function LineAudioRow({ line, lineIndex, docId, colName, existingUrl, idToken, o
   );
 }
 
-// ── 담화 항목 카드 ────────────────────────────
-interface DialogueAudioCardProps {
-  doc_: CurriculumDoc;
-  idToken: string;
-  onRefresh: () => void;
-}
-
-function DialogueAudioCard({ doc_, idToken, onRefresh }: DialogueAudioCardProps) {
+// ── 담화 항목 카드 ────────────────────────────────────────
+function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; idToken: string; onRefresh: () => void; }) {
   const [expanded, setExpanded] = useState(false);
   const lines = parseScript(doc_.script ?? "");
   const filledCount = lines.filter((_, i) => !!doc_.audio_paths?.[i]).length;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      {/* 헤더 */}
-      <button
-        onClick={() => setExpanded(p => !p)}
-        className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left"
-      >
+      <button onClick={() => setExpanded(p => !p)}
+        className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left">
         <div>
           <p className="font-bold text-slate-800">{doc_.title ?? doc_.id}</p>
           <p className="text-xs text-slate-400 mt-0.5">
-            {doc_.category}
-            {doc_.step ? ` · Step ${doc_.step}` : ""}
+            {doc_.category}{doc_.step ? ` · Step ${doc_.step}` : ""}
             {" · "}
             <span className={filledCount === lines.length && lines.length > 0 ? "text-green-600 font-bold" : "text-orange-500 font-bold"}>
               {filledCount}/{lines.length} 라인 등록
@@ -184,33 +166,125 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: DialogueAudioCardProps)
         </div>
         <span className="text-slate-400 text-sm">{expanded ? "▲" : "▼"}</span>
       </button>
-
-      {/* 라인별 업로드 */}
       {expanded && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-100 pt-3">
           {lines.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-4">대본 데이터 없음</p>
-          ) : (
-            lines.map((line, idx) => (
-              <LineAudioRow
-                key={idx}
-                line={line}
-                lineIndex={idx}
-                docId={doc_.id}
-                colName="sori_curriculum_dialogue"
-                existingUrl={doc_.audio_paths?.[idx] ?? ""}
-                idToken={idToken}
-                onRefresh={onRefresh}
-              />
-            ))
-          )}
+          ) : lines.map((line, idx) => (
+            <LineAudioRow key={idx} line={line} lineIndex={idx} docId={doc_.id}
+              colName="sori_curriculum_dialogue" existingUrl={doc_.audio_paths?.[idx] ?? ""}
+              idToken={idToken} onRefresh={onRefresh} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-// ── 메인 어드민 페이지 ────────────────────────
+// ── 점수 피드백 멘트 업로드 카드 ─────────────────────────
+function FeedbackVoiceCard({
+  tier, idToken, currentUrl, onRefresh
+}: {
+  tier: typeof SCORE_TIERS[number];
+  idToken: string;
+  currentUrl: string;
+  onRefresh: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("tier", tier.id);
+      const res = await fetch("/api/admin/feedback-audio", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResult("✅ 업로드 완료");
+      onRefresh();
+    } catch (e: any) {
+      setResult("❌ " + e.message);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("멘트 오디오를 삭제할까요?")) return;
+    await fetch("/api/admin/feedback-audio", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: tier.id }),
+    });
+    onRefresh();
+  };
+
+  const handlePreview = () => {
+    if (!currentUrl) return;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; setPlaying(false); return; }
+    const audio = new Audio(currentUrl);
+    audioRef.current = audio;
+    setPlaying(true);
+    audio.onended = () => { audioRef.current = null; setPlaying(false); };
+    audio.play();
+  };
+
+  return (
+    <div className={`rounded-2xl border-2 p-4 ${tier.color}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <p className="font-black text-slate-800 text-sm mb-1">{tier.label}</p>
+          <p className="text-xs text-slate-500 italic mb-3">"{tier.desc}"</p>
+          {currentUrl ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">🎵 등록됨</span>
+              <button onClick={handlePreview}
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-bold border transition ${playing ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}>
+                <Volume2 size={12} /> {playing ? "정지" : "미리듣기"}
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">미등록</span>
+          )}
+          {result && (
+            <p className={`text-xs font-bold mt-2 ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>
+              {result}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 shrink-0">
+          <input ref={fileRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleUpload} className="hidden" />
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            className="flex items-center gap-1 text-xs bg-white border border-slate-300 px-3 py-2 rounded-xl font-bold hover:bg-slate-50 disabled:opacity-50 transition shadow-sm">
+            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+            {currentUrl ? "교체" : "업로드"}
+          </button>
+          {currentUrl && (
+            <button onClick={handleDelete}
+              className="flex items-center gap-1 text-xs bg-white border border-red-200 text-red-500 px-3 py-2 rounded-xl font-bold hover:bg-red-50 transition shadow-sm">
+              <Trash2 size={12} /> 삭제
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 메인 어드민 페이지 ────────────────────────────────────
 export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -233,13 +307,17 @@ export default function AdminPage() {
   const [editingDraft, setEditingDraft] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
 
-  // 오디오 업로드 (단어/문장용 — 담화는 별도 컴포넌트)
+  // 오디오 업로드
   const [audioColName, setAudioColName] = useState<"sori_curriculum_word" | "sori_curriculum_sentence" | "sori_curriculum_dialogue">("sori_curriculum_word");
   const [audioDocs, setAudioDocs] = useState<CurriculumDoc[]>([]);
   const [selectedDocId, setSelectedDocId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 피드백 멘트
+  const [feedbackVoices, setFeedbackVoices] = useState<Record<string, string>>({});
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
 
   // 커리큘럼/사용자/충전/문의
   const [curriculumType, setCurriculumType] = useState<"word" | "sentence" | "dialogue">("word");
@@ -249,7 +327,7 @@ export default function AdminPage() {
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ── 인증 ───────────────────────────────────
+  // ── 인증 ─────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { setChecking(false); return; }
@@ -266,7 +344,7 @@ export default function AdminPage() {
 
   const authHeader = { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" };
 
-  // ── AI 생성 ────────────────────────────────
+  // ── AI 생성 ──────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!genCategory.trim()) return alert("카테고리를 입력하세요.");
     setGenerating(true); setGenResult(null);
@@ -283,7 +361,7 @@ export default function AdminPage() {
     } finally { setGenerating(false); }
   };
 
-  // ── 초안 ───────────────────────────────────
+  // ── 초안 ─────────────────────────────────────────────────
   const loadDrafts = async () => {
     setLoadingDrafts(true);
     try {
@@ -314,7 +392,7 @@ export default function AdminPage() {
     } catch (e: any) { alert(e.message); }
   };
 
-  // ── 오디오 탭 데이터 로드 ──────────────────
+  // ── 오디오 탭 ────────────────────────────────────────────
   const loadAudioDocs = async () => {
     try {
       const snap = await getDocs(collection(db, audioColName));
@@ -325,7 +403,6 @@ export default function AdminPage() {
 
   useEffect(() => { if (isAdmin && activeTab === "audio") loadAudioDocs(); }, [isAdmin, activeTab, audioColName]);
 
-  // 단어/문장 단일 오디오 업로드
   const handleSingleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedDocId) return alert("파일과 항목을 선택하세요.");
@@ -339,7 +416,7 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/audio", { method: "POST", headers: { Authorization: `Bearer ${idToken}` }, body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setUploadResult(`✅ 업로드 완료`);
+      setUploadResult("✅ 업로드 완료");
       loadAudioDocs();
     } catch (e: any) {
       setUploadResult(`❌ 실패: ${e.message}`);
@@ -355,7 +432,20 @@ export default function AdminPage() {
     loadAudioDocs();
   };
 
-  // ── 커리큘럼 ───────────────────────────────
+  // ── 피드백 멘트 탭 ───────────────────────────────────────
+  const loadFeedbackVoices = async () => {
+    setLoadingFeedback(true);
+    try {
+      const res = await fetch("/api/admin/feedback-audio");
+      const data = await res.json();
+      setFeedbackVoices(data);
+    } catch (e) { console.error(e); }
+    setLoadingFeedback(false);
+  };
+
+  useEffect(() => { if (isAdmin && activeTab === "feedback") loadFeedbackVoices(); }, [isAdmin, activeTab]);
+
+  // ── 커리큘럼 ─────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin || activeTab !== "curriculum") return;
     setLoading(true);
@@ -370,7 +460,7 @@ export default function AdminPage() {
     setCurriculumList(prev => prev.filter(i => i.id !== id));
   };
 
-  // ── 사용자 ────────────────────────────────
+  // ── 사용자 ───────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin || activeTab !== "users") return;
     setLoading(true);
@@ -386,7 +476,7 @@ export default function AdminPage() {
     alert("지급 완료");
   };
 
-  // ── 충전 ──────────────────────────────────
+  // ── 충전 ─────────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin || activeTab !== "charges") return;
     setLoading(true);
@@ -403,7 +493,7 @@ export default function AdminPage() {
     setCharges(prev => prev.filter(c => c.id !== req.id));
   };
 
-  // ── 문의 ──────────────────────────────────
+  // ── 문의 ─────────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin || activeTab !== "inquiries") return;
     setLoading(true);
@@ -412,17 +502,18 @@ export default function AdminPage() {
       .finally(() => setLoading(false));
   }, [isAdmin, activeTab]);
 
-  // ── 렌더 ──────────────────────────────────
+  // ── 렌더 ─────────────────────────────────────────────────
   if (checking) return <div className="flex h-screen items-center justify-center text-slate-400">인증 확인 중...</div>;
   if (!isAdmin) return <div className="flex h-screen items-center justify-center text-red-500 font-bold">관리자 권한이 없습니다.</div>;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "generate", label: "✨ AI 생성" },
-    { id: "drafts", label: `📋 승인대기 (${drafts.length})` },
-    { id: "audio", label: "🎵 오디오" },
+    { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },
+    { id: "audio",    label: "🎵 오디오" },
+    { id: "feedback", label: "🔊 점수 멘트" },
     { id: "curriculum", label: "📚 커리큘럼" },
-    { id: "users", label: "👥 사용자" },
-    { id: "charges", label: `💳 충전 (${charges.length})` },
+    { id: "users",    label: "👥 사용자" },
+    { id: "charges",  label: `💳 충전 (${charges.length})` },
     { id: "inquiries", label: "📬 문의" },
   ];
 
@@ -433,7 +524,6 @@ export default function AdminPage() {
         <h1 className="text-xl font-black">Sori-Tutor Admin</h1>
       </header>
 
-      {/* 탭 네비 */}
       <div className="flex overflow-x-auto bg-white border-b border-slate-200 px-4 gap-1 scrollbar-hide">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -445,7 +535,7 @@ export default function AdminPage() {
 
       <div className="max-w-4xl mx-auto p-6">
 
-        {/* ──── AI 생성 탭 ──── */}
+        {/* ──── AI 생성 ──── */}
         {activeTab === "generate" && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <h2 className="text-xl font-black mb-6 flex items-center gap-2">
@@ -484,7 +574,7 @@ export default function AdminPage() {
             </div>
             <div className="mb-6">
               <label className="text-xs font-bold text-slate-500 block mb-1">문법 힌트 (선택)</label>
-              <input value={genGrammar} onChange={e => setGenGrammar(e.target.value)} placeholder="예: -아/어서 (이유), -(으)ㄹ 것 같다"
+              <input value={genGrammar} onChange={e => setGenGrammar(e.target.value)} placeholder="예: -아/어서 (이유)"
                 className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button onClick={handleGenerate} disabled={generating}
@@ -499,7 +589,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ──── 승인 대기 탭 ──── */}
+        {/* ──── 승인 대기 ──── */}
         {activeTab === "drafts" && (
           <div>
             <div className="flex justify-between items-center mb-4">
@@ -526,17 +616,13 @@ export default function AdminPage() {
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => { setEditingDraft(draft.id); setEditContent(JSON.stringify(draft.content, null, 2)); }}
-                          className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-bold hover:bg-slate-50">
-                          수정 후 승인
-                        </button>
+                          className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-bold hover:bg-slate-50">수정 후 승인</button>
                         <button onClick={() => approveDraft(draft.id)}
                           className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-green-700 flex items-center gap-1">
-                          <CheckCircle size={12} /> 승인
-                        </button>
+                          <CheckCircle size={12} /> 승인</button>
                         <button onClick={() => rejectDraft(draft.id)}
                           className="text-xs bg-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-200 flex items-center gap-1">
-                          <XCircle size={12} /> 반려
-                        </button>
+                          <XCircle size={12} /> 반려</button>
                       </div>
                     </div>
                     <div className="p-4">
@@ -545,7 +631,7 @@ export default function AdminPage() {
                           <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
                             className="w-full h-48 p-3 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                           <div className="flex gap-2 mt-2">
-                            <button onClick={() => { try { approveDraft(draft.id, JSON.parse(editContent)); } catch { alert("JSON 형식 오류"); } }}
+                            <button onClick={() => { try { approveDraft(draft.id, JSON.parse(editContent)); } catch { alert("JSON 오류"); } }}
                               className="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold text-sm">수정된 내용으로 승인</button>
                             <button onClick={() => setEditingDraft(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold text-sm">취소</button>
                           </div>
@@ -570,14 +656,10 @@ export default function AdminPage() {
               <Music className="text-green-500" size={24} />
               <h2 className="text-xl font-black">정답 발음 오디오 관리</h2>
             </div>
-
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-6 text-sm text-blue-800">
               💡 ElevenLabs MP3 또는 직접 녹음 파일을 업로드하세요.<br />
-              업로드된 파일은 학습자에게 Google TTS 대신 재생됩니다.<br />
               <span className="font-bold">담화는 라인별로 A·B 목소리를 각각 업로드할 수 있습니다.</span>
             </div>
-
-            {/* 유형 탭 */}
             <div className="flex gap-2 mb-6">
               {(["sori_curriculum_word", "sori_curriculum_sentence", "sori_curriculum_dialogue"] as const).map(col => (
                 <button key={col} onClick={() => { setAudioColName(col); setSelectedDocId(""); setUploadResult(null); }}
@@ -587,19 +669,14 @@ export default function AdminPage() {
               ))}
             </div>
 
-            {/* ── 담화: 카드별 라인 업로드 ── */}
             {audioColName === "sori_curriculum_dialogue" ? (
               <div className="space-y-4">
-                {audioDocs.length === 0 ? (
-                  <p className="text-center text-slate-400 py-12">담화 데이터가 없습니다.</p>
-                ) : (
-                  audioDocs.map(d => (
-                    <DialogueAudioCard key={d.id} doc_={d} idToken={idToken} onRefresh={loadAudioDocs} />
-                  ))
-                )}
+                {audioDocs.length === 0
+                  ? <p className="text-center text-slate-400 py-12">담화 데이터가 없습니다.</p>
+                  : audioDocs.map(d => <DialogueAudioCard key={d.id} doc_={d} idToken={idToken} onRefresh={loadAudioDocs} />)
+                }
               </div>
             ) : (
-              /* ── 단어/문장: 기존 단일 업로드 UI ── */
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
                 <div className="mb-4">
                   <label className="text-xs font-bold text-slate-500 block mb-1">항목 선택</label>
@@ -607,27 +684,18 @@ export default function AdminPage() {
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">— 항목을 선택하세요 —</option>
                     {audioDocs.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.text ?? d.id} {d.category ? `(${d.category})` : ""} {d.has_audio ? "🎵" : ""}
-                      </option>
+                      <option key={d.id} value={d.id}>{d.text ?? d.id} {d.category ? `(${d.category})` : ""} {d.has_audio ? "🎵" : ""}</option>
                     ))}
                   </select>
                 </div>
-
-                <input ref={fileInputRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg"
-                  onChange={handleSingleUpload} disabled={!selectedDocId || uploading} className="hidden" />
+                <input ref={fileInputRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleSingleUpload} disabled={!selectedDocId || uploading} className="hidden" />
                 <button onClick={() => fileInputRef.current?.click()} disabled={!selectedDocId || uploading}
                   className="w-full py-4 bg-green-600 text-white rounded-xl font-black flex items-center justify-center gap-2 hover:bg-green-700 transition disabled:opacity-50">
                   {uploading ? <><Loader2 size={20} className="animate-spin" /> 업로드 중...</> : <><Upload size={20} /> MP3 / WAV 파일 업로드</>}
                 </button>
-
                 {uploadResult && (
-                  <div className={`mt-3 p-3 rounded-xl text-xs font-bold ${uploadResult.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-                    {uploadResult}
-                  </div>
+                  <div className={`mt-3 p-3 rounded-xl text-xs font-bold ${uploadResult.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{uploadResult}</div>
                 )}
-
-                {/* 등록된 오디오 현황 */}
                 <div className="mt-8">
                   <h3 className="font-bold text-slate-700 mb-3 text-sm">등록된 오디오 현황</h3>
                   <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -653,7 +721,54 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ──── 커리큘럼 탭 ──── */}
+        {/* ──── 점수 멘트 탭 ──── */}
+        {activeTab === "feedback" && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-black flex items-center gap-2">🔊 점수대별 피드백 멘트</h2>
+                <p className="text-sm text-slate-500 mt-1">ElevenLabs로 생성한 MP3를 점수대별로 업로드하세요.</p>
+              </div>
+              <button onClick={loadFeedbackVoices} className="flex items-center gap-1 text-sm bg-white border border-slate-200 px-3 py-2 rounded-lg font-bold hover:bg-slate-50">
+                <RefreshCw size={14} /> 새로고침
+              </button>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm text-amber-800">
+              <p className="font-bold mb-1">📋 업로드 가이드</p>
+              <p>ElevenLabs에서 아래 멘트를 준호님 목소리로 생성 후 각 점수대에 업로드하세요.<br />
+              효과음은 자동 재생되고, 효과음이 끝난 후 멘트가 이어서 재생됩니다.</p>
+            </div>
+
+            {loadingFeedback ? (
+              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div>
+            ) : (
+              <div className="space-y-3">
+                {SCORE_TIERS.map(tier => (
+                  <FeedbackVoiceCard
+                    key={tier.id}
+                    tier={tier}
+                    idToken={idToken}
+                    currentUrl={feedbackVoices[tier.id] ?? ""}
+                    onRefresh={loadFeedbackVoices}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500">
+              <p className="font-bold text-slate-700 mb-2">💡 ElevenLabs 멘트 생성 팁</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li>짧고 명확하게 (3~5초 분량 권장)</li>
+                <li>밝고 친근한 톤으로 설정</li>
+                <li>MP3 또는 WAV 형식으로 다운로드</li>
+                <li>파일 크기 5MB 이하</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* ──── 커리큘럼 ──── */}
         {activeTab === "curriculum" && (
           <div>
             <div className="flex gap-2 mb-4">
@@ -672,9 +787,7 @@ export default function AdminPage() {
                       <p className="font-bold text-slate-800">{item.text ?? item.title ?? "—"}</p>
                       <p className="text-xs text-slate-400">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
                     </div>
-                    <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg">
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                   </div>
                 ))}
                 {curriculumList.length === 0 && <p className="text-center text-slate-400 py-10">데이터 없음</p>}
@@ -683,7 +796,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ──── 사용자 탭 ──── */}
+        {/* ──── 사용자 ──── */}
         {activeTab === "users" && (
           <div className="space-y-3">
             {users.map(u => (
@@ -693,15 +806,13 @@ export default function AdminPage() {
                   <p className="text-xs text-slate-400">{u.id} · {u.role} · 토큰: {u.tokens}</p>
                 </div>
                 <button onClick={() => { const amt = Number(prompt("지급할 토큰 수:")); if (amt > 0) grantTokens(u.id, amt); }}
-                  className="text-xs bg-blue-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-blue-700">
-                  토큰 지급
-                </button>
+                  className="text-xs bg-blue-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-blue-700">토큰 지급</button>
               </div>
             ))}
           </div>
         )}
 
-        {/* ──── 충전 탭 ──── */}
+        {/* ──── 충전 ──── */}
         {activeTab === "charges" && (
           <div className="space-y-3">
             {charges.map(c => (
@@ -722,7 +833,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ──── 문의 탭 ──── */}
+        {/* ──── 문의 ──── */}
         {activeTab === "inquiries" && (
           <div className="space-y-3">
             {inquiries.map(i => (
