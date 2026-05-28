@@ -32,6 +32,7 @@ import { useTokenTransaction } from "@/hooks/useTokenTransaction";
 import { useCurriculum } from "@/hooks/useCurriculum";
 import { useFeedbackVoices } from "@/hooks/useFeedbackVoices";
 import { playScoreFeedback, getTier } from "@/lib/scoreSound";
+import LandingPage from "./components/LandingPage";
 
 // ────────────────────────────────────────
 const WELCOME_MESSAGE = {
@@ -759,30 +760,7 @@ export default function Home() {
   if (isAuthChecking) return <div className="flex h-screen items-center justify-center bg-slate-50">로딩 중...</div>;
 
   if (!currentUser) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex flex-col">
-        <nav className="flex justify-between items-center p-6 max-w-5xl mx-auto w-full">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-200">S</div>
-            <span className="font-black text-2xl text-slate-800">Sori-Tutor</span>
-          </div>
-          <Login onUserChange={handleUserChange} />
-        </nav>
-        <section className="flex-1 flex flex-col justify-center items-center text-center px-6 py-12 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="mb-4 px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold inline-block">✨ AI 기반 한국어 회화 코칭</div>
-          <h1 className="text-4xl md:text-6xl font-black text-slate-900 leading-tight mb-6">
-            한국어, 이제 <span className="text-blue-600">AI 친구</span>와<br />실전처럼 연습하세요.
-          </h1>
-          <p className="text-slate-500 text-lg md:text-xl mb-10 leading-relaxed">
-            단어 연습부터 프리토킹까지.<br />구글의 최신 AI가 발음과 억양을 실시간 교정합니다.
-          </p>
-          <div className="bg-white p-8 rounded-3xl shadow-2xl border border-slate-100 w-full max-w-sm">
-            <p className="text-slate-500 mb-6 font-bold text-sm">👇 3초 만에 시작하기</p>
-            <Login onUserChange={handleUserChange} />
-          </div>
-        </section>
-      </main>
-    );
+    return <LandingPage onUserChange={handleUserChange} />;
   }
 
   // ── 메인 앱 ───────────────────────────

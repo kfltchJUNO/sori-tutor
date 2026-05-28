@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 
-const MODEL_CANDIDATES = [
-  "gemini-2.0-flash",
+// 고성능 → 효율 → 속도 순 릴레이
+const MODEL_CANDIDATES: string[] = [
   "gemini-2.5-flash",
-  "gemini-2.0-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
   "gemini-2.5-flash-lite",
+];
+
+const SAFETY_SETTINGS = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
 // ── 한글 자모 분리 ────────────────────────────────────────────
@@ -26,63 +34,54 @@ function decomposeString(str: string): string {
   return str.split("").map(decompose).join("");
 }
 
-// ── 자모 단위 레벤슈타인 유사도 0~1 ──────────────────────────
+// ── 자모 레벤슈타인 유사도 0~1 ───────────────────────────────
 function jamoSimilarity(a: string, b: string): number {
   if (!a || !b) return 0;
   const da = decomposeString(a.replace(/\s/g, ""));
   const db = decomposeString(b.replace(/\s/g, ""));
   if (da === db) return 1;
   const m = da.length, n = db.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  const dp: number[][] = Array.from({ length: m + 1 }, (_v, i) =>
+    Array.from({ length: n + 1 }, (_w, j) => (i === 0 ? j : j === 0 ? i : 0))
   );
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = da[i-1] === db[j-1]
-        ? dp[i-1][j-1]
-        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      dp[i][j] = da[i - 1] === db[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
     }
   }
-  const maxLen = Math.max(m, n);
-  return maxLen === 0 ? 1 : 1 - dp[m][n] / maxLen;
+  return 1 - dp[m][n] / Math.max(m, n);
 }
 
-// ── Gemini 호출 헬퍼 ──────────────────────────────────────────
+// ── Gemini 호출 헬퍼 ─────────────────────────────────────────
 async function callGemini(
   genAI: GoogleGenerativeAI,
   prompt: string,
-  base64Audio?: string
+  base64Audio?: string,
 ): Promise<string> {
   let lastError: unknown;
   for (const modelName of MODEL_CANDIDATES) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ],
-      });
+      const model = genAI.getGenerativeModel({ model: modelName, safetySettings: SAFETY_SETTINGS });
       const parts: (string | { inlineData: { mimeType: string; data: string } })[] = [prompt];
       if (base64Audio) parts.push({ inlineData: { mimeType: "audio/webm", data: base64Audio } });
-      const response = await model.generateContent(parts);
-      console.log("✅ [" + modelName + "] 성공");
-      return response.response.text();
+      const res = await model.generateContent(parts);
+      console.log(`✅ [${modelName}] 성공`);
+      return res.response.text();
     } catch (e: unknown) {
-      console.warn("⚠️ [" + modelName + "] 실패: " + (e instanceof Error ? e.message : String(e)).substring(0, 80));
+      console.warn(`⚠️ [${modelName}] 실패: ${e instanceof Error ? e.message.substring(0, 80) : String(e)}`);
       lastError = e;
     }
   }
   throw lastError ?? new Error("All models failed");
 }
 
-// ── 1단계: STT — 들린 그대로 받아쓰기 ───────────────────────
+// ── 1단계: STT ───────────────────────────────────────────────
 async function runSTT(
   genAI: GoogleGenerativeAI,
   base64Audio: string,
-  targetText: string
+  targetText: string,
 ): Promise<string> {
   const prompt = `당신은 한국어 음성 받아쓰기(STT) 전문가입니다.
 
@@ -93,22 +92,21 @@ async function runSTT(
 - 말소리가 없으면 "(침묵)"을 출력하세요.
 - 소음/숨소리만 있으면 "(잡음)"을 출력하세요.
 
-[초급 한국어 학습자 오류를 절대 보정하지 마세요]
-- 종성 누락: "먹어요"를 "머거요"로 들렸으면 "머거요"로 적기
-- 경음/격음 혼동: "바다"를 "파다"로 들렸으면 "파다"로 적기
-- 모음 오류: "어머니"를 "으머니"로 들렸으면 "으머니"로 적기
+[초급 학습자 오류를 절대 보정하지 마세요]
+- 종성 누락: "먹어요" → "머거요"로 들렸으면 "머거요"로 적기
+- 경음/격음 혼동: "바다" → "파다"로 들렸으면 "파다"로 적기
+- 모음 오류: "어머니" → "으머니"로 들렸으면 "으머니"로 적기
 - 연음 실패: 끊어 발음된 그대로 적기
-- ㄹ→ㄴ 오류: "라면"을 "나면"으로 들렸으면 "나면"으로 적기
-- 이중모음 단모음화: "봐"를 "바"로 들렸으면 "바"로 적기
-- 기식음/평음 혼동: "카페"를 "가페"로 들렸으면 "가페"로 적기
+- ㄹ→ㄴ 오류: "라면" → "나면"으로 들렸으면 "나면"으로 적기
+- 이중모음 단모음화: "봐" → "바"로 들렸으면 "바"로 적기
 
-오직 들린 텍스트만 출력하세요. 설명·따옴표·기호 없이 텍스트만.`;
+오직 들린 텍스트만 출력. 설명·따옴표·기호 없이 텍스트만.`;
 
   const raw = await callGemini(genAI, prompt, base64Audio);
   return raw.replace(/^["']|["']$/g, "").trim();
 }
 
-// ── 2단계: 음운 단위 채점 ────────────────────────────────────
+// ── 2단계: 채점 ──────────────────────────────────────────────
 interface ScoringResult {
   score: number;
   correct: string;
@@ -122,45 +120,41 @@ async function runScoring(
   targetText: string,
   context: string,
   userNick: string,
-  jamoSim: number
+  jamoSim: number,
 ): Promise<ScoringResult> {
   const prompt = `당신은 한국어 발음 교정 전문가입니다.
 
 [목표 텍스트]: "${targetText}"
 [학습자 발음 (STT 결과)]: "${recognized}"
-[자모 유사도]: ${Math.round(jamoSim * 100)}% (이 수치를 채점의 핵심 기준으로 사용하세요)
+[자모 유사도]: ${Math.round(jamoSim * 100)}%
 [상황 맥락]: ${context || "일반 발음 연습"}
 
-[채점 기준 — 반드시 준수]
+[채점 기준]
 - 자모 유사도 90% 이상: 85~95점
 - 자모 유사도 75~89%: 65~84점
 - 자모 유사도 55~74%: 40~64점
 - 자모 유사도 55% 미만: 0~39점
 - 100점 절대 금지. 최대 95점.
 
-[분석해야 할 초급 오류 유형]
-1. 종성(받침) 누락/대치: 먹→머, 학교→하교
+[분석 오류 유형]
+1. 종성 누락: 먹→머, 학교→하교
 2. 경음화 오류: 바다→파다
 3. 모음 혼동: ㅓ↔ㅡ, ㅐ↔ㅔ
-4. 연음 실패: 먹어요를 끊어서 발음
+4. 연음 실패
 5. ㄹ 오류: 라면→나면
 6. 이중모음 단모음화: 봐→바
-7. 기식음/평음 혼동: ㅂ↔ㅍ, ㄷ↔ㅌ
-8. 비음 오류: ㅁ↔ㅂ, ㄴ↔ㄷ
+7. 기식음/평음 혼동: ㅂ↔ㅍ
+8. 비음 오류: ㅁ↔ㅂ
 
-반드시 JSON만 출력. 다른 텍스트 절대 금지.
-
-{
-  "score": 0~95 사이 정수,
-  "correct": "올바른 발음 표기",
-  "explanation": "${userNick}님, (발견된 구체적 오류와 원인. 오류 없으면 잘한 점 칭찬)",
-  "advice": "(입 모양·혀 위치 등 실용적인 교정 조언)"
-}`;
+JSON만 출력. 다른 텍스트 금지.
+{"score":정수,"correct":"발음표기","explanation":"${userNick}님, 피드백","advice":"교정 조언"}`;
 
   const raw = await callGemini(genAI, prompt);
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("채점 JSON 파싱 실패");
-  const data = JSON.parse(match[0]) as { score?: number; correct?: string; explanation?: string; advice?: string };
+  const data = JSON.parse(match[0]) as {
+    score?: number; correct?: string; explanation?: string; advice?: string;
+  };
   return {
     score:       Math.max(0, Math.min(95, Math.round(data.score ?? 0))),
     correct:     data.correct     ?? targetText,
@@ -169,7 +163,7 @@ async function runScoring(
   };
 }
 
-// ── 메인 핸들러 ───────────────────────────────────────────────
+// ── 메인 핸들러 ──────────────────────────────────────────────
 export async function POST(req: Request): Promise<Response> {
   try {
     const formData   = await req.formData();
@@ -214,9 +208,10 @@ export async function POST(req: Request): Promise<Response> {
 
     console.log(`🎤 STT: "${recognized}" / 목표: "${targetText}"`);
 
-    // 침묵·잡음·너무 짧음 차단
     const r = recognized.trim();
-    if (!r || /^[(\[]?(침묵|잡음|인식\s*불가)[)\]]?$/.test(r) || /^[.…\s음어아으]+$/.test(r)) {
+
+    // 침묵·잡음·무의미 차단
+    if (!r || /^[([（]?(침묵|잡음|인식\s*불가)[)）\]]?$/.test(r) || /^[.…\s음어아으]+$/.test(r)) {
       return NextResponse.json({
         score: 0, recognized, correct: targetText,
         explanation: `${userNick}님, 발음이 인식되지 않았습니다. 마이크를 확인하고 또렷하게 말해보세요.`,
@@ -248,24 +243,21 @@ export async function POST(req: Request): Promise<Response> {
       scored = await runScoring(genAI, recognized, targetText, context, userNick, jamoSim);
     } catch (e) {
       console.error("채점 실패:", e);
-      const fallback = Math.min(Math.round(jamoSim * 90), 95);
       return NextResponse.json({
-        score: fallback, recognized, correct: targetText,
+        score: Math.min(Math.round(jamoSim * 90), 95),
+        recognized, correct: targetText,
         explanation: `${userNick}님, AI 채점 서버가 불안정합니다. 자동 채점 결과입니다.`,
         advice: "잠시 후 다시 시도해보세요.",
       });
     }
 
-    // 2차 보정: AI 과채점 방지 (유사도와 30점 이상 차이 시 평균값)
+    // 과채점 보정: AI 점수와 자모 유사도 차이 30점 이상이면 평균값
     const simScore = Math.round(jamoSim * 90);
-    const aiScore  = scored.score;
-    let finalScore = aiScore;
-
-    if (aiScore - simScore > 30) {
-      finalScore = Math.round((aiScore + simScore) / 2);
-      console.warn(`🚨 과채점 보정: AI=${aiScore} → 최종=${finalScore} (유사도 기반=${simScore})`);
+    let finalScore = scored.score;
+    if (scored.score - simScore > 30) {
+      finalScore = Math.round((scored.score + simScore) / 2);
+      console.warn(`🚨 과채점 보정: AI=${scored.score} → 최종=${finalScore}`);
     }
-
     finalScore = Math.max(0, Math.min(95, finalScore));
 
     return NextResponse.json({
