@@ -1,5 +1,4 @@
-// hooks/useTokenTransaction.ts
-// 이 훅을 통해서만 토큰/하트를 소비합니다. 클라이언트에서 직접 updateDoc 금지.
+﻿// hooks/useTokenTransaction.ts
 import { auth } from "@/lib/firebase";
 
 type SpendReason =
@@ -21,7 +20,6 @@ export function useTokenTransaction() {
     return user.getIdToken();
   };
 
-  // 토큰/하트 소비 — 서버에서 잔액 확인 후 차감
   const spendToken = async (
     reason: SpendReason,
     currency: Currency = "token"
@@ -30,10 +28,7 @@ export function useTokenTransaction() {
       const idToken = await getIdToken();
       const res = await fetch("/api/token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ action: "spend", reason, currency }),
       });
       const data = await res.json();
@@ -44,16 +39,12 @@ export function useTokenTransaction() {
     }
   };
 
-  // 출석 체크 보상 (하루 1회)
   const claimCheckin = async (): Promise<{ success: boolean; earned?: number; error?: string }> => {
     try {
       const idToken = await getIdToken();
       const res = await fetch("/api/token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ action: "earn", reason: "출석 체크 보상" }),
       });
       const data = await res.json();

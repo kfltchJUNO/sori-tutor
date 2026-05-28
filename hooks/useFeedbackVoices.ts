@@ -1,8 +1,7 @@
-// hooks/useFeedbackVoices.ts
-// 점수대별 멘트 MP3 URL을 Firestore에서 가져와 캐싱
+﻿// hooks/useFeedbackVoices.ts
 import useSWR from "swr";
-import type { ScoreTier } from "@/lib/scoreSound";
 
+type ScoreTier = "perfect" | "great" | "good" | "okay" | "fail" | "silence";
 type VoiceMap = Partial<Record<ScoreTier, string>>;
 
 const fetcher = async (): Promise<VoiceMap> => {
@@ -14,7 +13,7 @@ const fetcher = async (): Promise<VoiceMap> => {
 export function useFeedbackVoices() {
   const { data } = useSWR<VoiceMap>("feedback-voices", fetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 10 * 60 * 1000, // 10분 캐시
+    dedupingInterval: 10 * 60 * 1000,
   });
   return data ?? {};
 }
