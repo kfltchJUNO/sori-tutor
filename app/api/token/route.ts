@@ -24,14 +24,14 @@ const ALLOWED_EARN_REASONS = [
 
 // 액션별 고정 비용 (서버에서 결정, 클라이언트 값 무시)
 const COSTS: Record<string, number> = {
-  "발음 분석 (word)": 0.5,
-  "발음 분석 (sentence)": 1,
-  "발음 분석 (dialogue)": 1,
-  "실전 회화 (1턴)": 2,
-  "회화 피드백 분석": 2,
-  "피드백 번역": 0.5,
-  "기록 번역": 0.5,
-  "단어 뜻 검색": 0.5,
+  "발음 분석 (word)":     1,  // 단어 발음 — 1 Sori
+  "발음 분석 (sentence)": 1,  // 문장 발음 — 1 Sori
+  "발음 분석 (dialogue)": 1,  // 담화 발음 — 1 Sori
+  "실전 회화 (1턴)":      2,  // 자유회화 1턴 — 2 Sori
+  "회화 피드백 분석":     3,  // 피드백 리포트 — 3 Sori
+  "피드백 번역":          1,  // 번역 — 1 Sori
+  "기록 번역":            1,  // 번역 — 1 Sori
+  "단어 뜻 검색":         0,  // 무료
 };
 
 // Firebase ID Token 검증 헬퍼
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cost = COSTS[reason];
-    if (!cost) return NextResponse.json({ error: "비용 정보 없음" }, { status: 400 });
+    if (cost === undefined) return NextResponse.json({ error: "비용 정보 없음" }, { status: 400 });
 
     const userRef = adminDb.collection("sori_users").doc(email);
 
@@ -80,7 +80,9 @@ export async function POST(req: NextRequest) {
           t.update(userRef, { free_hearts: FieldValue.increment(-1) });
           return { remaining: (data.free_hearts ?? 0) - 1 };
         } else {
-          if ((data.tokens ?? 0) < cost) throw new Error("토큰 부족");
+          // 무료 기능 (cost === 0)
+        if (cost === 0) return { remaining: data.tokens ?? 0 };
+        if ((data.tokens ?? 0) < cost) throw new Error("소리가 부족합니다.");
           t.update(userRef, {
             tokens: FieldValue.increment(-cost),
             points: FieldValue.increment(currency === "heart" ? 0 : 2),

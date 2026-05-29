@@ -402,19 +402,9 @@ export default function Home() {
   };
 
   // ── 수동 충전 ─────────────────────────
-  const handleManualCharge = async (tokenAmount: number, price: string) => {
-    const depositorName = prompt(`[${price}] 입금하실 분의 성함을 입력해주세요.`);
-    if (!depositorName?.trim()) return;
-    if (!confirm(`${depositorName}님 명의로 충전을 요청하시겠습니까?`)) return;
-    try {
-      await addDoc(collection(db, "sori_charge_requests"), {
-        userId: currentUser.email, userAlias: userAlias || "이름없음",
-        amount: tokenAmount, price, depositor: depositorName,
-        status: "pending", createdAt: serverTimestamp(),
-      });
-      alert(`✅ 요청 완료! 입금 확인 후 충전됩니다.\n\n🏦 카카오뱅크 3333-29-9690780 (오준호)`);
-      setShowPaymentModal(false);
-    } catch (e) { alert("요청 오류"); }
+  const handleGumroadBuy = (url: string) => {
+    window.open(url, "_blank");
+    setShowPaymentModal(false);
   };
 
   // ── 프리토킹 진입 ─────────────────────
@@ -868,13 +858,17 @@ export default function Home() {
           </button>
         </div>
         <div
-          className="flex items-center gap-1 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1 rounded-full border border-slate-200"
+          className="flex items-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 transition"
           onClick={() => setShowPaymentModal(true)}
         >
           {userRole === "guest" ? (
             [1, 2, 3].map(i => <Heart key={i} size={16} className={i <= hearts ? "text-red-500 fill-red-500" : "text-slate-300"} />)
           ) : (
-            <><Coins size={14} className="text-yellow-500" fill="currentColor" /><span className="font-bold text-slate-700">{tokens.toFixed(1).replace(/\.0$/, "")}</span></>
+            <>
+              <img src="/sori.jpg" alt="소리" className="w-5 h-5 rounded-full object-cover" />
+              <span className="font-bold text-slate-700 text-sm">{Math.floor(tokens)}</span>
+              <span className="text-[10px] text-slate-400 font-bold">Sori</span>
+            </>
           )}
         </div>
       </div>
@@ -1171,32 +1165,123 @@ export default function Home() {
         />
       )}
 
-      {/* 충전소 + 토큰 히스토리 */}
+      {/* 소리 충전소 */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="bg-slate-900 p-5 text-white text-center flex-none relative">
-              <h2 className="text-xl font-bold">충전소 & 히스토리</h2>
-              <button onClick={() => setShowPaymentModal(false)} className="absolute top-5 right-5 text-white/70 hover:text-white"><X size={20} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-              <div className="mb-6">
-                <h3 className="text-sm font-bold text-slate-500 mb-3">⚡ 토큰 충전</h3>
-                <div className="grid gap-2">
-                  <button onClick={() => handleManualCharge(100, "2,900원")} className="w-full py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-bold flex justify-between px-4 hover:bg-blue-100"><span>💎 100 토큰</span><span>2,900원</span></button>
-                  <button onClick={() => handleManualCharge(250, "5,900원")} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold flex justify-between px-4 hover:bg-blue-700 shadow-lg"><span>💎 250 토큰</span><span>5,900원</span></button>
-                  {/* B: 광고 버튼 → 출석 체크로 교체 */}
-                  <button
-                    onClick={() => { setShowPaymentModal(false); setShowCheckinModal(true); }}
-                    className="w-full py-3 bg-orange-50 text-orange-600 border border-orange-200 rounded-xl font-bold text-sm flex items-center justify-center gap-2 mt-2 hover:bg-orange-100"
-                  >
-                    ✅ 오늘의 출석 체크 (무료 토큰 1개)
-                  </button>
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-5 text-white flex-none relative">
+              <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-white/60 hover:text-white transition"><X size={20} /></button>
+              <div className="flex items-center gap-3">
+                <img src="/sori.jpg" alt="소리" className="w-10 h-10 rounded-full object-cover border-2 border-white/20" />
+                <div>
+                  <h2 className="text-lg font-black leading-tight">소리(Sori) 충전소</h2>
+                  <p className="text-xs text-white/60">현재 잔액: <span className="text-white font-bold">{Math.floor(tokens)} Sori</span></p>
                 </div>
               </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto scrollbar-hide">
+              {/* 패키지 */}
+              <div className="p-5">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">크레딧 패키지 / Credit Packages</p>
+                <div className="grid gap-3">
+                  {/* 스타터 */}
+                  <button
+                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-starter-200")}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover" />
+                        <div>
+                          <p className="font-black text-slate-800 text-sm group-hover:text-blue-700">스타터 팩</p>
+                          <p className="text-xs text-slate-500">200 Sori</p>
+                        </div>
+                      </div>
+                      <span className="font-black text-slate-800 text-lg">$4</span>
+                    </div>
+                  </button>
+
+                  {/* 스탠다드 (추천) */}
+                  <button
+                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-standard-550")}
+                    className="w-full p-4 bg-blue-600 rounded-2xl text-left hover:bg-blue-700 transition relative overflow-hidden shadow-lg shadow-blue-200"
+                  >
+                    <div className="absolute top-2 right-12 bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">추천</div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover border-2 border-white/30" />
+                        <div>
+                          <p className="font-black text-white text-sm">스탠다드 팩</p>
+                          <p className="text-xs text-blue-200">550 Sori</p>
+                        </div>
+                      </div>
+                      <span className="font-black text-white text-lg">$8</span>
+                    </div>
+                  </button>
+
+                  {/* 프리미엄 */}
+                  <button
+                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-premium-1400")}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover" />
+                        <div>
+                          <p className="font-black text-slate-800 text-sm group-hover:text-blue-700">프리미엄 팩</p>
+                          <p className="text-xs text-slate-500">1,400 Sori</p>
+                        </div>
+                      </div>
+                      <span className="font-black text-slate-800 text-lg">$15</span>
+                    </div>
+                  </button>
+
+                  {/* 울트라 */}
+                  <button
+                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-ultra-3500")}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover" />
+                        <div>
+                          <p className="font-black text-slate-800 text-sm group-hover:text-blue-700">울트라 팩</p>
+                          <p className="text-xs text-slate-500">3,500 Sori</p>
+                        </div>
+                      </div>
+                      <span className="font-black text-slate-800 text-lg">$30</span>
+                    </div>
+                  </button>
+
+                  {/* 출석 체크 */}
+                  <button
+                    onClick={() => { setShowPaymentModal(false); setShowCheckinModal(true); }}
+                    className="w-full py-3 bg-orange-50 text-orange-600 border border-orange-200 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-100 transition"
+                  >
+                    ✅ 오늘의 출석 체크 — 무료 1 Sori
+                  </button>
+                </div>
+
+                {/* 크레딧 소비 안내 */}
+                <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">소리 소비 안내</p>
+                  <div className="grid grid-cols-2 gap-1 text-xs text-slate-600">
+                    <span>🎙️ 발음 분석 — 1 Sori</span>
+                    <span>💬 자유회화 — 2 Sori/턴</span>
+                    <span>📝 회화 피드백 — 3 Sori</span>
+                    <span>🌏 번역 — 1 Sori</span>
+                    <span className="col-span-2">🔤 단어 검색 — 무료</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 히스토리 */}
+              <div className="px-5 pb-5 border-t border-slate-100 pt-4">
               <div className="pt-6 border-t border-slate-100">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1"><History size={14} /> 최근 사용 내역</h3>
+                  <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1"><History size={14} /> Sori 사용 내역</h3>
                   <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
                     <button onClick={() => setHistoryTab("earn")} className={`px-3 py-1 text-xs font-bold rounded-md transition ${historyTab === "earn" ? "bg-white shadow text-slate-800" : "text-slate-400"}`}>획득</button>
                     <button onClick={() => setHistoryTab("spend")} className={`px-3 py-1 text-xs font-bold rounded-md transition ${historyTab === "spend" ? "bg-white shadow text-slate-800" : "text-slate-400"}`}>차감</button>
@@ -1210,9 +1295,9 @@ export default function Home() {
                       </button>
                       {showSpendStats && (
                         <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs mb-2 animate-in slide-in-from-top-2">
-                          <div className="flex justify-between mb-1"><span>단어/문장 연습</span><span className="font-bold">{getSpendStats().word + getSpendStats().sentence} 토큰</span></div>
-                          <div className="flex justify-between mb-1"><span>실전/자유 회화</span><span className="font-bold">{getSpendStats().chat} 토큰</span></div>
-                          <div className="flex justify-between border-t pt-1 mt-1"><span>기타(번역 등)</span><span className="font-bold">{getSpendStats().etc} 토큰</span></div>
+                          <div className="flex justify-between mb-1"><span>단어/문장 연습</span><span className="font-bold">{getSpendStats().word + getSpendStats().sentence} Sori</span></div>
+                          <div className="flex justify-between mb-1"><span>실전/자유 회화</span><span className="font-bold">{getSpendStats().chat} Sori</span></div>
+                          <div className="flex justify-between border-t pt-1 mt-1"><span>기타(번역 등)</span><span className="font-bold">{getSpendStats().etc} Sori</span></div>
                         </div>
                       )}
                     </div>

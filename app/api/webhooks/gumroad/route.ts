@@ -10,10 +10,10 @@ import { FieldValue } from "firebase-admin/firestore";
 // ── Gumroad 상품 ID → 토큰 수량 매핑 ────────────────────────
 // Gumroad 상품 등록 후 실제 permalink로 교체
 const PRODUCT_TOKEN_MAP: Record<string, number> = {
-  "sori_token_100":  100,   // 2,900원 → 100토큰
-  "sori_token_250":  250,   // 5,900원 → 250토큰
-  "sori_token_500":  500,   // 9,900원 → 500토큰 (추후 추가)
-  "sori_token_1000": 1000,  // 17,900원 → 1000토큰 (추후 추가)
+  "sori-starter-200":  200,   // $4  → 200 Sori
+  "sori-standard-550": 550,   // $8  → 550 Sori
+  "sori-premium-1400": 1400,  // $15 → 1,400 Sori
+  "sori-ultra-3500":   3500,  // $30 → 3,500 Sori
 };
 
 // ── 교재 상품 ID → Step 번호 매핑 ───────────────────────────
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       await userRef.collection("inbox").add({
         from: "소리튜터 운영진",
         title: `✅ ${tokenAmount}토큰 충전 완료!`,
-        content: `Gumroad 결제가 확인되어 ${tokenAmount}토큰이 자동 충전되었습니다.`,
+        content: `Gumroad 결제가 확인되어 ${tokenAmount} Sori가 자동 충전되었습니다.`,
         date: FieldValue.serverTimestamp(),
         read: false,
       });
