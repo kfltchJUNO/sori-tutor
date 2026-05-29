@@ -1169,9 +1169,12 @@ export default function Home() {
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+
             {/* 헤더 */}
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-5 text-white flex-none relative">
-              <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-white/60 hover:text-white transition"><X size={20} /></button>
+              <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-white/60 hover:text-white transition">
+                <X size={20} />
+              </button>
               <div className="flex items-center gap-3">
                 <img src="/sori.jpg" alt="소리" className="w-10 h-10 rounded-full object-cover border-2 border-white/20" />
                 <div>
@@ -1181,16 +1184,16 @@ export default function Home() {
               </div>
             </div>
 
+            {/* 바디 */}
             <div className="flex-1 overflow-y-auto scrollbar-hide">
+
               {/* 패키지 */}
               <div className="p-5">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">크레딧 패키지 / Credit Packages</p>
                 <div className="grid gap-3">
-                  {/* 스타터 */}
-                  <button
-                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-starter-200")}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group"
-                  >
+
+                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-starter-200")}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover" />
@@ -1203,12 +1206,9 @@ export default function Home() {
                     </div>
                   </button>
 
-                  {/* 스탠다드 (추천) */}
-                  <button
-                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-standard-550")}
-                    className="w-full p-4 bg-blue-600 rounded-2xl text-left hover:bg-blue-700 transition relative overflow-hidden shadow-lg shadow-blue-200"
-                  >
-                    <div className="absolute top-2 right-12 bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">추천</div>
+                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-standard-550")}
+                    className="w-full p-4 bg-blue-600 rounded-2xl text-left hover:bg-blue-700 transition relative overflow-hidden shadow-lg shadow-blue-200">
+                    <div className="absolute top-2 right-14 bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">추천</div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover border-2 border-white/30" />
@@ -1221,11 +1221,8 @@ export default function Home() {
                     </div>
                   </button>
 
-                  {/* 프리미엄 */}
-                  <button
-                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-premium-1400")}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group"
-                  >
+                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-premium-1400")}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover" />
@@ -1238,11 +1235,8 @@ export default function Home() {
                     </div>
                   </button>
 
-                  {/* 울트라 */}
-                  <button
-                    onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-ultra-3500")}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group"
-                  >
+                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-ultra-3500")}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <img src="/sori.jpg" alt="소리" className="w-8 h-8 rounded-full object-cover" />
@@ -1255,16 +1249,13 @@ export default function Home() {
                     </div>
                   </button>
 
-                  {/* 출석 체크 */}
-                  <button
-                    onClick={() => { setShowPaymentModal(false); setShowCheckinModal(true); }}
-                    className="w-full py-3 bg-orange-50 text-orange-600 border border-orange-200 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-100 transition"
-                  >
+                  <button onClick={() => { setShowPaymentModal(false); setShowCheckinModal(true); }}
+                    className="w-full py-3 bg-orange-50 text-orange-600 border border-orange-200 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-100 transition">
                     ✅ 오늘의 출석 체크 — 무료 1 Sori
                   </button>
                 </div>
 
-                {/* 크레딧 소비 안내 */}
+                {/* 소비 안내 */}
                 <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">소리 소비 안내</p>
                   <div className="grid grid-cols-2 gap-1 text-xs text-slate-600">
@@ -1279,9 +1270,10 @@ export default function Home() {
 
               {/* 히스토리 */}
               <div className="px-5 pb-5 border-t border-slate-100 pt-4">
-              <div className="pt-6 border-t border-slate-100">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1"><History size={14} /> Sori 사용 내역</h3>
+                  <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1">
+                    <History size={14} /> Sori 사용 내역
+                  </h3>
                   <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
                     <button onClick={() => setHistoryTab("earn")} className={`px-3 py-1 text-xs font-bold rounded-md transition ${historyTab === "earn" ? "bg-white shadow text-slate-800" : "text-slate-400"}`}>획득</button>
                     <button onClick={() => setHistoryTab("spend")} className={`px-3 py-1 text-xs font-bold rounded-md transition ${historyTab === "spend" ? "bg-white shadow text-slate-800" : "text-slate-400"}`}>차감</button>
@@ -1291,7 +1283,8 @@ export default function Home() {
                   {historyTab === "spend" && (
                     <div className="mb-2 px-2">
                       <button onClick={() => setShowSpendStats(!showSpendStats)} className="w-full py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 flex items-center justify-center gap-1 hover:bg-slate-50 mb-2">
-                        {showSpendStats ? <TrendingDown size={14} /> : <PieChart size={14} />} {showSpendStats ? "지출 통계 접기" : "지출 유형별 분석"}
+                        {showSpendStats ? <TrendingDown size={14} /> : <PieChart size={14} />}
+                        {showSpendStats ? "지출 통계 접기" : "지출 유형별 분석"}
                       </button>
                       {showSpendStats && (
                         <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs mb-2 animate-in slide-in-from-top-2">
@@ -1320,11 +1313,11 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
       )}
-
       {/* 번역 모달 */}
       {showTranslateModal && translation && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
