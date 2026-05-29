@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       const userRef = adminDb.collection("sori_users").doc(buyerEmail);
       const snap    = await userRef.get();
 
-      if (!snap.exists()) {
+      if (!snap.exists) {
         // 앱 미가입 구매자 — 대기 상태로 저장 (로그인 시 처리)
         await adminDb.collection("sori_pending_charges").add({
           email: buyerEmail,
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       const userRef = adminDb.collection("sori_users").doc(buyerEmail);
       const snap    = await userRef.get();
 
-      if (!snap.exists()) {
+      if (!snap.exists) {
         // 미가입자 라이선스 대기
         await adminDb.collection("sori_pending_licenses").add({
           email: buyerEmail,
