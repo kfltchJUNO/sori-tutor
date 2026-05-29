@@ -545,7 +545,7 @@ export default function AdminPage() {
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">유형</label>
                 <select value={genType} onChange={e => setGenType(e.target.value as any)}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="word">단어</option>
                   <option value="sentence">문장</option>
                   <option value="dialogue">담화</option>
@@ -554,28 +554,28 @@ export default function AdminPage() {
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">생성 개수</label>
                 <input type="number" min={1} max={20} value={genCount} onChange={e => setGenCount(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">Step (1~8)</label>
                 <input type="number" min={1} max={8} value={genStep} onChange={e => setGenStep(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
                 <input type="number" min={1} value={genUnit} onChange={e => setGenUnit(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
             <div className="mb-4">
               <label className="text-xs font-bold text-slate-500 block mb-1">카테고리 *</label>
               <input value={genCategory} onChange={e => setGenCategory(e.target.value)} placeholder="예: 음식, 직장 생활, 여행"
-                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="mb-6">
               <label className="text-xs font-bold text-slate-500 block mb-1">문법 힌트 (선택)</label>
               <input value={genGrammar} onChange={e => setGenGrammar(e.target.value)} placeholder="예: -아/어서 (이유)"
-                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button onClick={handleGenerate} disabled={generating}
               className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-black text-base shadow-lg hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2 disabled:opacity-60">
@@ -629,7 +629,7 @@ export default function AdminPage() {
                       {editingDraft === draft.id ? (
                         <div>
                           <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-                            className="w-full h-48 p-3 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                            className="w-full h-48 p-3 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                           <div className="flex gap-2 mt-2">
                             <button onClick={() => { try { approveDraft(draft.id, JSON.parse(editContent)); } catch { alert("JSON 오류"); } }}
                               className="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold text-sm">수정된 내용으로 승인</button>
@@ -681,11 +681,20 @@ export default function AdminPage() {
                 <div className="mb-4">
                   <label className="text-xs font-bold text-slate-500 block mb-1">항목 선택</label>
                   <select value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">— 항목을 선택하세요 —</option>
-                    {audioDocs.map(d => (
-                      <option key={d.id} value={d.id}>{d.text ?? d.id} {d.category ? `(${d.category})` : ""} {d.has_audio ? "🎵" : ""}</option>
+                    {audioDocs.filter(d => !d.audio_path).map(d => (
+                      <option key={d.id} value={d.id}>{d.text ?? d.id} {d.category ? `(${d.category})` : ""}</option>
                     ))}
+                    {audioDocs.some(d => d.audio_path) && (
+                      <optgroup label="── 이미 등록됨 (교체하려면 아래 목록에서 삭제 후 재업로드) ──">
+                        {audioDocs.filter(d => d.audio_path).map(d => (
+                          <option key={d.id} value={d.id} disabled style={{ color: "#94a3b8" }}>
+                            🎵 {d.text ?? d.id} {d.category ? `(${d.category})` : ""} — 등록됨
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
                 <input ref={fileInputRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleSingleUpload} disabled={!selectedDocId || uploading} className="hidden" />

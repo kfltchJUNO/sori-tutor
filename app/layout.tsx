@@ -1,39 +1,37 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-// 🔥 [중요] vm이 아니라 next/script에서 가져와야 합니다.
-import Script from "next/script"; 
-
-const inter = Inter({ subsets: ["latin"] });
+import Script from "next/script";
 
 export const metadata: Metadata = {
-  title: "🗣️ Sori-Tutor", 
-  description: "내 손 안의 한국어 발음 선생님, 소리 튜터(Sori-Tutor)", 
-  icons: {
-    icon: "/favicon.ico",
+  title: "Sori-Tutor | AI Korean Pronunciation Coach · 소리튜터",
+  description:
+    "AI-powered Korean pronunciation coaching. Speak Korean like a native with real-time phoneme-level feedback. TOPIK I~II curriculum. 소리튜터 — AI 한국어 발음 교정 서비스.",
+  keywords: [
+    "Korean pronunciation", "한국어 발음", "TOPIK", "Korean language learning",
+    "AI Korean tutor", "소리튜터", "한국어 회화", "발음 교정",
+  ],
+  openGraph: {
+    title: "Sori-Tutor | AI Korean Pronunciation Coach",
+    description: "Speak Korean like a native. AI analyzes your pronunciation in real time.",
+    url: "https://sori-tutor.vercel.app",
+    siteName: "Sori-Tutor",
+    locale: "en_US",
+    type: "website",
   },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko">
+    <html lang="en">
       <head>
-        {/* 🔥 [수정] 
-          1. 일반 <script> 태그는 삭제했습니다. (Next.js Script와 중복됨)
-          2. Script 컴포넌트를 사용하여 최적화합니다.
-        */}
+        {/* Google AdSense */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4585319125929329"
           crossOrigin="anonymous"
-          strategy="afterInteractive" 
+          strategy="afterInteractive"
         />
       </head>
-      <body className={inter.className}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
