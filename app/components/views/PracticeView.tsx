@@ -142,13 +142,15 @@ export default function PracticeView({
               </div>
             </div>
           </div>
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3 relative">
-            <button
-              onClick={onTranslate}
-              className="absolute top-4 right-4 text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded shadow-sm flex items-center gap-1"
-            >
-              <Languages size={12} /> 번역 (0.5🪙)
-            </button>
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3">
+            <div className="flex justify-end mb-1">
+              <button
+                onClick={onTranslate}
+                className="text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded-lg shadow-sm flex items-center gap-1 hover:bg-blue-50 transition"
+              >
+                <Languages size={12} /> 번역 (0.5🪙)
+              </button>
+            </div>
             <div className="flex items-start gap-2">
               <CheckCircle size={16} className="text-blue-600 mt-0.5 shrink-0" />
               <div>
@@ -274,23 +276,23 @@ export default function PracticeView({
               AI가 소리를 분석 중입니다... 🎧
             </div>
           )}
-          {!recording && !audioUrl && !loading && isShadowingMode && courseType !== "dialogue" && (
-            {countdown !== null ? (
-              /* 카운트다운 표시 */
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-16 h-16 rounded-full bg-purple-100 border-4 border-purple-500 flex items-center justify-center">
-                  <span className="text-3xl font-black text-purple-600 animate-pulse">{countdown}</span>
-                </div>
-                <span className="text-xs text-purple-600 font-bold">준비하세요!</span>
+          {/* 쉐도잉 모드 — 카운트다운 */}
+          {!recording && !audioUrl && !loading && isShadowingMode && courseType !== "dialogue" && countdown !== null && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-16 h-16 rounded-full bg-purple-100 border-4 border-purple-500 flex items-center justify-center">
+                <span className="text-3xl font-black text-purple-600 animate-pulse">{countdown}</span>
               </div>
-            ) : (
-              <button
-                onClick={handleShadowingPlay}
-                className="w-16 h-16 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center hover:scale-105 transition animate-pulse"
-              >
-                <Headphones size={28} />
-              </button>
-            )}
+              <span className="text-xs text-purple-600 font-bold">준비하세요!</span>
+            </div>
+          )}
+          {/* 쉐도잉 모드 — 재생 버튼 */}
+          {!recording && !audioUrl && !loading && isShadowingMode && courseType !== "dialogue" && countdown === null && (
+            <button
+              onClick={handleShadowingPlay}
+              className="w-16 h-16 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center hover:scale-105 transition animate-pulse"
+            >
+              <Headphones size={28} />
+            </button>
           )}
           {!recording && !audioUrl && !loading && (!isShadowingMode || courseType === "dialogue") && (
             <button
