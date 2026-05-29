@@ -1,7 +1,7 @@
 "use client";
 // components/views/PracticeView.tsx
 // AdSense push는 ins 요소가 DOM에 마운트된 후 실행해야 함
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import AdUnit from "@/app/components/AdUnit";
 import { X, Volume2, CheckCircle, Info, Languages, Mic, ChevronLeft, Headphones } from "lucide-react";
 import type { AnalysisResult, CourseType } from "@/types";
@@ -48,6 +48,43 @@ export default function PracticeView({
   onStartRecording, onStopRecording, onCancelAudio, onAnalyze, onNextDialogue,
   isAllMyLinesFinished,
 }: Props) {
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  // 쉐도잉: 음성 재생 완료 후 카운트다운 → 녹음 시작
+  const handleShadowingPlay = useCallback(() => {
+    const audioSrc = currentProblem?.audio_path;
+    const text = currentProblem?.text ?? "";
+
+    const startCountdown = () => {
+      setCountdown(3);
+      let count = 3;
+      const timer = setInterval(() => {
+        count -= 1;
+        if (count > 0) {
+          setCountdown(count);
+        } else {
+          clearInterval(timer);
+          setCountdown(null);
+          onStartRecording();
+        }
+      }, 800);
+    };
+
+    if (audioSrc) {
+      // MP3 파일 — onended 이벤트로 정확한 종료 감지
+      const audio = new Audio(audioSrc);
+      audio.onended = () => startCountdown();
+      audio.onerror = () => startCountdown(); // 로드 실패 시 바로 시작
+      audio.play().catch(() => startCountdown());
+    } else {
+      // TTS — onPlayTTS 후 음성 길이 추정 (음절 수 × 250ms + 여유 500ms)
+      onPlayTTS(text, null, null);
+      const syllableCount = (text.match(/[가-힣]/g) ?? []).length || text.length / 2;
+      const estimatedDuration = Math.max(syllableCount * 250 + 500, 2000);
+      setTimeout(startCountdown, estimatedDuration);
+    }
+  }, [currentProblem, onStartRecording, onPlayTTS]);
+
   return (
     <div className="flex flex-col h-full pb-24">
       {/* 상단 컨트롤 */}
@@ -238,20 +275,22 @@ export default function PracticeView({
             </div>
           )}
           {!recording && !audioUrl && !loading && isShadowingMode && courseType !== "dialogue" && (
-            <button
-              onClick={() => {
-                if (currentProblem.audio_path) {
-                  new Audio(currentProblem.audio_path).play();
-                  setTimeout(onStartRecording, 500);
-                } else {
-                  onPlayTTS(currentProblem.text);
-                  setTimeout(onStartRecording, 2000);
-                }
-              }}
-              className="w-16 h-16 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center hover:scale-105 transition animate-pulse"
-            >
-              <Headphones size={28} />
-            </button>
+            {countdown !== null ? (
+              /* 카운트다운 표시 */
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-16 h-16 rounded-full bg-purple-100 border-4 border-purple-500 flex items-center justify-center">
+                  <span className="text-3xl font-black text-purple-600 animate-pulse">{countdown}</span>
+                </div>
+                <span className="text-xs text-purple-600 font-bold">준비하세요!</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleShadowingPlay}
+                className="w-16 h-16 rounded-full bg-purple-600 text-white shadow-xl flex items-center justify-center hover:scale-105 transition animate-pulse"
+              >
+                <Headphones size={28} />
+              </button>
+            )}
           )}
           {!recording && !audioUrl && !loading && (!isShadowingMode || courseType === "dialogue") && (
             <button

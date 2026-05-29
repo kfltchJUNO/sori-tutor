@@ -207,6 +207,8 @@ export default function Home() {
       setHearts(data.role === "guest" ? (data.free_hearts ?? 3) : 3);
       fetchTokenLogs(user.email);
       checkNewMail(user.email);
+      // Gumroad 미가입 구매자 대기 토큰/라이선스 처리
+      processPendingCharges(user.email);
     } else {
       await setDoc(userRef, {
         email: user.email, name: user.displayName, role: "guest",
@@ -217,6 +219,33 @@ export default function Home() {
       });
       setUserRole("guest"); setHearts(3); setShowNicknameModal(true);
     }
+  };
+
+  // ── Gumroad 미가입 대기 처리 ─────────
+  const processPendingCharges = async (email: string) => {
+    try {
+      const { db: firestoreDb } = await import("@/lib/firebase");
+      const { collection: col, query: q, where, getDocs, updateDoc, doc: firestoreDoc, increment: inc } = await import("firebase/firestore");
+
+      // 대기 토큰
+      const tokenSnap = await getDocs(q(col(firestoreDb, "sori_pending_charges"), where("email", "==", email), where("processed", "==", false)));
+      for (const d of tokenSnap.docs) {
+        const data = d.data();
+        await updateDoc(firestoreDoc(firestoreDb, "sori_users", email), { tokens: inc(data.tokenAmount) });
+        await updateDoc(firestoreDoc(firestoreDb, "sori_pending_charges", d.id), { processed: true });
+        setTokens(p => p + data.tokenAmount);
+        alert(`🎉 Gumroad 구매 ${data.tokenAmount}토큰이 충전되었습니다!`);
+      }
+
+      // 대기 라이선스
+      const licenseSnap = await getDocs(q(col(firestoreDb, "sori_pending_licenses"), where("email", "==", email), where("processed", "==", false)));
+      for (const d of licenseSnap.docs) {
+        const data = d.data();
+        await updateDoc(firestoreDoc(firestoreDb, "sori_users", email), { purchased_steps: (await import("firebase/firestore")).then(m => m.arrayUnion(data.step)) });
+        await updateDoc(firestoreDoc(firestoreDb, "sori_pending_licenses", d.id), { processed: true });
+        setPurchasedSteps(p => [...new Set([...p, data.step])]);
+      }
+    } catch (e) { console.error("Pending charge process error:", e); }
   };
 
   // ── 토큰 로그 ─────────────────────────
@@ -393,7 +422,7 @@ export default function Home() {
     setChatStatus("select_persona");
   };
 
-  const startChatWithPersona = (personaId: string) => {
+  const startChatWithPersona = async (personaId: string) => {
     setSelectedPersona(personaId);
     const persona = PERSONAS.find(p => p.id === personaId);
     const suffix = (persona?.name.charCodeAt(persona.name.length - 1) ?? 0 - 0xac00) % 28 > 0 ? "이에요" : "예요";
@@ -401,7 +430,24 @@ export default function Home() {
     setChatHistory([{ role: "model", text: greeting }]);
     setChatStatus("active");
     setChatFeedback(null);
-    handleGoogleTTS(greeting, null, persona?.voice);
+
+    // ttsLoading 상태와 무관하게 인사말 TTS 직접 호출
+    try {
+      setTtsLoading(true);
+      const formData = new FormData();
+      formData.append("action", "tts_simple");
+      formData.append("text", greeting);
+      formData.append("voiceName", persona?.voice ?? "ko-KR-Chirp3-HD-Zephyr");
+      const res = await fetch("/api/chat", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.audioContent) {
+        new Audio(`data:audio/mp3;base64,${data.audioContent}`).play();
+      }
+    } catch (e) {
+      console.error("인사말 TTS 실패:", e);
+    } finally {
+      setTtsLoading(false);
+    }
   };
 
   // ── 회화 전송 — A: 서버 토큰 차감 ────
@@ -609,7 +655,12 @@ export default function Home() {
   const handleWordClick = async (word: string, context: string) => {
     const cleanWord = word.replace(/[.,?!~]/g, "");
     if (!cleanWord) return;
-    if (userRole !== "guest" && tokens < 0.5) { alert("0.5 토큰 필요"); setShowPaymentModal(true); return; }
+    // student 계정만 토큰 차감 (guest는 무료)
+    if (userRole === "student" && tokens < 0.5) {
+      alert("0.5 토큰이 필요합니다.");
+      setShowPaymentModal(true);
+      return;
+    }
     setLoading(true);
     try {
       const formData = new FormData();
@@ -621,11 +672,16 @@ export default function Home() {
       if (data.error) throw new Error(data.error);
       setSelectedWordData(data);
       setShowWordModal(true);
-      if (userRole !== "guest") {
+      // student만 토큰 차감
+      if (userRole === "student") {
         const spendRes = await spendToken("단어 뜻 검색");
         if (spendRes.success) setTokens(spendRes.remaining ?? tokens - 0.5);
       }
-    } catch (e) { alert("단어 정보 로딩 실패"); } finally { setLoading(false); }
+    } catch (e) {
+      alert("단어 정보 로딩 실패");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const saveVocabulary = async () => {
