@@ -21,7 +21,7 @@ import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, setDoc, collection, getDocs, query, where,
   addDoc, serverTimestamp, orderBy, updateDoc, increment,
-  limit, writeBatch,
+  limit, writeBatch, arrayUnion,
 } from "firebase/firestore";
 import {
   Mic, MessageSquare, Trophy, X, ChevronLeft, Star, Heart, Coins,
@@ -224,25 +224,28 @@ export default function Home() {
   // ── Gumroad 미가입 대기 처리 ─────────
   const processPendingCharges = async (email: string) => {
     try {
-      const { db: firestoreDb } = await import("@/lib/firebase");
-      const { collection: col, query: q, where, getDocs, updateDoc, doc: firestoreDoc, increment: inc } = await import("firebase/firestore");
-
       // 대기 토큰
-      const tokenSnap = await getDocs(q(col(firestoreDb, "sori_pending_charges"), where("email", "==", email), where("processed", "==", false)));
+      const tokenSnap = await getDocs(
+        query(collection(db, "sori_pending_charges"),
+          where("email", "==", email), where("processed", "==", false))
+      );
       for (const d of tokenSnap.docs) {
         const data = d.data();
-        await updateDoc(firestoreDoc(firestoreDb, "sori_users", email), { tokens: inc(data.tokenAmount) });
-        await updateDoc(firestoreDoc(firestoreDb, "sori_pending_charges", d.id), { processed: true });
+        await updateDoc(doc(db, "sori_users", email), { tokens: increment(data.tokenAmount) });
+        await updateDoc(doc(db, "sori_pending_charges", d.id), { processed: true });
         setTokens(p => p + data.tokenAmount);
         alert(`🎉 Gumroad 구매 ${data.tokenAmount}토큰이 충전되었습니다!`);
       }
 
       // 대기 라이선스
-      const licenseSnap = await getDocs(q(col(firestoreDb, "sori_pending_licenses"), where("email", "==", email), where("processed", "==", false)));
+      const licenseSnap = await getDocs(
+        query(collection(db, "sori_pending_licenses"),
+          where("email", "==", email), where("processed", "==", false))
+      );
       for (const d of licenseSnap.docs) {
         const data = d.data();
-        await updateDoc(firestoreDoc(firestoreDb, "sori_users", email), { purchased_steps: (await import("firebase/firestore")).then(m => m.arrayUnion(data.step)) });
-        await updateDoc(firestoreDoc(firestoreDb, "sori_pending_licenses", d.id), { processed: true });
+        await updateDoc(doc(db, "sori_users", email), { purchased_steps: arrayUnion(data.step) });
+        await updateDoc(doc(db, "sori_pending_licenses", d.id), { processed: true });
         setPurchasedSteps(p => [...new Set([...p, data.step])]);
       }
     } catch (e) { console.error("Pending charge process error:", e); }
