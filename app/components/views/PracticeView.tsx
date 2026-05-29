@@ -1,5 +1,8 @@
 "use client";
 // components/views/PracticeView.tsx
+// AdSense push는 ins 요소가 DOM에 마운트된 후 실행해야 함
+import { useEffect } from "react";
+import AdUnit from "@/app/components/AdUnit";
 import { X, Volume2, CheckCircle, Info, Languages, Mic, ChevronLeft, Headphones } from "lucide-react";
 import type { AnalysisResult, CourseType } from "@/types";
 
@@ -131,6 +134,10 @@ export default function PracticeView({
                 <p className="text-xs text-slate-700 whitespace-pre-wrap">{translation}</p>
               </div>
             )}
+          </div>
+          {/* 광고 #3: 분석 결과 확인 후 */}
+          <div className="w-full bg-slate-50 rounded-xl overflow-hidden my-2 border border-slate-100">
+            <AdUnit slot="SLOT_ID_3" format="rectangle" />
           </div>
           <div className="flex flex-col gap-2 shrink-0 bg-white pt-2 border-t">
             <button onClick={onRetry} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2">

@@ -33,6 +33,7 @@ import { useCurriculum } from "@/hooks/useCurriculum";
 import { useFeedbackVoices } from "@/hooks/useFeedbackVoices";
 import { playScoreFeedback, getTier } from "@/lib/scoreSound";
 import LandingPage from "./components/LandingPage";
+import AdUnit from "./components/AdUnit";
 
 // ────────────────────────────────────────
 const WELCOME_MESSAGE = {
@@ -151,15 +152,6 @@ export default function Home() {
   // ── 훅 ────────────────────────────────
   const { spendToken, claimCheckin } = useTokenTransaction();
   const feedbackVoices = useFeedbackVoices();
-
-  // 홈 화면 진입 시 광고 초기화
-  useEffect(() => {
-    if (viewMode !== "home") return;
-    try {
-      const w = window as any;
-      (w.adsbygoogle = w.adsbygoogle || []).push({});
-    } catch {}
-  }, [viewMode]);
 
   // ── E: 딥링크 처리 ──────────────────
   useDeepLink(async (step, unit) => {
@@ -878,17 +870,9 @@ export default function Home() {
               onOpenNickname={() => setShowNicknameModal(true)}
             />
 
-            {/* 광고 #4: 홈 화면 하단 (코스 선택 아래) */}
+            {/* 광고 #4: 홈 화면 하단 */}
             <div className="w-full mt-2 rounded-2xl overflow-hidden bg-slate-50 border border-slate-100">
-              <p className="text-center text-[9px] text-slate-300 pt-1 tracking-widest uppercase">Advertisement</p>
-              <ins
-                className="adsbygoogle"
-                style={{ display: "block" }}
-                data-ad-client="ca-pub-4585319125929329"
-                data-ad-slot="SLOT_ID_4"
-                data-ad-format="auto"
-                data-full-width-responsive="true"
-              />
+              <AdUnit slot="SLOT_ID_4" format="auto" />
             </div>
           </div>
         )}

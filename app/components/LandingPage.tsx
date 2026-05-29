@@ -22,13 +22,6 @@ export default function LandingPage({ onUserChange }: { onUserChange: (u: any) =
   const [loading, setLoading]     = useState(true);
 
   useEffect(() => {
-    // AdSense 광고 초기화
-    try {
-      const w = window as any;
-      (w.adsbygoogle = w.adsbygoogle || []).push({});
-      (w.adsbygoogle = w.adsbygoogle || []).push({});
-    } catch {}
-
     // 폰트 로드
     const link = document.createElement("link");
     link.rel  = "stylesheet"; link.href = FONT_LINK;
