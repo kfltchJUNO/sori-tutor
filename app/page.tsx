@@ -15,6 +15,8 @@ import CheckinModal from "./components/CheckinModal";
 import LicenseModal, { useDeepLink } from "./components/LicenseModal";
 import HomeView from "./components/views/HomeView";
 import PracticeView from "./components/views/PracticeView";
+import AudioWaveform from "./components/AudioWaveform";
+import { PERSONAS } from "@/types";
 
 import { db, auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
@@ -44,19 +46,6 @@ const WELCOME_MESSAGE = {
   read: true,
   content: `안녕하세요, 새로운 학습자님! 👋\n\n소리튜터(Sori-Tutor)는 AI와 함께 발음을 교정하고 회화를 연습하는 공간입니다.`,
 };
-
-const PERSONAS = [
-  { id: "su", name: "수경", role: "대학생", desc: "활발한 20대 대학생", color: "bg-pink-50 border-pink-200", img: "/images/수경.png", voice: "ko-KR-Chirp3-HD-Zephyr" },
-  { id: "min", name: "민철", role: "카페 사장", desc: "감성적이고 따뜻한 30대 사장님", color: "bg-amber-50 border-amber-200", img: "/images/민철.png", voice: "ko-KR-Chirp3-HD-Rasalgethi" },
-  { id: "jin", name: "진성", role: "면접관", desc: "논리적이고 깐깐한 대기업 부장님", color: "bg-slate-50 border-slate-300", img: "/images/진성.png", voice: "ko-KR-Chirp3-HD-Algenib" },
-  { id: "seol", name: "설아", role: "K-Culture 팬", desc: "텐션 높은 K-POP/드라마 덕후", color: "bg-purple-50 border-purple-200", img: "/images/설아.png", voice: "ko-KR-Chirp3-HD-Despina" },
-  { id: "do", name: "도식", role: "트레이너", desc: "에너지 넘치는 헬스 트레이너", color: "bg-blue-50 border-blue-200", img: "/images/도식.png", voice: "ko-KR-Chirp3-HD-Achird" },
-  { id: "ju", name: "주호", role: "여행 가이드", desc: "박식하고 친절한 한국 여행 가이드", color: "bg-green-50 border-green-200", img: "/images/주호.png", voice: "ko-KR-Chirp3-HD-Sadachbia" },
-  { id: "hye", name: "혜선", role: "상담사", desc: "지친 마음을 위로해주는 심리 상담가", color: "bg-rose-50 border-rose-200", img: "/images/혜선.png", voice: "ko-KR-Chirp3-HD-Aoede" },
-  { id: "woo", name: "우주", role: "중학생", desc: "축구와 게임을 좋아하는 개구쟁이", color: "bg-yellow-50 border-yellow-200", img: "/images/우주.png", voice: "ko-KR-Chirp3-HD-Charon" },
-  { id: "hyun", name: "현성", role: "소설가", desc: "지적이고 시니컬한 소설 작가", color: "bg-stone-50 border-stone-200", img: "/images/현성.png", voice: "ko-KR-Chirp3-HD-Zubenelgenubi" },
-  { id: "sun", name: "순자", role: "국밥집 할머니", desc: "구수한 사투리와 정이 넘치는 할머니", color: "bg-orange-50 border-orange-200", img: "/images/순자.png", voice: "ko-KR-Chirp3-HD-Vindemiatrix" },
-];
 
 // ────────────────────────────────────────
 export default function Home() {
@@ -193,22 +182,42 @@ export default function Home() {
 
     if (snap.exists()) {
       const data = snap.data();
-      setUserRole(data.role ?? "guest");
+      let role = data.role ?? "guest";
+      const userTokens = data.tokens ?? 0;
+      const userSteps = data.purchased_steps ?? [];
+
+      // 토큰 보유 또는 교재 구매 시 student로 자동 승격
+      if (role === "guest" && (userTokens > 0 || userSteps.length > 0)) {
+        role = "student";
+        await updateDoc(userRef, { role: "student" });
+      }
+
+      setUserRole(role);
       setUserAlias(data.alias ?? "");
       setSharedMemory(data.shared_memory ?? "");
       setChatCount(data.chat_count ?? 0);
-      setStreak(data.streak ?? 0);
-      setTodayCount(data.last_access_date === today ? (data.today_count ?? 0) : 0);
-      setPurchasedSteps(data.purchased_steps ?? []);  // E: 교재 구매 목록
-      if (data.last_access_date !== today) {
-        await updateDoc(userRef, { last_access_date: today, today_count: 0 });
+      setPurchasedSteps(userSteps);
+      setTokens(userTokens);
+      setHearts(role === "guest" ? (data.free_hearts ?? 3) : 3);
+
+      // Streak (연속 학습) 날짜 검증
+      let currentStreak = data.streak ?? 0;
+      if (data.last_access_date && data.last_access_date !== today) {
+        const lastDate = new Date(data.last_access_date);
+        const todayDate = new Date(today);
+        const diffDays = Math.round((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays > 1) {
+          currentStreak = 0; // 하루 이상 결석 시 streak 리셋
+        }
+        await updateDoc(userRef, { last_access_date: today, today_count: 0, streak: currentStreak });
       }
-      setTokens(data.role === "guest" ? 0 : (data.tokens ?? 0));
-      setHearts(data.role === "guest" ? (data.free_hearts ?? 3) : 3);
+      setStreak(currentStreak);
+      setTodayCount(data.last_access_date === today ? (data.today_count ?? 0) : 0);
+
       fetchTokenLogs(user.email);
       checkNewMail(user.email);
-      // Gumroad 미가입 구매자 대기 토큰/라이선스 처리
-      processPendingCharges(user.email);
+      // 미가입 결제 대기 내역 서버 처리
+      processPendingCharges();
     } else {
       await setDoc(userRef, {
         email: user.email, name: user.displayName, role: "guest",
@@ -221,32 +230,28 @@ export default function Home() {
     }
   };
 
-  // ── Gumroad 미가입 대기 처리 ─────────
-  const processPendingCharges = async (email: string) => {
+  // ── 결제 대기 내역 서버 처리 (클라이언트 직접 조작 제거) ─────────
+  const processPendingCharges = async () => {
     try {
-      // 대기 토큰
-      const tokenSnap = await getDocs(
-        query(collection(db, "sori_pending_charges"),
-          where("email", "==", email), where("processed", "==", false))
-      );
-      for (const d of tokenSnap.docs) {
-        const data = d.data();
-        await updateDoc(doc(db, "sori_users", email), { tokens: increment(data.tokenAmount) });
-        await updateDoc(doc(db, "sori_pending_charges", d.id), { processed: true });
-        setTokens(p => p + data.tokenAmount);
-        alert(`🎉 Gumroad 구매 ${data.tokenAmount}토큰이 충전되었습니다!`);
-      }
-
-      // 대기 라이선스
-      const licenseSnap = await getDocs(
-        query(collection(db, "sori_pending_licenses"),
-          where("email", "==", email), where("processed", "==", false))
-      );
-      for (const d of licenseSnap.docs) {
-        const data = d.data();
-        await updateDoc(doc(db, "sori_users", email), { purchased_steps: arrayUnion(data.step) });
-        await updateDoc(doc(db, "sori_pending_licenses", d.id), { processed: true });
-        setPurchasedSteps(p => [...new Set([...p, data.step])]);
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) return;
+      const res = await fetch("/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: "process_pending" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.chargedTokens > 0) {
+          setTokens(p => p + data.chargedTokens);
+          setUserRole("student");
+          alert(`🎉 결제 대기 중이던 ${data.chargedTokens} Sori가 충전되었습니다!`);
+        }
+        if (data.unlockedSteps?.length > 0) {
+          setPurchasedSteps(p => [...new Set([...p, ...data.unlockedSteps])]);
+          setUserRole("student");
+          alert(`🎉 구매하신 교재 커리큘럼이 활성화되었습니다!`);
+        }
       }
     } catch (e) { console.error("Pending charge process error:", e); }
   };
@@ -285,15 +290,24 @@ export default function Home() {
       newStreak += 1;
       updates.streak = newStreak;
       if (newStreak === 7) {
-        updates.tokens = increment(15);
-        setTokens(p => p + 15);
-        await addDoc(collection(db, "sori_users", currentUser.email, "inbox"), {
-          from: "소리튜터 운영진", title: "🏆 7일 연속 학습 달성 보상!",
-          content: "축하합니다! 👏 15토큰이 지급되었습니다.",
-          date: serverTimestamp(), read: false,
-        });
-        setHasNewMail(true);
-        alert("🎉 7일 연속 학습 달성으로 15토큰이 지급되었습니다!");
+        try {
+          const idToken = await auth.currentUser?.getIdToken();
+          if (idToken) {
+            const earnRes = await fetch("/api/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+              body: JSON.stringify({ action: "earn", reason: "7일 연속 학습 보상" }),
+            });
+            const earnData = await earnRes.json();
+            if (earnData.success) {
+              setTokens(p => p + (earnData.earned ?? 15));
+              setHasNewMail(true);
+              alert("🎉 7일 연속 학습 달성으로 15토큰이 지급되었습니다!");
+            }
+          }
+        } catch (e) {
+          console.error("Streak reward error:", e);
+        }
       }
     }
     setTodayCount(newTodayCount);
@@ -401,9 +415,12 @@ export default function Home() {
     fetchTokenLogs(currentUser.email);
   };
 
-  // ── 수동 충전 ─────────────────────────
-  const handleGumroadBuy = (url: string) => {
-    window.open(url, "_blank");
+  // ── 토큰 충전 (Lemon Squeezy) ─────────────────────────
+  const handleBuyTokens = (url: string) => {
+    const fullUrl = currentUser?.email
+      ? `${url}?checkout[custom][user_id]=${encodeURIComponent(currentUser.email)}`
+      : url;
+    window.open(fullUrl, "_blank");
     setShowPaymentModal(false);
   };
 
@@ -506,7 +523,7 @@ export default function Home() {
   const handleChatFeedback = async () => {
     const currency = userRole === "guest" ? "heart" : "token";
     if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < 2) return setShowPaymentModal(true);
+    if (userRole !== "guest" && tokens < 3) return setShowPaymentModal(true);
     setLoading(true);
     try {
       const formData = new FormData();
@@ -519,7 +536,7 @@ export default function Home() {
       const spendRes = await spendToken("회화 피드백 분석", currency);
       if (!spendRes.success) { alert(spendRes.error); return; }
       if (currency === "heart") setHearts(p => p - 1);
-      else setTokens(spendRes.remaining ?? tokens - 2);
+      else setTokens(spendRes.remaining ?? Math.max(0, tokens - 3));
 
       setChatFeedback(data);
       await updateDoc(doc(db, "sori_users", currentUser.email), { points: increment(10) });
@@ -541,8 +558,8 @@ export default function Home() {
   const handleTranslateFeedback = async () => {
     const currency = userRole === "guest" ? "heart" : "token";
     if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < 0.5) return setShowPaymentModal(true);
-    if (!confirm("번역하시겠습니까? (0.5🪙)")) return;
+    if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
+    if (!confirm("번역하시겠습니까? (1🪙)")) return;
     setLoading(true);
     try {
       const formData = new FormData();
@@ -559,7 +576,7 @@ export default function Home() {
       const spendRes = await spendToken("피드백 번역", currency);
       if (spendRes.success) {
         if (currency === "heart") setHearts(p => p - 1);
-        else setTokens(spendRes.remaining ?? tokens - 0.5);
+        else setTokens(spendRes.remaining ?? Math.max(0, tokens - 1));
       }
       if (!showTranslateModal && viewMode === "freetalking") setShowTranslateModal(true);
     } catch (e) { alert("번역 실패"); } finally { setLoading(false); }
@@ -568,8 +585,8 @@ export default function Home() {
   const handleHistoryTranslate = async (item: any) => {
     const currency = userRole === "guest" ? "heart" : "token";
     if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < 0.5) return setShowPaymentModal(true);
-    if (!confirm("번역하시겠습니까? (0.5🪙)")) return;
+    if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
+    if (!confirm("번역하시겠습니까? (1🪙)")) return;
     const text = item.feedback || item.explanation || item.advice;
     if (!text) return;
     setLoading(true);
@@ -584,7 +601,7 @@ export default function Home() {
       const spendRes = await spendToken("기록 번역", currency);
       if (spendRes.success) {
         if (currency === "heart") setHearts(p => p - 1);
-        else setTokens(spendRes.remaining ?? tokens - 0.5);
+        else setTokens(spendRes.remaining ?? Math.max(0, tokens - 1));
       }
     } catch (e) { alert("오류"); } finally { setLoading(false); }
   };
@@ -644,16 +661,10 @@ export default function Home() {
     setTargetLineIndex(null);
   };
 
-  // ── 단어 검색 — A: 서버 토큰 차감 ────
+  // ── 단어 검색 — 무료 기능 ────
   const handleWordClick = async (word: string, context: string) => {
     const cleanWord = word.replace(/[.,?!~]/g, "");
     if (!cleanWord) return;
-    // student 계정만 토큰 차감 (guest는 무료)
-    if (userRole === "student" && tokens < 0.5) {
-      alert("0.5 토큰이 필요합니다.");
-      setShowPaymentModal(true);
-      return;
-    }
     setLoading(true);
     try {
       const formData = new FormData();
@@ -665,11 +676,6 @@ export default function Home() {
       if (data.error) throw new Error(data.error);
       setSelectedWordData(data);
       setShowWordModal(true);
-      // student만 토큰 차감
-      if (userRole === "student") {
-        const spendRes = await spendToken("단어 뜻 검색");
-        if (spendRes.success) setTokens(spendRes.remaining ?? tokens - 0.5);
-      }
     } catch (e) {
       alert("단어 정보 로딩 실패");
     } finally {
@@ -707,9 +713,9 @@ export default function Home() {
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     const currency = userRole === "guest" ? "heart" : "token";
-    const cost = courseType === "word" ? 0.5 : 1;
+    const cost = 1;
     if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
-    if (userRole === "student" && tokens < cost) return setShowPaymentModal(true);
+    if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
     setLoading(true); setResult(null); setTranslation(null);
 
     let targetText = currentProblem.text; let contextInfo = "";
@@ -739,7 +745,7 @@ export default function Home() {
         const spendRes = await spendToken(reason as any, currency);
         if (spendRes.success) {
           if (currency === "heart") setHearts(p => p - 1);
-          else setTokens(spendRes.remaining ?? tokens - cost);
+          else setTokens(spendRes.remaining ?? Math.max(0, tokens - cost));
         }
 
         await updateDoc(doc(db, "sori_users", currentUser.email), { points: increment(courseType === "word" ? 2 : 3) });
@@ -1099,6 +1105,7 @@ export default function Home() {
             loading={loading}
             recording={recording}
             audioUrl={audioUrl}
+            analyser={analyserRef.current}
             onBack={() => setViewMode("home")}
             onSetMyRole={setMyRole}
             onSetTargetLine={(i) => { setTargetLineIndex(i); setResult(null); setAudioUrl(null); }}
@@ -1125,11 +1132,12 @@ export default function Home() {
                 <button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>
               )}
               {recording && (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center gap-2">
+                  <AudioWaveform analyser={analyserRef.current} isRecording={recording} className="mb-1" />
                   <button onClick={stopRecording} className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100">
-                    <div className="w-6 h-6 bg-white rounded-md" />
+                    <div className="w-6 h-6 bg-red-500 rounded-md" />
                   </button>
-                  <span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span>
+                  <span className="text-xs text-red-500 font-bold">녹음 중입니다... (탭하여 완료)</span>
                 </div>
               )}
               {audioUrl && !recording && !loading && (
@@ -1192,7 +1200,7 @@ export default function Home() {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">크레딧 패키지 / Credit Packages</p>
                 <div className="grid gap-3">
 
-                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-starter-200")}
+                  <button onClick={() => handleBuyTokens("https://sori-tutor.lemonsqueezy.com/buy/sori-starter-200")}
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1206,7 +1214,7 @@ export default function Home() {
                     </div>
                   </button>
 
-                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-standard-550")}
+                  <button onClick={() => handleBuyTokens("https://sori-tutor.lemonsqueezy.com/buy/sori-standard-550")}
                     className="w-full p-4 bg-blue-600 rounded-2xl text-left hover:bg-blue-700 transition relative overflow-hidden shadow-lg shadow-blue-200">
                     <div className="absolute top-2 right-14 bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">추천</div>
                     <div className="flex items-center justify-between">
@@ -1221,7 +1229,7 @@ export default function Home() {
                     </div>
                   </button>
 
-                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-premium-1400")}
+                  <button onClick={() => handleBuyTokens("https://sori-tutor.lemonsqueezy.com/buy/sori-premium-1400")}
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1235,7 +1243,7 @@ export default function Home() {
                     </div>
                   </button>
 
-                  <button onClick={() => handleGumroadBuy("https://sorihelper.gumroad.com/l/sori-ultra-3500")}
+                  <button onClick={() => handleBuyTokens("https://sori-tutor.lemonsqueezy.com/buy/sori-ultra-3500")}
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left hover:border-blue-400 hover:bg-blue-50 transition group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1488,7 +1496,7 @@ export default function Home() {
               </div>
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <span className="text-xs font-bold text-slate-400 block mb-1">예문</span>
-                <p className="text-sm text-slate-600 italic">"{selectedWordData.example}"</p>
+                <p className="text-sm text-slate-600 italic">&ldquo;{selectedWordData.example}&rdquo;</p>
               </div>
             </div>
             <button onClick={saveVocabulary} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2">

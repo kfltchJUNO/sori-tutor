@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Basecamp Korean — Hanbook 프로토타입</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700;900&family=Pretendard:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1C2B33;
+    --mist:#F1F4F1;
+    --paper:#FBFCFB;
+    --pine:#2F6F5E;
+    --pine-dark:#204A3F;
+    --ochre:#B9762E;
+    --sage:#9FB3AC;
+    --sage-light:#DCE5E1;
+    --danger:#A5432F;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--mist);
+    color:var(--ink);
+    font-family:'Pretendard',sans-serif;
+    line-height:1.55;
+  }
+  h1,h2,h3,.display{
+    font-family:'Noto Serif KR',serif;
+    font-weight:900;
+    letter-spacing:-0.01em;
+  }
+  .mono{
+    font-family:'Space Mono',monospace;
+  }
+  a{color:inherit;}
+  /* ---------- Layout shell ---------- */
+  .shell{
+    display:grid;
+    grid-template-columns:280px 1fr;
+    min-height:100vh;
+  }
+  @media (max-width: 860px){
+    .shell{grid-template-columns:1fr;}
+    .trail-col{order:2; border-right:none; border-top:1px solid var(--sage-light);}
+  }
+  /* ---------- Trail sidebar ---------- */
+  .trail-col{
+    background:var(--paper);
+    border-right:1px solid var(--sage-light);
+    padding:28px 20px 60px;
+    position:relative;
+  }
+  .brand{
+    display:flex; align-items:baseline; gap:8px; margin-bottom:4px;
+  }
+  .brand .mark{font-size:22px;}
+  .brand h1{font-size:20px; margin:0; color:var(--pine-dark);}
+  .brand-sub{
+    font-size:12px; color:var(--sage); margin:0 0 30px; font-family:'Space Mono',monospace;
+    letter-spacing:.04em;
+  }
+  .book-tabs{
+    display:flex; gap:6px; margin-bottom:22px; background:var(--sage-light);
+    border-radius:999px; padding:4px;
+  }
+  .book-tab{
+    flex:1; border:none; background:none; padding:8px 4px; border-radius:999px;
+    font-family:'Pretendard'; font-size:13px; font-weight:600; color:var(--ink);
+    cursor:pointer; opacity:.55; transition:opacity .15s, background .15s, color .15s;
+  }
+  .book-tab.active{background:var(--pine); color:#fff; opacity:1;}
+  .book-tab:focus-visible, button:focus-visible, .lesson-node:focus-visible{
+    outline:3px solid var(--ochre); outline-offset:2px;
+  }
+
+  .trail{
+    position:relative;
+    padding-left:26px;
+  }
+  .trail::before{
+    content:"";
+    position:absolute; left:9px; top:6px; bottom:6px; width:2px;
+    background:repeating-linear-gradient(to bottom, var(--sage) 0 6px, transparent 6px 12px);
+  }
+  .lesson-node{
+    position:relative;
+    display:flex; align-items:center; gap:10px;
+    width:100%; text-align:left; background:none; border:none; cursor:pointer;
+    padding:9px 8px; border-radius:10px; margin-bottom:2px;
+    font-family:'Pretendard'; font-size:13.5px; color:var(--ink);
+    transition:background .15s;
+  }
+  .lesson-node:hover{background:var(--sage-light);}
+  .lesson-node::before{
+    content:"";
+    position:absolute; left:-26px; top:50%; transform:translateY(-50%);
+    width:12px; height:12px; border-radius:50%;
+    background:var(--paper); border:2px solid var(--sage);
+  }
+  .lesson-node.free::before{background:var(--pine); border-color:var(--pine);}
+  .lesson-node.active{background:var(--sage-light); font-weight:700;}
+  .lesson-node.active::before{background:var(--ochre); border-color:var(--ochre); box-shadow:0 0 0 4px rgba(185,118,46,.18);}
+  .lock-chip{
+    margin-left:auto; font-size:10px; font-family:'Space Mono'; color:var(--sage);
+    display:flex; align-items:center; gap:3px; flex-shrink:0;
+  }
+  .free-chip{
+    margin-left:auto; font-size:10px; font-family:'Space Mono'; color:var(--pine);
+    background:rgba(47,111,94,.12); padding:2px 6px; border-radius:6px; flex-shrink:0;
+  }
+  .workbook-block{
+    margin-top:26px; padding-top:20px; border-top:1px solid var(--sage-light);
+  }
+  .workbook-block .eyebrow{
+    font-family:'Space Mono'; font-size:11px; color:var(--sage); letter-spacing:.08em; margin-bottom:10px;
+  }
+
+  .unlock-status{
+    position:sticky; bottom:0; margin-top:24px; padding:14px; border-radius:12px;
+    background:var(--pine-dark); color:#fff; font-size:12.5px;
+  }
+  .unlock-status.on{background:var(--pine);}
+  .unlock-status button{
+    margin-top:8px; width:100%; border:none; background:rgba(255,255,255,.18); color:#fff;
+    padding:7px; border-radius:8px; font-size:12px; cursor:pointer; font-family:'Pretendard'; font-weight:600;
+  }
+
+  /* ---------- Main content ---------- */
+  main{padding:40px 48px 100px; max-width:760px;}
+  @media (max-width:860px){ main{padding:24px 20px 80px;} }
+  .crumb{font-family:'Space Mono'; font-size:11px; color:var(--sage); margin-bottom:10px; letter-spacing:.05em;}
+  .lesson-title{font-size:32px; margin:0 0 6px;}
+  .lesson-sub{color:var(--ink); opacity:.65; margin:0 0 30px; font-size:15px;}
+
+  .card{
+    background:var(--paper); border:1px solid var(--sage-light); border-radius:var(--radius);
+    padding:24px 26px; margin-bottom:20px;
+  }
+  .card h2{
+    font-size:18px; margin:0 0 14px; display:flex; align-items:center; gap:10px; color:var(--pine-dark);
+  }
+  .card h2 .num{
+    font-family:'Space Mono'; font-size:12px; background:var(--sage-light); color:var(--ink);
+    padding:2px 8px; border-radius:6px;
+  }
+
+  /* vocab */
+  .vocab-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px;}
+  .vocab-card{
+    border:1px solid var(--sage-light); border-radius:10px; padding:12px; cursor:pointer;
+    background:var(--mist); transition:transform .12s;
+    perspective:600px;
+  }
+  .vocab-card:hover{transform:translateY(-2px);}
+  .vocab-card .word{font-family:'Noto Serif KR'; font-weight:700; font-size:17px;}
+  .vocab-card .meaning{font-size:12px; color:var(--sage); margin-top:6px; display:none;}
+  .vocab-card.flipped .meaning{display:block;}
+  .vocab-card .rom{font-size:11px; font-family:'Space Mono'; color:var(--ochre); margin-top:2px; display:none;}
+  .vocab-card.flipped .rom{display:block;}
+
+  /* grammar accordion */
+  .gram-item{border-bottom:1px solid var(--sage-light);}
+  .gram-item:last-child{border-bottom:none;}
+  .gram-head{
+    width:100%; text-align:left; background:none; border:none; padding:12px 0; cursor:pointer;
+    font-family:'Pretendard'; font-weight:600; font-size:15px; color:var(--ink);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .gram-body{display:none; padding:0 0 16px; font-size:13.5px; color:var(--ink); opacity:.85;}
+  .gram-item.open .gram-body{display:block;}
+  .gram-ex{font-family:'Space Mono'; font-size:12.5px; background:var(--mist); padding:8px 10px; border-radius:8px; margin-top:8px;}
+
+  /* dialogue */
+  .bubble-row{display:flex; margin-bottom:10px;}
+  .bubble-row.b{justify-content:flex-end;}
+  .bubble{
+    max-width:80%; padding:10px 14px; border-radius:14px; font-size:14.5px;
+    background:var(--sage-light);
+  }
+  .bubble-row.b .bubble{background:var(--pine); color:#fff;}
+  .speaker{font-size:11px; opacity:.6; margin-bottom:2px; font-family:'Space Mono';}
+  .play-btn{
+    display:inline-flex; align-items:center; gap:8px; background:var(--ochre); color:#fff;
+    border:none; padding:9px 16px; border-radius:999px; font-weight:600; cursor:pointer; margin-bottom:16px;
+    font-family:'Pretendard'; font-size:13.5px;
+  }
+  .play-btn .bar{width:2px; height:10px; background:#fff; display:inline-block; animation:none;}
+  .play-btn.playing .bar{animation:eq 0.8s infinite ease-in-out alternate;}
+  .play-btn .bar:nth-child(2){animation-delay:.15s;}
+  .play-btn .bar:nth-child(3){animation-delay:.3s;}
+  @keyframes eq{from{height:4px;} to{height:14px;}}
+
+  /* speaking checklist */
+  .check-item{display:flex; gap:10px; align-items:flex-start; margin-bottom:10px; font-size:14px;}
+  .check-item input{margin-top:3px;}
+
+  /* listening / quiz */
+  .q{margin-bottom:16px;}
+  .q p{font-weight:600; margin:0 0 8px; font-size:14.5px;}
+  .opt{
+    display:block; width:100%; text-align:left; padding:9px 12px; margin-bottom:6px;
+    border:1px solid var(--sage-light); border-radius:9px; background:var(--paper); cursor:pointer;
+    font-family:'Pretendard'; font-size:13.5px; transition:border-color .12s;
+  }
+  .opt:hover{border-color:var(--pine);}
+  .opt.correct{border-color:var(--pine); background:rgba(47,111,94,.12); font-weight:700;}
+  .opt.wrong{border-color:var(--danger); background:rgba(165,67,47,.1);}
+  .feedback{font-size:12.5px; margin-top:4px; font-family:'Space Mono';}
+  .feedback.ok{color:var(--pine-dark);}
+  .feedback.no{color:var(--danger);}
+
+  .write-line{
+    border-bottom:1.5px dashed var(--sage); padding:4px 2px; font-family:'Noto Serif KR'; font-size:15px;
+  }
+
+  .score-box{
+    margin-top:16px; padding:12px 16px; background:var(--mist); border-radius:10px; font-size:13.5px;
+  }
+  .submit-btn{
+    background:var(--pine); color:#fff; border:none; padding:10px 20px; border-radius:999px;
+    font-weight:700; cursor:pointer; font-family:'Pretendard'; font-size:13.5px; margin-top:6px;
+  }
+
+  /* locked state */
+  .locked-wrap{
+    position:relative; border-radius:var(--radius); overflow:hidden; border:1px solid var(--sage-light);
+  }
+  .locked-ghost{
+    filter:blur(3px) grayscale(.4); opacity:.55; padding:24px 26px; pointer-events:none; user-select:none;
+    background:var(--paper);
+  }
+  .paywall{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:30px; background:rgba(241,244,241,.55); backdrop-filter:blur(1px);
+  }
+  .paywall .badge{
+    font-family:'Space Mono'; font-size:11px; letter-spacing:.08em; color:var(--ochre);
+    background:rgba(185,118,46,.12); padding:4px 10px; border-radius:999px; margin-bottom:12px;
+  }
+  .paywall h3{margin:0 0 8px; font-size:20px;}
+  .paywall p{margin:0 0 18px; font-size:13.5px; opacity:.75; max-width:340px;}
+  .unlock-btn{
+    background:var(--ochre); color:#fff; border:none; padding:12px 26px; border-radius:999px;
+    font-weight:700; cursor:pointer; font-family:'Pretendard'; font-size:14.5px;
+  }
+  .unlock-btn:disabled{opacity:.6; cursor:default;}
+
+  .price-note{font-size:11px; color:var(--sage); margin-top:10px; font-family:'Space Mono';}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ===== Trail sidebar ===== -->
+  <aside class="trail-col">
+    <div class="brand"><span class="mark">⛺</span><h1>Basecamp Korean</h1></div>
+    <p class="brand-sub">HANBOOK · SERIES PROTOTYPE</p>
+
+    <div class="book-tabs">
+      <button class="book-tab active" data-book="b1">Book 1</button>
+      <button class="book-tab" data-book="b2">Book 2</button>
+    </div>
+
+    <nav class="trail" id="trailNav"></nav>
+
+    <div class="workbook-block">
+      <div class="eyebrow">WORKBOOK</div>
+      <button class="lesson-node" data-lesson="workbook">
+        <span>워크북 (숙제·정답지)</span>
+        <span class="lock-chip" id="wbChip">🔒 결제 필요</span>
+      </button>
+    </div>
+
+    <div class="unlock-status" id="unlockStatus">
+      <div id="unlockText">🔒 미리보기 모드 — Book1 1과만 열람 가능</div>
+      <button id="unlockBtn">전체 잠금 해제 (데모)</button>
+    </div>
+  </aside>
+
+  <!-- ===== Main viewer ===== -->
+  <main id="mainView"></main>
+
+</div>
+
+<script>
+/* ---------------- Data ---------------- */
+const books = {
+  b1: {
+    label: "Book 1 · 0급~1급",
+    lessons: [
+      {id:"b1-0", n:"0", title:"한글 마스터하기"},
+      {id:"b1-1", n:"1", title:"저는 ○○이에요", free:true},
+      {id:"b1-2", n:"2", title:"이거 뭐예요?"},
+      {id:"b1-3", n:"3", title:"학교에 가요"},
+      {id:"b1-4", n:"4", title:"안 가요, 못 가요"},
+      {id:"b1-5", n:"5", title:"도서관에 있어요"},
+      {id:"b1-6", n:"6", title:"어제 뭐 했어요?"},
+      {id:"b1-7", n:"7", title:"이거 주세요"},
+      {id:"b1-8", n:"8", title:"복습"},
+    ]
+  },
+  b2: {
+    label: "Book 2 · 2급",
+    lessons: [
+      {id:"b2-1", n:"1", title:"바빠서 못 갔어요"},
+      {id:"b2-2", n:"2", title:"시간 있으면 같이 갈까요?"},
+      {id:"b2-3", n:"3", title:"저는 수영할 수 있어요"},
+      {id:"b2-4", n:"4", title:"제가 좋아하는 건 여행이에요"},
+      {id:"b2-5", n:"5", title:"춥지만 좋아요"},
+      {id:"b2-6", n:"6", title:"숙제를 해야 해요"},
+      {id:"b2-7", n:"7", title:"날씨가 더 추워요"},
+      {id:"b2-8", n:"8", title:"많이 들으세요"},
+      {id:"b2-9", n:"9", title:"저도 좋대요"},
+      {id:"b2-10", n:"10", title:"복습"},
+    ]
+  }
+};
+
+let state = { unlocked:false, book:"b1", active:"b1-1" };
+
+/* ---------------- Trail render ---------------- */
+function renderTrail(){
+  const nav = document.getElementById("trailNav");
+  nav.innerHTML = "";
+  books[state.book].lessons.forEach(l=>{
+    const btn = document.createElement("button");
+    const isFree = !!l.free;
+    const isUnlocked = state.unlocked || isFree;
+    btn.className = "lesson-node" + (isFree?" free":"") + (state.active===l.id?" active":"");
+    btn.dataset.lesson = l.id;
+    btn.innerHTML = `<span class="mono" style="opacity:.5">${l.n}</span>&nbsp; ${l.title}` +
+      (isUnlocked ? (isFree?`<span class="free-chip">무료</span>`:``) : `<span class="lock-chip">🔒</span>`);
+    btn.addEventListener("click", ()=>{ state.active = l.id; state.book = state.book; render(); });
+    nav.appendChild(btn);
+  });
+}
+
+document.querySelectorAll(".book-tab").forEach(t=>{
+  t.addEventListener("click", ()=>{
+    document.querySelectorAll(".book-tab").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+    state.book = t.dataset.book;
+    state.active = books[state.book].lessons[0].id;
+    render();
+  });
+});
+
+document.getElementById("wbChip");
+document.querySelector('[data-lesson="workbook"]').addEventListener("click", ()=>{
+  state.active = "workbook"; render();
+});
+
+document.getElementById("unlockBtn").addEventListener("click", (e)=>{
+  if(state.unlocked) return;
+  e.target.textContent = "결제 처리 중...";
+  e.target.disabled = true;
+  setTimeout(()=>{
+    state.unlocked = true;
+    render();
+  }, 900);
+});
+
+/* ---------------- Main content render ---------------- */
+function findLesson(id){
+  for(const b of Object.values(books)){
+    const f = b.lessons.find(l=>l.id===id);
+    if(f) return f;
+  }
+  return null;
+}
+
+function lockedPanel(title, reason){
+  return `
+    <div class="locked-wrap">
+      <div class="locked-ghost">
+        <h2><span class="num">?</span> 어휘 (Vocabulary)</h2>
+        <p style="height:14px;background:var(--sage-light);border-radius:4px;width:70%"></p>
+        <p style="height:14px;background:var(--sage-light);border-radius:4px;width:55%;margin-top:8px"></p>
+        <h2 style="margin-top:20px"><span class="num">?</span> 문법 (Grammar)</h2>
+        <p style="height:14px;background:var(--sage-light);border-radius:4px;width:80%"></p>
+        <p style="height:14px;background:var(--sage-light);border-radius:4px;width:40%;margin-top:8px"></p>
+      </div>
+      <div class="paywall">
+        <div class="badge">LOCKED</div>
+        <h3>${title}</h3>
+        <p>${reason}</p>
+        <button class="unlock-btn" onclick="document.getElementById('unlockBtn').click()">전체 잠금 해제하고 보기</button>
+        <div class="price-note">Book1 1과는 항상 무료 · 전체 구매 시 워크북 포함</div>
+      </div>
+    </div>`;
+}
+
+function render(){
+  renderTrail();
+  const main = document.getElementById("mainView");
+  const statusBox = document.getElementById("unlockStatus");
+  const statusText = document.getElementById("unlockText");
+  const wbChip = document.getElementById("wbChip");
+
+  if(state.unlocked){
+    statusBox.classList.add("on");
+    statusText.textContent = "✅ 전체 열람 중 (구매 완료 데모)";
+    document.getElementById("unlockBtn").style.display = "none";
+    wbChip.outerHTML = '<span class="free-chip" id="wbChip">열람 가능</span>';
+  }
+
+  if(state.active === "workbook"){
+    main.innerHTML = `
+      <div class="crumb">HANBOOK / BASECAMP KOREAN / 워크북</div>
+      <h1 class="lesson-title">워크북 (숙제용)</h1>
+      <p class="lesson-sub">드릴 연습문제 · 읽기 연계 쓰기 · Book별 종합 모의고사 · 정답지 수록</p>
+      ${ state.unlocked ? `
+        <div class="card">
+          <h2><span class="num">✓</span> 워크북 열람 가능</h2>
+          <p style="font-size:14px">과별 드릴(12~30문항, 문법 밀도별 차등), 읽기 연계 쓰기 과제, 정답지가 이 영역에 표시됩니다. (실제 문항 데이터는 추후 연결)</p>
+        </div>` : lockedPanel("워크북은 결제 후 열람 가능합니다", "본교재 전체 구매에 워크북(드릴·쓰기·모의고사·정답지)이 포함됩니다.")
+      }
+    `;
+    return;
+  }
+
+  const lesson = findLesson(state.active);
+  const isFree = lesson && lesson.free;
+  const isUnlocked = state.unlocked || isFree;
+
+  const crumb = `<div class="crumb">HANBOOK / BASECAMP KOREAN / ${books[state.book].label.split(" · ")[0]}</div>`;
+
+  if(!isUnlocked){
+    main.innerHTML = `
+      ${crumb}
+      <h1 class="lesson-title">${lesson.n}과. ${lesson.title}</h1>
+      <p class="lesson-sub">본교재 · 예상 소요시간 2~3시간</p>
+      ${lockedPanel(lesson.n+"과는 결제 후 열람 가능합니다", "Book1 1과는 무료로 계속 보실 수 있어요. 이 과부터는 전체 구매가 필요합니다.")}
+    `;
+    return;
+  }
+
+  if(lesson.id === "b1-1"){
+    main.innerHTML = renderLesson1();
+    attachLesson1Handlers();
+  } else {
+    main.innerHTML = `
+      ${crumb}
+      <h1 class="lesson-title">${lesson.n}과. ${lesson.title}</h1>
+      <p class="lesson-sub">본교재 · 예상 소요시간 2~3시간</p>
+      <div class="card"><h2>콘텐츠 준비 중</h2><p style="font-size:14px">이 프로토타입에는 Book1 1과만 전체 콘텐츠가 연결되어 있습니다. 나머지 과는 동일한 컴포넌트 구조(어휘→문법→대화→말하기→듣기→읽기→퀴즈)로 이어집니다.</p></div>
+    `;
+  }
+}
+
+/* ---------------- Lesson 1 (free) full content ---------------- */
+function renderLesson1(){
+  return `
+    <div class="crumb">HANBOOK / BASECAMP KOREAN / BOOK 1</div>
+    <h1 class="lesson-title">1과. 저는 ○○이에요</h1>
+    <p class="lesson-sub">My name is ___ · 본교재 · 예상 소요시간 2~3시간 · <span style="color:var(--pine-dark);font-weight:700">무료 미리보기</span></p>
+
+    <div class="card">
+      <h2><span class="num">1</span> 어휘 (Vocabulary)</h2>
+      <p style="font-size:12.5px;opacity:.6;margin-top:-8px;margin-bottom:14px">카드를 클릭하면 뜻과 발음이 보여요</p>
+      <div class="vocab-grid" id="vocabGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">2</span> 문법 (Grammar)</h2>
+      <div id="gramList"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">3</span> 대화 (Dialogue)</h2>
+      <button class="play-btn" id="dialoguePlay"><span class="bar"></span><span class="bar"></span><span class="bar"></span> 대화 듣기</button>
+      <div class="bubble-row a"><div><div class="speaker">마이클 (미국)</div><div class="bubble">안녕하세요. 저는 마이클이에요.</div></div></div>
+      <div class="bubble-row b"><div><div class="speaker">유키 (일본)</div><div class="bubble">안녕하세요. 저는 유키예요. 만나서 반가워요.</div></div></div>
+      <div class="bubble-row a"><div><div class="speaker">마이클</div><div class="bubble">만나서 반가워요. 유키 씨는 어느 나라 사람이에요?</div></div></div>
+      <div class="bubble-row b"><div><div class="speaker">유키</div><div class="bubble">저는 일본 사람이에요. 마이클 씨는요?</div></div></div>
+      <div class="bubble-row a"><div><div class="speaker">마이클</div><div class="bubble">저는 미국 사람이에요.</div></div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">4</span> 말하기 (Speaking)</h2>
+      <p style="font-size:13.5px;margin-top:-6px">자가 점검 체크리스트</p>
+      <label class="check-item"><input type="checkbox"> 인사말 발음이 자연스러운가</label>
+      <label class="check-item"><input type="checkbox"> 이에요/예요 구분을 정확히 했는가</label>
+      <label class="check-item"><input type="checkbox"> 억양이 질문처럼 올라가는가</label>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">5</span> 듣기 (Listening)</h2>
+      <div class="q" data-answer="2">
+        <p>Q1. 유키 씨는 어느 나라 사람이에요?</p>
+        <button class="opt">① 한국</button><button class="opt">② 일본</button><button class="opt">③ 미국</button><button class="opt">④ 베트남</button>
+        <div class="feedback"></div>
+      </div>
+      <div class="q" data-answer="3">
+        <p>Q2. 마이클 씨는 어느 나라 사람이에요?</p>
+        <button class="opt">① 한국</button><button class="opt">② 일본</button><button class="opt">③ 미국</button><button class="opt">④ 베트남</button>
+        <div class="feedback"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">6</span> 읽기 (Reading)</h2>
+      <p style="font-size:15px">제 이름은 유키예요. 저는 일본 사람이에요. 저는 학생이에요. 만나서 반가워요.</p>
+      <p style="font-weight:700;font-size:13.5px;margin-top:16px">✏️ 쓰기 예문 — 빈칸을 채워 자기소개 문장을 완성해 보세요</p>
+      <p class="write-line">제 이름은 <span style="opacity:.4">_______</span>이에요/예요. 저는 <span style="opacity:.4">_______</span> 사람이에요.</p>
+      <p style="font-size:12px;opacity:.6;font-style:italic">(전체 쓰기 연습은 워크북 1과 참고)</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">7</span> 미니 퀴즈</h2>
+      <div class="q" data-answer="1"><p>1. 저는 마이클____.</p><button class="opt">① 이에요</button><button class="opt">② 예요</button><div class="feedback"></div></div>
+      <div class="q" data-answer="2"><p>2. 저는 유키____.</p><button class="opt">① 이에요</button><button class="opt">② 예요</button><div class="feedback"></div></div>
+      <div class="q" data-answer="1"><p>3. 처음 만난 친구의 이름을 알고 싶어요. 알맞은 질문은?</p><button class="opt">① 이름이 뭐예요?</button><button class="opt">② 안녕히 가세요</button><div class="feedback"></div></div>
+      <div class="score-box" id="quizScore">아직 채점 전이에요 — 위 문제를 눌러 답을 선택하면 자동으로 채점됩니다.</div>
+    </div>
+  `;
+}
+
+function attachLesson1Handlers(){
+  const vocab = [
+    {w:"저", m:"I / me (humble)", r:"jeo"},
+    {w:"이름", m:"name", r:"ireum"},
+    {w:"학생", m:"student", r:"haksaeng"},
+    {w:"선생님", m:"teacher", r:"seonsaengnim"},
+    {w:"친구", m:"friend", r:"chingu"},
+    {w:"나라", m:"country", r:"nara"},
+    {w:"사람", m:"person", r:"saram"},
+    {w:"안녕하세요", m:"hello (formal)", r:"annyeonghaseyo"},
+  ];
+  const grid = document.getElementById("vocabGrid");
+  vocab.forEach(v=>{
+    const c = document.createElement("div");
+    c.className = "vocab-card";
+    c.innerHTML = `<div class="word">${v.w}</div><div class="meaning">${v.m}</div><div class="rom">${v.r}</div>`;
+    c.addEventListener("click", ()=>c.classList.toggle("flipped"));
+    grid.appendChild(c);
+  });
+
+  const gram = [
+    {t:"① N + 이다 (formal polite: -이에요/예요)", b:"Used to say 'I am N'. Consonant-ending noun → 이에요, vowel-ending noun → 예요.", ex:"저는 마이클이에요. / 저는 유키예요."},
+    {t:"② 저는 N이에요/예요 (Self-introduction pattern)", b:"저는 = 'As for me'. Combine with N이에요/예요 to introduce yourself.", ex:"저는 학생이에요."},
+    {t:"③ 인칭대명사 (Personal pronouns)", b:"저 = I/me (humble, formal contexts). [Name]씨 = polite address form.", ex:"유키 씨는 어느 나라 사람이에요?"},
+  ];
+  const list = document.getElementById("gramList");
+  gram.forEach((g,i)=>{
+    const item = document.createElement("div");
+    item.className = "gram-item" + (i===0?" open":"");
+    item.innerHTML = `<button class="gram-head">${g.t}<span>${i===0?"−":"+"}</span></button>
+      <div class="gram-body"><p>${g.b}</p><div class="gram-ex">${g.ex}</div></div>`;
+    item.querySelector(".gram-head").addEventListener("click", ()=>{
+      item.classList.toggle("open");
+      item.querySelector(".gram-head span").textContent = item.classList.contains("open")?"−":"+";
+    });
+    list.appendChild(item);
+  });
+
+  const playBtn = document.getElementById("dialoguePlay");
+  playBtn.addEventListener("click", ()=>{
+    if(playBtn.classList.contains("playing")) return;
+    playBtn.classList.add("playing");
+    playBtn.lastChild.textContent = " 재생 중...";
+    setTimeout(()=>{ playBtn.classList.remove("playing"); playBtn.lastChild.textContent = " 대화 듣기"; }, 2200);
+  });
+
+  document.querySelectorAll(".q").forEach(q=>{
+    const answer = Number(q.dataset.answer);
+    const opts = q.querySelectorAll(".opt");
+    const fb = q.querySelector(".feedback");
+    opts.forEach((o,idx)=>{
+      o.addEventListener("click", ()=>{
+        if(q.dataset.done) return;
+        q.dataset.done = "1";
+        opts.forEach((oo,ii)=>{
+          if(ii+1 === answer) oo.classList.add("correct");
+          else if(oo===o) oo.classList.add("wrong");
+        });
+        fb.textContent = (idx+1===answer) ? "정답이에요 ✓" : "다시 확인해 보세요";
+        fb.className = "feedback " + ((idx+1===answer)?"ok":"no");
+        updateScore();
+      });
+    });
+  });
+}
+
+function updateScore(){
+  const qs = document.querySelectorAll("#mainView .card:last-of-type .q");
+  if(!qs.length) return;
+  let done=0, correct=0;
+  qs.forEach(q=>{
+    if(q.dataset.done){
+      done++;
+      if(q.querySelector(".opt.correct")) correct++;
+    }
+  });
+  const box = document.getElementById("quizScore");
+  if(!box) return;
+  if(done < qs.length){
+    box.textContent = `진행 중: ${done}/${qs.length}문항 응답`;
+  } else {
+    box.textContent = `채점 완료: ${correct}/${qs.length} 정답`;
+  }
+}
+
+render();
+</script>
+</body>
+</html>

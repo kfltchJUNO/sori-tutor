@@ -1,4 +1,4 @@
-﻿// hooks/useTokenTransaction.ts
+// hooks/useTokenTransaction.ts
 import { auth } from "@/lib/firebase";
 
 type SpendReason =
@@ -9,6 +9,7 @@ type SpendReason =
   | "회화 피드백 분석"
   | "피드백 번역"
   | "기록 번역"
+  | "문법 설명 요청"
   | "단어 뜻 검색";
 
 type Currency = "token" | "heart";
@@ -34,8 +35,8 @@ export function useTokenTransaction() {
       const data = await res.json();
       if (!res.ok) return { success: false, error: data.error };
       return { success: true, remaining: data.remaining };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : "오류가 발생했습니다." };
     }
   };
 
@@ -50,8 +51,8 @@ export function useTokenTransaction() {
       const data = await res.json();
       if (!res.ok) return { success: false, error: data.error };
       return { success: true, earned: data.earned };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : "오류가 발생했습니다." };
     }
   };
 

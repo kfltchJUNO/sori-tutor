@@ -1,21 +1,9 @@
 // app/api/license/verify/route.ts
-// Gumroad 라이선스 키 검증 → purchased_steps 업데이트
+// Lemon Squeezy 라이선스 키 검증 → purchased_steps 업데이트 및 student 승격
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
-
-// Gumroad 상품 ID 목록 (준호님 Gumroad 등록 후 실제 값으로 교체)
-const GUMROAD_PRODUCTS: Record<number, string> = {
-  1: "GUMROAD_PRODUCT_ID_STEP1",
-  2: "GUMROAD_PRODUCT_ID_STEP2",
-  3: "GUMROAD_PRODUCT_ID_STEP3",
-  4: "GUMROAD_PRODUCT_ID_STEP4",
-  5: "GUMROAD_PRODUCT_ID_STEP5",
-  6: "GUMROAD_PRODUCT_ID_STEP6",
-  7: "GUMROAD_PRODUCT_ID_STEP7",
-  8: "GUMROAD_PRODUCT_ID_STEP8",
-};
 
 export async function POST(req: NextRequest) {
   // 1. 사용자 인증
@@ -33,59 +21,81 @@ export async function POST(req: NextRequest) {
 
   const { licenseKey, step } = await req.json();
 
-  if (!licenseKey || !step || !GUMROAD_PRODUCTS[step]) {
+  if (!licenseKey || !step) {
     return NextResponse.json({ error: "licenseKey 또는 step 누락" }, { status: 400 });
   }
 
-  const productId = GUMROAD_PRODUCTS[step];
+  const cleanKey = String(licenseKey).trim();
+  const stepNum = Number(step);
 
   // 2. 이미 사용된 키 체크
   const existingSnap = await adminDb
     .collection("sori_license_keys")
-    .where("key", "==", licenseKey)
+    .where("key", "==", cleanKey)
     .limit(1)
     .get();
 
   if (!existingSnap.empty) {
     const existing = existingSnap.docs[0].data();
-    // 동일 사용자가 재입력하는 경우는 허용
     if (existing.email !== userEmail) {
-      return NextResponse.json({ error: "이미 사용된 라이선스 키입니다." }, { status: 400 });
+      return NextResponse.json({ error: "이미 다른 계정에서 사용된 라이선스 키입니다." }, { status: 400 });
     }
-    // 이미 본인이 이 키를 사용했으면 그냥 성공 처리
-    return NextResponse.json({ success: true, step, alreadyOwned: true });
+    return NextResponse.json({ success: true, step: stepNum, alreadyOwned: true });
   }
 
-  // 3. Gumroad API 검증
+  // 3. Lemon Squeezy 라이선스 검증 API 호출
   try {
-    const gumRes = await fetch("https://api.gumroad.com/v2/licenses/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        product_id: productId,
-        license_key: licenseKey,
-        increment_uses_count: "true",
-      }),
-    });
+    let isValid = false;
 
-    const gumData = await gumRes.json();
+    if (process.env.LEMONSQUEEZY_API_KEY) {
+      const lsRes = await fetch("https://api.lemonsqueezy.com/v1/licenses/validate", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          license_key: cleanKey,
+        }),
+      });
 
-    if (!gumData.success) {
-      return NextResponse.json({ error: "유효하지 않은 라이선스 키입니다." }, { status: 400 });
+      const lsData = await lsRes.json();
+      if (lsData.valid) {
+        isValid = true;
+      } else {
+        return NextResponse.json({ error: lsData.error || "유효하지 않거나 만료된 라이선스 키입니다." }, { status: 400 });
+      }
+    } else {
+      // 개발 환경 미등록 키 폴백: 형식 검사
+      if (cleanKey.length >= 8) {
+        isValid = true;
+      } else {
+        return NextResponse.json({ error: "라이선스 키 형식이 올바르지 않습니다." }, { status: 400 });
+      }
     }
 
-    // 4. 검증 성공 → Firestore 업데이트
+    if (!isValid) {
+      return NextResponse.json({ error: "라이선스 검증에 실패했습니다." }, { status: 400 });
+    }
+
+    // 4. Firestore 업데이트 (purchased_steps 추가 및 guest -> student 승격)
     const userRef = adminDb.collection("sori_users").doc(userEmail);
-    await userRef.update({
-      purchased_steps: FieldValue.arrayUnion(step),
-    });
+    const userSnap = await userRef.get();
+    const updatePayload: Record<string, any> = {
+      purchased_steps: FieldValue.arrayUnion(stepNum),
+    };
+    if (userSnap.exists && userSnap.data()?.role === "guest") {
+      updatePayload.role = "student";
+    }
+
+    await userRef.update(updatePayload);
 
     // 5. 사용 기록 저장
     await adminDb.collection("sori_license_keys").add({
-      key: licenseKey,
+      key: cleanKey,
       email: userEmail,
-      step,
-      productId,
+      step: stepNum,
+      provider: "lemonsqueezy",
       verified_at: FieldValue.serverTimestamp(),
     });
 
@@ -96,15 +106,15 @@ export async function POST(req: NextRequest) {
       .collection("inbox")
       .add({
         from: "소리튜터 운영진",
-        title: `🎉 STEP Korean Step ${step} 활성화!`,
-        content: `Step ${step} 교재 연동이 완료되었습니다.\n앱에서 Step ${step} 전용 심화 커리큘럼을 이용하실 수 있습니다.`,
+        title: `🎉 STEP Korean Step ${stepNum} 활성화!`,
+        content: `Step ${stepNum} 교재 연동이 완료되었습니다.\n앱에서 Step ${stepNum} 전용 심화 커리큘럼을 이용하실 수 있습니다.`,
         date: FieldValue.serverTimestamp(),
         read: false,
       });
 
-    return NextResponse.json({ success: true, step });
+    return NextResponse.json({ success: true, step: stepNum });
   } catch (e: any) {
-    console.error("Gumroad verify error:", e);
-    return NextResponse.json({ error: "검증 서버 오류" }, { status: 500 });
+    console.error("License verify error:", e);
+    return NextResponse.json({ error: "검증 서버 오류: " + (e.message || "") }, { status: 500 });
   }
 }

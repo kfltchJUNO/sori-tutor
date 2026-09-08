@@ -2,7 +2,7 @@ export default function Privacy() {
   return (
     <main className="max-w-4xl mx-auto p-6 bg-white min-h-screen text-slate-800">
       <h1 className="text-3xl font-bold mb-6">개인정보처리방침</h1>
-      <p className="mb-4">소리튜터(이하 '서비스')는 이용자의 개인정보를 중요시하며, '개인정보 보호법'을 준수하고 있습니다.</p>
+      <p className="mb-4">소리튜터(이하 &apos;서비스&apos;)는 이용자의 개인정보를 중요시하며, &apos;개인정보 보호법&apos;을 준수하고 있습니다.</p>
       
       <h2 className="text-xl font-bold mt-6 mb-2">1. 수집하는 개인정보 항목</h2>
       <ul className="list-disc pl-6 mb-4">

@@ -471,9 +471,19 @@ export default function AdminPage() {
 
   const grantTokens = async (email: string, amount: number) => {
     if (!confirm(`${email}에 ${amount}토큰 지급?`)) return;
-    await updateDoc(doc(db, "sori_users", email), { tokens: amount });
-    await addDoc(collection(db, "sori_users", email, "token_logs"), { type: "earn", amount, reason: "관리자 지급", date: serverTimestamp() });
-    alert("지급 완료");
+    try {
+      const res = await fetch("/api/admin/grant-tokens", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({ targetEmail: email, amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert(`지급 완료! (현재 잔액: ${data.newBalance})`);
+      setUsers(prev => prev.map(u => u.id === email ? { ...u, tokens: data.newBalance } : u));
+    } catch (e: any) {
+      alert("오류: " + e.message);
+    }
   };
 
   // ── 충전 ─────────────────────────────────────────────────
@@ -487,10 +497,20 @@ export default function AdminPage() {
 
   const approveCharge = async (req: any) => {
     if (!confirm(`${req.depositor} (${req.amount}토큰) 승인?`)) return;
-    await updateDoc(doc(db, "sori_users", req.userId), { tokens: req.amount });
-    await updateDoc(doc(db, "sori_charge_requests", req.id), { status: "approved" });
-    await addDoc(collection(db, "sori_users", req.userId, "inbox"), { from: "소리튜터 운영진", title: "✅ 충전 완료!", content: `${req.amount}토큰이 충전되었습니다.`, date: serverTimestamp(), read: false });
-    setCharges(prev => prev.filter(c => c.id !== req.id));
+    try {
+      const res = await fetch("/api/admin/grant-tokens", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({ targetEmail: req.userId, amount: req.amount, reason: "충전 요청 승인" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await updateDoc(doc(db, "sori_charge_requests", req.id), { status: "approved" });
+      setCharges(prev => prev.filter(c => c.id !== req.id));
+      alert("승인 완료");
+    } catch (e: any) {
+      alert("오류: " + e.message);
+    }
   };
 
   // ── 문의 ─────────────────────────────────────────────────

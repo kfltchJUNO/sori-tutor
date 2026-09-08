@@ -16,6 +16,8 @@ export interface SoriUser {
   chat_count: number;
 }
 
+export type SeriesId = "step-korean" | "basecamp-korean";
+
 export interface CurriculumItem {
   id: string;
   category: string;
@@ -25,6 +27,8 @@ export interface CurriculumItem {
   source?: "manual" | "ai_generated";
   has_audio?: boolean;
   audio_path?: string;
+  // 시리즈 구분 — 없으면 STEP Korean으로 취급 (기존 데이터 마이그레이션 불필요)
+  seriesId?: SeriesId;
 }
 
 export interface WordItem extends CurriculumItem {
@@ -48,12 +52,20 @@ export interface DialogueItem extends CurriculumItem {
 
 export type CourseType = "word" | "sentence" | "dialogue";
 
+export interface SyllableMatch {
+  char: string;
+  recognizedChar?: string;
+  status: "match" | "coda_error" | "vowel_error" | "mismatch" | "omitted";
+  tip?: string;
+}
+
 export interface AnalysisResult {
   score: number;
   recognized: string;
   correct: string;
   explanation: string;
   advice: string;
+  syllableResults?: SyllableMatch[];
 }
 
 export interface ChatMessage {

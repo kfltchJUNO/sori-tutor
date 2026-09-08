@@ -9,6 +9,12 @@ export const metadata: Metadata = {
     "Korean pronunciation", "한국어 발음", "TOPIK", "Korean language learning",
     "AI Korean tutor", "소리튜터", "한국어 회화", "발음 교정",
   ],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "소리튜터",
+  },
   openGraph: {
     title: "Sori-Tutor | AI Korean Pronunciation Coach",
     description: "Speak Korean like a native. AI analyzes your pronunciation in real time.",

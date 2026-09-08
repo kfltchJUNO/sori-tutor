@@ -29,17 +29,17 @@ export function useDeepLink(onNavigate: (step: number, unit: number) => void) {
 }
 
 // ──────────────────────────────────────────
-// Step 상품 정보
+// Step 상품 정보 (Lemon Squeezy 스토어 연동)
 // ──────────────────────────────────────────
 const STEP_PRODUCTS = [
-  { step: 1, name: "STEP Korean Step 1", level: "입문", desc: "한글 자모 ~ TOPIK I 기초", gumroadUrl: "https://gumroad.com/l/STEP1_URL" },
-  { step: 2, name: "STEP Korean Step 2", level: "TOPIK I 1급", desc: "자기소개 ~ 쇼핑/교통", gumroadUrl: "https://gumroad.com/l/STEP2_URL" },
-  { step: 3, name: "STEP Korean Step 3", level: "TOPIK I 2급", desc: "가족 ~ 건강/여행", gumroadUrl: "https://gumroad.com/l/STEP3_URL" },
-  { step: 4, name: "STEP Korean Step 4", level: "TOPIK II 3급", desc: "일상 ~ 직업/계획", gumroadUrl: "https://gumroad.com/l/STEP4_URL" },
-  { step: 5, name: "STEP Korean Step 5", level: "TOPIK II 3급+", desc: "사회 ~ 미디어/환경", gumroadUrl: "https://gumroad.com/l/STEP5_URL" },
-  { step: 6, name: "STEP Korean Step 6", level: "TOPIK II 4급", desc: "뉴스 ~ 의학/직업", gumroadUrl: "https://gumroad.com/l/STEP6_URL" },
-  { step: 7, name: "STEP Korean Step 7", level: "TOPIK II 5급", desc: "학술 ~ 철학/과학", gumroadUrl: "https://gumroad.com/l/STEP7_URL" },
-  { step: 8, name: "STEP Korean Step 8", level: "TOPIK II 6급", desc: "정치 ~ 실전 모의고사", gumroadUrl: "https://gumroad.com/l/STEP8_URL" },
+  { step: 1, name: "STEP Korean Step 1", level: "입문", desc: "한글 자모 ~ TOPIK I 기초", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-1" },
+  { step: 2, name: "STEP Korean Step 2", level: "TOPIK I 1급", desc: "자기소개 ~ 쇼핑/교통", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-2" },
+  { step: 3, name: "STEP Korean Step 3", level: "TOPIK I 2급", desc: "가족 ~ 건강/여행", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-3" },
+  { step: 4, name: "STEP Korean Step 4", level: "TOPIK II 3급", desc: "일상 ~ 직업/계획", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-4" },
+  { step: 5, name: "STEP Korean Step 5", level: "TOPIK II 3급+", desc: "사회 ~ 미디어/환경", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-5" },
+  { step: 6, name: "STEP Korean Step 6", level: "TOPIK II 4급", desc: "뉴스 ~ 의학/직업", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-6" },
+  { step: 7, name: "STEP Korean Step 7", level: "TOPIK II 5급", desc: "학술 ~ 철학/과학", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-7" },
+  { step: 8, name: "STEP Korean Step 8", level: "TOPIK II 6급", desc: "정치 ~ 실전 모의고사", checkoutUrl: "https://sori-tutor.lemonsqueezy.com/buy/step-8" },
 ];
 
 // ──────────────────────────────────────────
@@ -138,7 +138,7 @@ export default function LicenseModal({ onClose, purchasedSteps, onUnlock }: Prop
                       ) : (
                         <div className="flex gap-2">
                           <a
-                            href={product.gumroadUrl}
+                            href={product.checkoutUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs bg-amber-500 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-amber-600 flex items-center gap-1"

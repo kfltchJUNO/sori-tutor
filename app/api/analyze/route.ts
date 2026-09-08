@@ -98,6 +98,59 @@ function weightedJamoSimilarity(recognized: string, target: string): number {
 }
 
 // ══════════════════════════════════════════════════════════════
+// 음절 단위 정밀 분석 (받침 오류, 모음 오류, 불일치 세부 판정)
+// ══════════════════════════════════════════════════════════════
+interface SyllableMatch {
+  char: string;
+  recognizedChar?: string;
+  status: "match" | "coda_error" | "vowel_error" | "mismatch" | "omitted";
+  tip?: string;
+}
+
+function analyzeSyllables(recognized: string, target: string): SyllableMatch[] {
+  const rChars = Array.from(recognized.replace(/\s+/g, ""));
+  const tChars = Array.from(target.trim());
+
+  let rIdx = 0;
+  return tChars.map((tc) => {
+    if (/\s|[.,?!~]/.test(tc)) {
+      return { char: tc, status: "match" as const };
+    }
+
+    const rc = rChars[rIdx] ?? "";
+    rIdx++;
+
+    if (!rc) {
+      return { char: tc, status: "omitted" as const, tip: "발음이 누락되었습니다." };
+    }
+
+    if (rc === tc) {
+      return { char: tc, recognizedChar: rc, status: "match" as const };
+    }
+
+    const rj = decomposeChar(rc);
+    const tj = decomposeChar(tc);
+
+    if (!rj || !tj) {
+      return { char: tc, recognizedChar: rc, status: "mismatch" as const };
+    }
+
+    if (rj.cho === tj.cho && rj.jung === tj.jung && rj.jong !== tj.jong) {
+      const tip = tj.jong
+        ? (rj.jong ? `[${rj.jong}] 대신 [${tj.jong}] 받침으로 발음하세요.` : `[${tj.jong}] 받침이 누락되었습니다.`)
+        : `불필요한 [${rj.jong}] 받침이 들어갔습니다.`;
+      return { char: tc, recognizedChar: rc, status: "coda_error" as const, tip };
+    }
+
+    if (rj.cho === tj.cho && rj.jung !== tj.jung) {
+      return { char: tc, recognizedChar: rc, status: "vowel_error" as const, tip: `[${rj.jung}] 대신 [${tj.jung}] 모음으로 발음하세요.` };
+    }
+
+    return { char: tc, recognizedChar: rc, status: "mismatch" as const, tip: `[${rc}]로 인식되었습니다.` };
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
 // 연음(liaison) 실패 감지
 // — "섭리" → "섭/리" 처럼 끊어 읽으면 STT가 보정해버림
 // — 오디오 길이 대비 음절 수로 탐지
@@ -407,12 +460,15 @@ export async function POST(req: Request): Promise<Response> {
 
     console.log(`✅ 최종: ${finalScore}점 (가중치유사도=${Math.round(weightedSim * 100)}%, 연음패널티=${liaisonPenalty}, 받침오류=${hasCodaError})`);
 
+    const syllableResults = analyzeSyllables(recognized, targetText);
+
     return NextResponse.json({
       score:       finalScore,
       recognized,
       correct:     scored.correct,
       explanation: finalExplanation,
       advice:      scored.advice,
+      syllableResults,
     });
 
   } catch (error: unknown) {

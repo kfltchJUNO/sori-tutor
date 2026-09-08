@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { doc, updateDoc, increment } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase"; 
-import { ChevronDown, ChevronUp, Mic, BookOpen, Loader2, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, Mic, BookOpen, Loader2 } from "lucide-react";
+import { useTokenTransaction } from "@/hooks/useTokenTransaction";
 
 interface HistoryItemProps {
   item: any;
@@ -12,6 +13,7 @@ interface HistoryItemProps {
 }
 
 export default function HistoryItem({ item, userEmail, userRole }: HistoryItemProps) {
+  const { spendToken } = useTokenTransaction();
   // DB에 저장된 설명이 있으면 초기값으로 사용 (캐싱 효과)
   // item.grammarExplanation 혹은 item.explanation 등 DB 필드명에 맞춰 유연하게 처리
   const [explanation, setExplanation] = useState<string | null>(item.explanation || item.grammarExplanation || null);
@@ -103,28 +105,24 @@ export default function HistoryItem({ item, userEmail, userRole }: HistoryItemPr
       
       if (!res.ok) throw new Error(data.error || "분석 실패");
 
-      // 2. 상태 업데이트
+      // 2. 서버 트랜잭션을 통한 재화 차감
+      const currency = userRole === "guest" ? "heart" : "token";
+      const spendRes = await spendToken("문법 설명 요청", currency);
+      if (!spendRes.success) {
+        throw new Error(spendRes.error || "재화 차감에 실패했습니다.");
+      }
+
+      // 3. 상태 업데이트 및 히스토리에 설명 저장
       setExplanation(data.explanation);
 
-      // 3. 재화 차감 및 데이터 저장 (updateDoc)
-      const userRef = doc(db, "sori_users", userEmail);
       const historyRef = doc(db, "sori_users", userEmail, "history", item.id);
-
-      // (1) 히스토리에 설명 영구 저장 (다음엔 공짜)
       await updateDoc(historyRef, {
         explanation: data.explanation
       });
 
-      // (2) 재화 차감
-      if (userRole === "guest") {
-        await updateDoc(userRef, { free_hearts: increment(-1) });
-      } else {
-        await updateDoc(userRef, { tokens: increment(-1) });
-      }
-
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setExplanation("설명을 불러오는 중 오류가 발생했습니다.");
+      setExplanation("설명을 불러오는 중 오류가 발생했습니다: " + (error.message || ""));
     } finally {
       setIsLoading(false);
     }

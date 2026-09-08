@@ -3,6 +3,7 @@
 // AdSense push는 ins 요소가 DOM에 마운트된 후 실행해야 함
 import { useEffect, useState, useCallback } from "react";
 import AdUnit from "@/app/components/AdUnit";
+import AudioWaveform from "@/app/components/AudioWaveform";
 import { X, Volume2, CheckCircle, Info, Languages, Mic, ChevronLeft, Headphones } from "lucide-react";
 import type { AnalysisResult, CourseType } from "@/types";
 
@@ -22,6 +23,7 @@ interface Props {
   loading: boolean;
   recording: boolean;
   audioUrl: string | null;
+  analyser?: AnalyserNode | null;
 
   onBack: () => void;
   onSetMyRole: (r: "A" | "B") => void;
@@ -42,7 +44,7 @@ interface Props {
 export default function PracticeView({
   courseType, currentProblem, result, translation,
   parsedScript, myRole, targetLineIndex, completedLines,
-  isShadowingMode, ttsLoading, loading, recording, audioUrl,
+  isShadowingMode, ttsLoading, loading, recording, audioUrl, analyser,
   onBack, onSetMyRole, onSetTargetLine, onToggleShadowing,
   onPlayTTS, onRetry, onNext, onTranslate,
   onStartRecording, onStopRecording, onCancelAudio, onAnalyze, onNextDialogue,
@@ -128,12 +130,54 @@ export default function PracticeView({
             </span>
           </div>
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
-            <div>
-              <span className="text-xs font-bold text-slate-400 block mb-1">인식된 소리</span>
-              <div className="text-lg font-bold text-red-500 bg-white p-2 rounded border border-red-100">
-                {result.recognized}
+            {/* 음절 단위 발음 정밀 하이라이트 */}
+            {result.syllableResults && result.syllableResults.length > 0 ? (
+              <div>
+                <span className="text-xs font-bold text-slate-400 block mb-1.5">음절별 발음 진단 (초록: 일치, 주황: 받침 오류, 보라: 모음 오류, 빨강: 불일치)</span>
+                <div className="flex flex-wrap gap-1.5 bg-white p-3 rounded-xl border border-slate-200">
+                  {result.syllableResults.map((s, idx) => {
+                    const isMatch = s.status === "match";
+                    const isCoda = s.status === "coda_error";
+                    const isVowel = s.status === "vowel_error";
+                    return (
+                      <span
+                        key={idx}
+                        title={s.tip}
+                        className={`px-2.5 py-1 rounded-lg font-black text-lg transition-all cursor-help ${
+                          isMatch
+                            ? "bg-green-100 text-green-700 border border-green-300"
+                            : isCoda
+                            ? "bg-amber-100 text-amber-800 border-2 border-amber-400 underline decoration-amber-500"
+                            : isVowel
+                            ? "bg-purple-100 text-purple-800 border-2 border-purple-400"
+                            : "bg-red-100 text-red-700 border border-red-300 line-through"
+                        }`}
+                      >
+                        {s.char}
+                      </span>
+                    );
+                  })}
+                </div>
+                {/* 틀린 음절 맞춤 팁 */}
+                {result.syllableResults.some(s => s.status !== "match" && s.tip) && (
+                  <div className="mt-2 space-y-1">
+                    {result.syllableResults.filter(s => s.status !== "match" && s.tip).map((s, idx) => (
+                      <p key={idx} className="text-xs text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5 shadow-sm">
+                        <span className="font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">[{s.char}]</span>
+                        <span>{s.tip}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div>
+                <span className="text-xs font-bold text-slate-400 block mb-1">인식된 소리</span>
+                <div className="text-lg font-bold text-red-500 bg-white p-2 rounded border border-red-100">
+                  {result.recognized}
+                </div>
+              </div>
+            )}
             <div className="flex justify-center"><div className="w-0.5 h-3 bg-slate-300" /></div>
             <div>
               <span className="text-xs font-bold text-slate-400 block mb-1">정답 소리</span>
@@ -148,7 +192,7 @@ export default function PracticeView({
                 onClick={onTranslate}
                 className="text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded-lg shadow-sm flex items-center gap-1 hover:bg-blue-50 transition"
               >
-                <Languages size={12} /> 번역 (0.5🪙)
+                <Languages size={12} /> 번역 (1🪙)
               </button>
             </div>
             <div className="flex items-start gap-2">
@@ -303,14 +347,15 @@ export default function PracticeView({
             </button>
           )}
           {recording && (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center gap-2">
+              <AudioWaveform analyser={analyser ?? null} isRecording={recording} className="mb-1" />
               <button
                 onClick={onStopRecording}
                 className="w-16 h-16 rounded-full bg-slate-800 text-white shadow-xl flex items-center justify-center animate-pulse ring-4 ring-slate-100"
               >
-                <div className="w-6 h-6 bg-white rounded-md" />
+                <div className="w-6 h-6 bg-red-500 rounded-md" />
               </button>
-              <span className="text-xs text-red-500 font-bold mt-2">녹음 중...</span>
+              <span className="text-xs text-red-500 font-bold">녹음 중입니다... (탭하여 완료)</span>
             </div>
           )}
           {audioUrl && !recording && !loading && (
