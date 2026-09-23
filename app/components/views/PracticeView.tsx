@@ -4,6 +4,7 @@
 import { useEffect, useState, useCallback } from "react";
 import AdUnit from "@/app/components/AdUnit";
 import AudioWaveform from "@/app/components/AudioWaveform";
+import SoriIcon from "@/app/components/SoriIcon";
 import { X, Volume2, CheckCircle, Info, Languages, Mic, ChevronLeft, Headphones } from "lucide-react";
 import type { AnalysisResult, CourseType } from "@/types";
 
@@ -192,7 +193,7 @@ export default function PracticeView({
                 onClick={onTranslate}
                 className="text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded-lg shadow-sm flex items-center gap-1 hover:bg-blue-50 transition"
               >
-                <Languages size={12} /> 번역 (1🪙)
+                <Languages size={12} /> 번역 (1<SoriIcon size={12} className="inline ml-0.5" />)
               </button>
             </div>
             <div className="flex items-start gap-2">

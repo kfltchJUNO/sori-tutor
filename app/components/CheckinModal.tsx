@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Sparkles, X, CheckCircle, Calendar } from "lucide-react";
+import SoriIcon from "@/app/components/SoriIcon";
 
 interface CheckinModalProps {
   onClose: () => void;
@@ -65,7 +66,7 @@ export default function CheckinModal({ onClose, onReward }: CheckinModalProps) {
           </button>
           <Calendar size={40} className="mx-auto mb-2 opacity-90" />
           <h2 className="text-xl font-black">오늘의 출석 체크</h2>
-          <p className="text-sm text-white/80 mt-1">매일 출석하면 토큰 1개 지급!</p>
+          <p className="text-sm text-white/80 mt-1">매일 출석하면 1 Sori 지급!</p>
         </div>
 
         {/* 바디 */}
@@ -74,7 +75,7 @@ export default function CheckinModal({ onClose, onReward }: CheckinModalProps) {
             <>
               <p className="text-slate-600 text-sm mb-6 leading-relaxed">
                 오늘 아직 출석 체크를 하지 않으셨어요.<br />
-                <span className="font-bold text-orange-500">🪙 토큰 1개</span>를 무료로 받으세요!
+                <span className="font-bold text-orange-500 inline-flex items-center gap-1"><SoriIcon size={16} /> 1 Sori</span>를 무료로 받으세요!
               </p>
               <button
                 onClick={handleCheckin}
@@ -97,7 +98,7 @@ export default function CheckinModal({ onClose, onReward }: CheckinModalProps) {
               <CheckCircle size={48} className="text-green-500" />
               <p className="text-xl font-black text-slate-800">출석 완료!</p>
               <p className="text-slate-500 text-sm">
-                <span className="font-bold text-orange-500">🪙 토큰 1개</span> 지급되었습니다.
+                <span className="font-bold text-orange-500 inline-flex items-center gap-1"><SoriIcon size={16} /> 1 Sori</span>가 지급되었습니다.
               </p>
               <button
                 onClick={onClose}
@@ -112,7 +113,7 @@ export default function CheckinModal({ onClose, onReward }: CheckinModalProps) {
             <div className="py-6 flex flex-col items-center gap-3">
               <Sparkles size={40} className="text-amber-400" />
               <p className="text-lg font-black text-slate-800">오늘은 이미 출석했어요!</p>
-              <p className="text-slate-500 text-sm">내일 다시 방문하면 토큰을 받을 수 있어요.</p>
+              <p className="text-slate-500 text-sm">내일 다시 방문하면 소리를 받을 수 있어요.</p>
               <button
                 onClick={onClose}
                 className="mt-2 w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-bold"

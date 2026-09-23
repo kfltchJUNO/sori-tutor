@@ -1,6 +1,7 @@
 "use client";
 // components/views/HomeView.tsx
 import { Mic, Star, MessageSquare, MessageCircle, Trophy } from "lucide-react";
+import SoriIcon from "@/app/components/SoriIcon";
 import type { SoriUser, CourseType } from "@/types";
 
 interface Props {
@@ -124,8 +125,8 @@ export default function HomeView({
           onClick={onEnterFreeTalking}
           className="w-full p-4 rounded-2xl text-left bg-gradient-to-r from-emerald-50 to-teal-50 shadow-sm border border-emerald-100 hover:border-emerald-400 transition group flex items-center gap-4 relative overflow-hidden"
         >
-          <div className="absolute top-2.5 right-3 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-700 border border-emerald-200">
-            🪙 2토큰 / 턴
+          <div className="absolute top-2.5 right-3 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-700 border border-emerald-200 flex items-center gap-1">
+            <SoriIcon size={12} /> 2 Sori / 턴
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
             <MessageCircle size={22} />

@@ -5,6 +5,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase"; 
 import { ChevronDown, ChevronUp, Mic, BookOpen, Loader2 } from "lucide-react";
 import { useTokenTransaction } from "@/hooks/useTokenTransaction";
+import SoriIcon from "@/app/components/SoriIcon";
 
 interface HistoryItemProps {
   item: any;
@@ -86,7 +87,7 @@ export default function HistoryItem({ item, userEmail, userRole }: HistoryItemPr
 
     // 권한/재화 체크
     if (userRole === 'guest' || userRole === 'student') {
-        const costMsg = userRole === 'guest' ? "하트 1개" : "토큰 1개";
+        const costMsg = userRole === 'guest' ? "하트 1개" : "1 소리";
         if (!confirm(`문법 설명을 보시겠습니까? (${costMsg} 차감)`)) return;
     }
 
@@ -176,8 +177,22 @@ export default function HistoryItem({ item, userEmail, userRole }: HistoryItemPr
           >
             <div className="flex items-center gap-1.5">
               <BookOpen size={14} className="group-hover:scale-110 transition-transform"/>
-              <span>
-                {explanation ? "문법 설명 및 문장 분석 보기" : `문장 분석 요청하기 (${userRole === 'guest' ? '❤️ -1' : '🪙 -1'})`}
+              <span className="flex items-center gap-1">
+                {explanation ? (
+                  "문법 설명 및 문장 분석 보기"
+                ) : (
+                  <>
+                    문장 분석 요청하기 (
+                    {userRole === 'guest' ? (
+                      "❤️ -1"
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5">
+                        <SoriIcon size={12} /> -1
+                      </span>
+                    )}
+                    )
+                  </>
+                )}
               </span>
             </div>
             {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

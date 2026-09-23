@@ -16,6 +16,7 @@ import LicenseModal, { useDeepLink } from "./components/LicenseModal";
 import HomeView from "./components/views/HomeView";
 import PracticeView from "./components/views/PracticeView";
 import AudioWaveform from "./components/AudioWaveform";
+import SoriIcon from "./components/SoriIcon";
 import { PERSONAS } from "@/types";
 
 import { db, auth } from "@/lib/firebase";
@@ -302,7 +303,7 @@ export default function Home() {
             if (earnData.success) {
               setTokens(p => p + (earnData.earned ?? 15));
               setHasNewMail(true);
-              alert("🎉 7일 연속 학습 달성으로 15토큰이 지급되었습니다!");
+              alert("🎉 7일 연속 학습 달성으로 15 Sori가 지급되었습니다!");
             }
           }
         } catch (e) {
@@ -559,7 +560,7 @@ export default function Home() {
     const currency = userRole === "guest" ? "heart" : "token";
     if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
-    if (!confirm("번역하시겠습니까? (1🪙)")) return;
+    if (!confirm("번역하시겠습니까? (1 소리)")) return;
     setLoading(true);
     try {
       const formData = new FormData();
@@ -586,7 +587,7 @@ export default function Home() {
     const currency = userRole === "guest" ? "heart" : "token";
     if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
-    if (!confirm("번역하시겠습니까? (1🪙)")) return;
+    if (!confirm("번역하시겠습니까? (1 소리)")) return;
     const text = item.feedback || item.explanation || item.advice;
     if (!text) return;
     setLoading(true);
@@ -871,7 +872,7 @@ export default function Home() {
             [1, 2, 3].map(i => <Heart key={i} size={16} className={i <= hearts ? "text-red-500 fill-red-500" : "text-slate-300"} />)
           ) : (
             <>
-              <img src="/sori.jpg" alt="소리" className="w-5 h-5 rounded-full object-cover" />
+              <SoriIcon size={20} />
               <span className="font-bold text-slate-700 text-sm">{Math.floor(tokens)}</span>
               <span className="text-[10px] text-slate-400 font-bold">Sori</span>
             </>
@@ -986,7 +987,7 @@ export default function Home() {
                   </div>
                   <div className="flex justify-end gap-2">
                     <button onClick={() => setShowFeedbackModal(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500">📄 자세히</button>
-                    <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500"><Languages size={10} /> 번역 (0.5🪙)</button>
+                    <button onClick={() => handleHistoryTranslate(h)} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 flex items-center gap-1 text-slate-500"><Languages size={10} /> 번역 (1<SoriIcon size={10} className="inline ml-0.5" />)</button>
                   </div>
                 </div>
               ))}
@@ -1067,7 +1068,9 @@ export default function Home() {
                 {chatFeedback && (
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-lg animate-in slide-in-from-bottom relative">
                     <button onClick={handleTranslateFeedback} className="absolute top-4 right-4 text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-100 flex items-center gap-1">
-                      <Languages size={12} /> {translation ? "번역 내용 보기" : "번역 (0.5🪙)"}
+                      <Languages size={12} /> {translation ? "번역 내용 보기" : (
+                        <span className="inline-flex items-center gap-0.5">번역 (1<SoriIcon size={12} className="inline ml-0.5" />)</span>
+                      )}
                     </button>
                     <h3 className="font-bold text-lg mb-3 border-b pb-2">📋 대화 분석 리포트</h3>
                     <div className="space-y-3 text-sm">
@@ -1143,8 +1146,8 @@ export default function Home() {
               {audioUrl && !recording && !loading && (
                 <div className="flex gap-2 w-full animate-in slide-in-from-bottom">
                   <button onClick={() => { setAudioUrl(null); setAudioBlob(null); }} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">취소</button>
-                  <button onClick={handleChatSend} className="flex-[2] py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2">
-                    <Send size={18} /> 전송 (-2🪙)
+                  <button onClick={handleChatSend} className="flex-[2] py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-1.5">
+                    <Send size={18} /> 전송 (-2<SoriIcon size={14} className="inline ml-0.5" />)
                   </button>
                 </div>
               )}
@@ -1346,7 +1349,7 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto text-sm text-slate-700 whitespace-pre-wrap">{showFeedbackModal.feedback || showFeedbackModal.explanation || showFeedbackModal.advice}</div>
             <div className="mt-4 pt-3 border-t flex justify-end">
               <button onClick={() => { setShowFeedbackModal(null); handleHistoryTranslate(showFeedbackModal); }} className="text-xs bg-slate-100 px-3 py-2 rounded-lg font-bold flex items-center gap-1 hover:bg-slate-200">
-                <Languages size={12} /> 번역하기 (0.5🪙)
+                <Languages size={12} /> 번역하기 (1<SoriIcon size={12} className="inline ml-0.5" />)
               </button>
             </div>
           </div>
