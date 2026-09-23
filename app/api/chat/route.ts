@@ -43,6 +43,80 @@ function cleanTextForTTS(text: string): string {
     .replace(/-/g, " ").trim();
 }
 
+// ── TTS 합성 헬퍼 (ElevenLabs 우선, Google Cloud TTS 폴백) ────
+async function synthesizeTTS(text: string, personaId?: string, voiceName?: string): Promise<string | null> {
+  const cleaned = cleanTextForTTS(text);
+  if (!cleaned) return null;
+
+  // 1. ElevenLabs API 시도
+  const elevenKey = process.env.ELEVENLABS_API_KEY;
+  if (elevenKey && elevenKey !== "your_elevenlabs_api_key_here") {
+    try {
+      const isMale = personaId !== "seoyeon";
+      const targetVoice = isMale
+        ? (process.env.ELEVENLABS_VOICE_JUNHO || "srhGhMYcxqeTNVuSRvWg")
+        : "EXAVITQu4vr4xnSDxMaL";
+
+      const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text: cleaned,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: { stability: 0.5, similarity_boost: 0.8 },
+        }),
+      });
+
+      if (elRes.ok) {
+        const buf = await elRes.arrayBuffer();
+        return Buffer.from(buf).toString("base64");
+      }
+    } catch (e) {
+      console.warn("ElevenLabs TTS 호출 오류:", e);
+    }
+  }
+
+  // 2. Google Cloud TTS 시도 (올바른 GOOGLE_TTS_API_KEY 사용)
+  const googleTtsKey = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_API_KEY;
+  if (googleTtsKey) {
+    try {
+      const VOICES: Record<string, string> = {
+        su: "ko-KR-Chirp3-HD-Zephyr", min: "ko-KR-Chirp3-HD-Rasalgethi",
+        jin: "ko-KR-Chirp3-HD-Algenib", seol: "ko-KR-Chirp3-HD-Despina",
+        do: "ko-KR-Chirp3-HD-Achird", ju: "ko-KR-Chirp3-HD-Sadachbia",
+        hye: "ko-KR-Chirp3-HD-Aoede", woo: "ko-KR-Chirp3-HD-Charon",
+        hyun: "ko-KR-Chirp3-HD-Zubenelgenubi", sun: "ko-KR-Chirp3-HD-Vindemiatrix",
+      };
+      const targetVoice = voiceName || (personaId && VOICES[personaId]) || "ko-KR-Chirp3-HD-Zephyr";
+
+      const ttsResponse = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleTtsKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: { text: cleaned },
+            voice: { languageCode: "ko-KR", name: targetVoice },
+            audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
+          }),
+        }
+      );
+      const ttsData = await ttsResponse.json();
+      if (ttsResponse.ok && ttsData.audioContent) {
+        return ttsData.audioContent;
+      }
+    } catch (e) {
+      console.error("Google TTS 호출 오류:", e);
+    }
+  }
+
+  return null;
+}
+
 export async function POST(req: Request): Promise<Response> {
   try {
     const formData = await req.formData();
@@ -70,25 +144,14 @@ Output JSON only (no markdown):
     if (action === "tts_simple") {
       const text      = formData.get("text")      as string;
       const voiceName = (formData.get("voiceName") as string) || "ko-KR-Chirp3-HD-Zephyr";
+      const personaId = (formData.get("personaId") as string) || undefined;
       if (!text) return NextResponse.json({ error: "No text provided" });
 
-      const ttsResponse = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: { text: cleanTextForTTS(text) },
-            voice: { languageCode: "ko-KR", name: voiceName },
-            audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
-          }),
-        }
-      );
-      const ttsData = await ttsResponse.json();
-      if (!ttsResponse.ok || ttsData.error) {
-        return NextResponse.json({ error: ttsData.error?.message || "TTS Failed" }, { status: 500 });
+      const audioContent = await synthesizeTTS(text, personaId, voiceName);
+      if (!audioContent) {
+        return NextResponse.json({ error: "TTS Failed" }, { status: 500 });
       }
-      return NextResponse.json({ audioContent: ttsData.audioContent });
+      return NextResponse.json({ audioContent });
     }
 
     // ── 자유 회화 (Chat + STT + TTS) ──────────────────────────
@@ -123,11 +186,16 @@ Output JSON only (no markdown):
         if (!userText) throw lastErr ?? new Error("STT all models failed");
       }
 
-      // AI 응답 생성 — 릴레이
-      const systemPrompt = `[Role]: You are a Korean conversation partner.
-[Persona]: ${personaId}
-[Memory]: ${sharedMemory}
-[Rule]: Respond naturally in Korean (1-3 sentences). Do NOT use markdown bold(**).`;
+      // AI 응답 생성 — 친근한 한국인 친구 콘셉트
+      const systemPrompt = `[Role]: You are '준호' (Junho), a warm, supportive, and friendly Korean friend talking with a foreign learner.
+[Tone]: Casual, friendly, and natural Korean (친근한 해요체 or 편한 구어체).
+[Guidelines]:
+1. React actively with empathy and warmth to what the user said (e.g., "정말? 대단하다!", "그랬구나! 많이 힘들었겠네").
+2. Keep responses natural and concise (1-3 sentences).
+3. Do NOT lecture like a teacher or ask for test answers. Treat the user as a real friend.
+4. Always ask an engaging, natural follow-up question so the learner feels encouraged and comfortable to keep talking.
+5. Do NOT use markdown bold(**) or markdown symbols.
+[User Memory]: ${sharedMemory}`;
 
       let aiText = "";
       let usedModel = "";
@@ -151,30 +219,11 @@ Output JSON only (no markdown):
       if (!aiText) throw new Error("All models failed to generate response.");
 
       // TTS
-      const VOICES: Record<string, string> = {
-        su: "ko-KR-Chirp3-HD-Zephyr", min: "ko-KR-Chirp3-HD-Rasalgethi",
-        jin: "ko-KR-Chirp3-HD-Algenib", seol: "ko-KR-Chirp3-HD-Despina",
-        do: "ko-KR-Chirp3-HD-Achird", ju: "ko-KR-Chirp3-HD-Sadachbia",
-        hye: "ko-KR-Chirp3-HD-Aoede", woo: "ko-KR-Chirp3-HD-Charon",
-        hyun: "ko-KR-Chirp3-HD-Zubenelgenubi", sun: "ko-KR-Chirp3-HD-Vindemiatrix",
-      };
-      const ttsRes = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: { text: cleanTextForTTS(aiText) },
-            voice: { languageCode: "ko-KR", name: VOICES[personaId] ?? "ko-KR-Chirp3-HD-Zephyr" },
-            audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
-          }),
-        }
-      );
-      const ttsData = await ttsRes.json();
+      const audioContent = await synthesizeTTS(aiText, personaId);
 
       return NextResponse.json({
         userText, aiText,
-        audioContent: ttsData.audioContent,
+        audioContent,
         usedModel, ended: false,
       });
     }

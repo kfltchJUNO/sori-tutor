@@ -430,26 +430,65 @@ export default function Home() {
     setChatStatus("select_persona");
   };
 
+  const playModelMessageAudio = async (text: string, personaId?: string, currentAudio?: string) => {
+    if (currentAudio) {
+      try {
+        const audio = new Audio(currentAudio);
+        audio.play().catch(e => console.error("오디오 재생 실패:", e));
+        return;
+      } catch (e) {
+        console.error("오디오 재생 에러:", e);
+      }
+    }
+    try {
+      const formData = new FormData();
+      formData.append("action", "tts_simple");
+      formData.append("text", text);
+      if (personaId) formData.append("personaId", personaId);
+      const res = await fetch("/api/chat", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.audioContent) {
+        const audioSrc = `data:audio/mp3;base64,${data.audioContent}`;
+        new Audio(audioSrc).play().catch(e => console.warn(e));
+        setChatHistory(prev => prev.map(m => m.text === text ? { ...m, audio: audioSrc } : m));
+      }
+    } catch (e) {
+      console.error("TTS 요청 실패:", e);
+    }
+  };
+
   const startChatWithPersona = async (personaId: string) => {
     setSelectedPersona(personaId);
     const persona = PERSONAS.find(p => p.id === personaId);
-    const suffix = (persona?.name.charCodeAt(persona.name.length - 1) ?? 0 - 0xac00) % 28 > 0 ? "이에요" : "예요";
-    const greeting = `안녕하세요! 저는 ${persona?.name}${suffix}. 우리 대화할까요?`;
+    const name = persona?.name ?? "";
+    const code = name.charCodeAt(name.length - 1);
+    const hasBatchim = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 > 0;
+    const suffix = hasBatchim ? "이에요" : "예요";
+    const greeting = `안녕하세요! 저는 ${name}${suffix}. 우리 대화할까요?`;
+
+    // 1. 말풍선 즉시 표시 (진입하자마자 즉각 렌더링)
     setChatHistory([{ role: "model", text: greeting }]);
     setChatStatus("active");
     setChatFeedback(null);
 
-    // ttsLoading 상태와 무관하게 인사말 TTS 직접 호출
+    // 2. 인사말 오디오 호출 및 재생
     try {
       setTtsLoading(true);
       const formData = new FormData();
       formData.append("action", "tts_simple");
       formData.append("text", greeting);
+      formData.append("personaId", personaId);
       formData.append("voiceName", persona?.voice ?? "ko-KR-Chirp3-HD-Zephyr");
+
       const res = await fetch("/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       if (data.audioContent) {
-        new Audio(`data:audio/mp3;base64,${data.audioContent}`).play();
+        const audioSrc = `data:audio/mp3;base64,${data.audioContent}`;
+        setChatHistory([{ role: "model", text: greeting, audio: audioSrc }]);
+        const audio = new Audio(audioSrc);
+        audio.play().catch(err => {
+          console.warn("브라우저 자동 재생 제한 (스피커 아이콘을 클릭하여 들을 수 있습니다):", err);
+        });
       }
     } catch (e) {
       console.error("인사말 TTS 실패:", e);
@@ -998,22 +1037,45 @@ export default function Home() {
           <div className="flex flex-col h-full pb-24">
             {chatStatus === "select_persona" && (
               <div className="animate-in fade-in zoom-in space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <button onClick={() => setViewMode("home")} className="p-2 bg-white rounded-full border"><ChevronLeft /></button>
-                  <h2 className="text-lg font-bold">대화 상대를 선택하세요</h2>
-                  <button onClick={() => setShowPersonaRanking(true)} className="p-2 bg-yellow-100 text-yellow-700 rounded-full font-bold text-xs flex items-center gap-1">
-                    <Crown size={14} /> 인기순위
-                  </button>
+                <div className="flex items-center justify-between mb-3">
+                  <button onClick={() => setViewMode("home")} className="p-2 bg-white rounded-full border shadow-sm hover:bg-slate-50 transition"><ChevronLeft size={20} /></button>
+                  <h2 className="text-lg font-bold text-slate-800">대화 친구를 선택하세요</h2>
+                  <div className="w-9" />
                 </div>
-                <div className="grid grid-cols-2 gap-3 pb-20">
+                <div className="grid grid-cols-2 gap-4 pb-20">
                   {PERSONAS.map(p => (
-                    <div key={p.id} onClick={() => startChatWithPersona(p.id)} className={`p-3 rounded-2xl border-2 cursor-pointer transition hover:scale-105 ${p.color} bg-white shadow-sm flex flex-col items-center text-center`}>
-                      <div className="w-20 h-20 rounded-full overflow-hidden mb-2 border-2 border-white shadow-md">
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        if (p.available) {
+                          startChatWithPersona(p.id);
+                        } else {
+                          alert(`🌸 ${p.name}이는 곧 찾아올 예정이에요!\n지금은 한국인 친구 준호와 대화해보세요.`);
+                        }
+                      }}
+                      className={`p-4 rounded-3xl border-2 transition-all relative flex flex-col items-center text-center ${
+                        p.available
+                          ? "cursor-pointer hover:scale-[1.03] shadow-md border-blue-400 bg-gradient-to-b from-blue-50/60 to-white"
+                          : "cursor-not-allowed opacity-60 border-slate-200 bg-slate-50/70"
+                      }`}
+                    >
+                      {!p.available ? (
+                        <div className="absolute top-3 right-3 bg-pink-100 text-pink-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-pink-200">
+                          준비 중 🌸
+                        </div>
+                      ) : (
+                        <div className="absolute top-3 right-3 bg-green-100 text-green-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> 대화 가능
+                        </div>
+                      )}
+                      <div className="w-24 h-24 rounded-full overflow-hidden mb-3 border-4 border-white shadow-md mt-3">
                         <img src={p.img} alt={p.name} className="w-full h-full object-cover object-top" />
                       </div>
-                      <h3 className="text-lg font-black text-slate-800">{p.name}</h3>
-                      <span className="text-[10px] font-bold bg-white/50 px-2 py-0.5 rounded-full mb-1 text-slate-600">{p.role}</span>
-                      <p className="text-xs opacity-70 leading-tight mt-1">{p.desc}</p>
+                      <h3 className="text-xl font-black text-slate-800 mb-0.5">{p.name}</h3>
+                      <span className="text-[11px] font-bold text-blue-600 bg-blue-100/70 px-2.5 py-0.5 rounded-full mb-2">
+                        {p.role}
+                      </span>
+                      <p className="text-xs text-slate-500 leading-snug px-1 break-keep">{p.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -1037,8 +1099,12 @@ export default function Home() {
                     <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[80%] p-3 rounded-2xl text-sm relative group ${msg.role === "user" ? "bg-blue-600 text-white rounded-tr-none" : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"}`}>
                         {renderClickableMessage(msg.text, msg.role)}
-                        {msg.role === "model" && msg.audio && (
-                          <button onClick={() => new Audio(msg.audio).play()} className="absolute -right-8 top-2 bg-white border border-slate-200 rounded-full p-1.5 shadow-sm text-slate-500 hover:text-blue-600">
+                        {msg.role === "model" && (
+                          <button
+                            onClick={() => playModelMessageAudio(msg.text, selectedPersona, msg.audio)}
+                            className="absolute -right-8 top-2 bg-white border border-slate-200 rounded-full p-1.5 shadow-sm text-slate-500 hover:text-blue-600 transition"
+                            title="음성 듣기"
+                          >
                             <Volume2 size={14} />
                           </button>
                         )}
@@ -1360,9 +1426,9 @@ export default function Home() {
             <button onClick={() => setShowPersonaRanking(false)} className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded-full"><X size={20} /></button>
             <h2 className="text-xl font-black mb-4 flex items-center gap-2"><Trophy className="text-yellow-500" fill="currentColor" /> 인기 AI 랭킹</h2>
             <div className="space-y-3">
-              {[PERSONAS[0], PERSONAS[1], PERSONAS[3]].map((p, i) => (
+              {PERSONAS.map((p, i) => (
                 <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className={`w-8 h-8 flex items-center justify-center font-black rounded-full ${i === 0 ? "bg-yellow-100 text-yellow-600" : i === 1 ? "bg-gray-200 text-gray-600" : "bg-orange-100 text-orange-700"}`}>{i + 1}</div>
+                  <div className={`w-8 h-8 flex items-center justify-center font-black rounded-full ${i === 0 ? "bg-yellow-100 text-yellow-600" : "bg-gray-200 text-gray-600"}`}>{i + 1}</div>
                   <div className="w-10 h-10 rounded-full overflow-hidden border"><img src={p.img} className="w-full h-full object-cover object-top" /></div>
                   <div><div className="font-bold text-sm">{p.name}</div><div className="text-[10px] text-slate-500">{p.role}</div></div>
                 </div>
