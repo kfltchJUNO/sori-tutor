@@ -10,8 +10,9 @@ import {
 } from "firebase/firestore";
 import {
   Sparkles, CheckCircle, XCircle, Upload, Trash2,
-  RefreshCw, Loader2, Music, Volume2,
+  RefreshCw, Loader2, Music, Volume2, Wand2,
 } from "lucide-react";
+import { ELEVENLABS_VOICES, DEFAULT_MALE_VOICE_ID } from "@/lib/elevenlabsVoices";
 
 // ── 타입 ──────────────────────────────────────────────────
 interface Draft {
@@ -62,81 +63,100 @@ function parseScript(script: string): ParsedLine[] {
   });
 }
 
-// ── 담화 라인별 업로드 컴포넌트 ──────────────────────────
+// ── 담화 라인별 업로드/생성 컴포넌트 ──────────────────────────
 function LineAudioRow({
   line, lineIndex, docId, colName, existingUrl, idToken, onRefresh
 }: {
   line: ParsedLine; lineIndex: number; docId: string; colName: string;
   existingUrl: string; idToken: string; onRefresh: () => void;
 }) {
-  const [uploading, setUploading] = useState(false);
+  const defaultVoice = line.role === "B"
+    ? (ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID)
+    : DEFAULT_MALE_VOICE_ID;
+  const [selectedVoice, setSelectedVoice] = useState(defaultVoice);
+  const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true); setResult(null);
+  // ElevenLabs 자동 생성
+  const handleGenerate = async () => {
+    setGenerating(true); setResult(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("docId", docId);
-      formData.append("colName", colName);
-      formData.append("audioType", "dialogue_line");
-      formData.append("lineIndex", String(lineIndex));
-      const res = await fetch("/api/admin/audio", {
+      const res = await fetch("/api/admin/generate-audio", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}` },
-        body: formData,
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          docId,
+          colName,
+          lineIndex,
+          text: line.text,
+          voiceId: selectedVoice,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResult("✅"); onRefresh();
+      setResult("✅ 생성 완료");
+      onRefresh();
     } catch (e: any) {
       setResult("❌ " + e.message);
     } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setGenerating(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm("삭제할까요?")) return;
-    await fetch("/api/admin/audio", {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ docId, colName, lineIndex }),
-    });
-    onRefresh();
+    if (!confirm("오디오를 삭제할까요?")) return;
+    try {
+      await fetch("/api/admin/generate-audio", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ docId, colName, lineIndex }),
+      });
+      onRefresh();
+    } catch (e: any) {
+      alert("삭제 실패: " + e.message);
+    }
   };
 
   return (
-    <div className={`flex items-start gap-3 p-3 rounded-xl border ${existingUrl ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
-      <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mt-0.5 ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+    <div className={`flex items-center gap-3 p-3 rounded-xl border ${existingUrl ? "bg-green-50/50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
+      <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
         {line.role}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-700 mb-1 truncate">{line.text}</p>
-        {existingUrl ? (
-          <div className="flex items-center gap-2">
-            <audio src={existingUrl} controls className="h-7 w-40" />
-            <span className="text-[10px] text-green-600 font-bold">등록됨</span>
-          </div>
-        ) : (
-          <p className="text-xs text-slate-400">오디오 없음</p>
-        )}
-        {result && <p className={`text-[10px] font-bold mt-1 ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</p>}
+        <p className="text-sm font-medium text-slate-800 truncate mb-1">{line.text}</p>
+        <div className="flex items-center gap-2">
+          {existingUrl ? (
+            <audio src={existingUrl} controls className="h-7 w-44" />
+          ) : (
+            <span className="text-xs text-slate-400">오디오 미생성</span>
+          )}
+          {result && <span className={`text-[11px] font-bold ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</span>}
+        </div>
       </div>
-      <div className="flex gap-1 shrink-0">
-        <input ref={fileRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleUpload} className="hidden" />
-        <button onClick={() => fileRef.current?.click()} disabled={uploading}
-          className="flex items-center gap-1 text-xs bg-white border border-slate-300 px-2 py-1.5 rounded-lg font-bold hover:bg-slate-50 disabled:opacity-50 transition">
-          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-          {existingUrl ? "교체" : "업로드"}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <select
+          value={selectedVoice}
+          onChange={e => setSelectedVoice(e.target.value)}
+          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 font-medium focus:outline-none"
+        >
+          {ELEVENLABS_VOICES.map(v => (
+            <option key={v.id} value={v.id}>{v.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 transition"
+        >
+          {generating ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+          {existingUrl ? "재생성" : "생성"}
         </button>
         {existingUrl && (
-          <button onClick={handleDelete} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
-            <Trash2 size={12} />
+          <button onClick={handleDelete} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="삭제">
+            <Trash2 size={14} />
           </button>
         )}
       </div>
@@ -147,13 +167,50 @@ function LineAudioRow({
 // ── 담화 항목 카드 ────────────────────────────────────────
 function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; idToken: string; onRefresh: () => void; }) {
   const [expanded, setExpanded] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
   const lines = parseScript(doc_.script ?? "");
   const filledCount = lines.filter((_, i) => !!doc_.audio_paths?.[i]).length;
 
+  const handleBatchGenerate = async () => {
+    if (!confirm(`전체 ${lines.length}개 라인의 음성을 ElevenLabs로 일괄 생성하시겠습니까?`)) return;
+    setBatchLoading(true);
+    try {
+      const preparedLines = lines.map((line, idx) => ({
+        text: line.text,
+        index: idx,
+        voiceId: line.role === "B"
+          ? (ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID)
+          : DEFAULT_MALE_VOICE_ID,
+      }));
+
+      const res = await fetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          docId: doc_.id,
+          colName: "sori_curriculum_dialogue",
+          isBatch: true,
+          lines: preparedLines,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert("🎉 전체 대화 음성이 일괄 생성되었습니다!");
+      onRefresh();
+    } catch (e: any) {
+      alert("일괄 생성 실패: " + e.message);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <button onClick={() => setExpanded(p => !p)}
-        className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left">
+      <div className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left cursor-pointer" onClick={() => setExpanded(p => !p)}>
         <div>
           <p className="font-bold text-slate-800">{doc_.title ?? doc_.id}</p>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -164,8 +221,20 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
             </span>
           </p>
         </div>
-        <span className="text-slate-400 text-sm">{expanded ? "▲" : "▼"}</span>
-      </button>
+        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={handleBatchGenerate}
+            disabled={batchLoading}
+            className="flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-bold transition disabled:opacity-50"
+          >
+            {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+            전체 대화 일괄 생성
+          </button>
+          <button onClick={() => setExpanded(p => !p)} className="p-1 text-slate-400 text-sm">
+            {expanded ? "▲" : "▼"}
+          </button>
+        </div>
+      </div>
       {expanded && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-100 pt-3">
           {lines.length === 0 ? (
@@ -403,6 +472,41 @@ export default function AdminPage() {
 
   useEffect(() => { if (isAdmin && activeTab === "audio") loadAudioDocs(); }, [isAdmin, activeTab, audioColName]);
 
+  const [selectedVoiceForSingle, setSelectedVoiceForSingle] = useState(DEFAULT_MALE_VOICE_ID);
+  const [singleGenerating, setSingleGenerating] = useState(false);
+
+  // ElevenLabs 단일 생성 (단어/문장)
+  const handleSingleGenerate = async (docIdToUse?: string, voiceIdToUse?: string) => {
+    const targetDocId = docIdToUse || selectedDocId;
+    if (!targetDocId) return alert("항목을 선택하세요.");
+    const docObj = audioDocs.find(d => d.id === targetDocId);
+    const targetText = docObj?.text || "";
+    if (!targetText) return alert("오디오를 생성할 텍스트가 없습니다.");
+
+    const targetVoice = voiceIdToUse || selectedVoiceForSingle;
+    setSingleGenerating(true); setUploadResult(null);
+    try {
+      const res = await fetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          docId: targetDocId,
+          colName: audioColName,
+          text: targetText,
+          voiceId: targetVoice,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setUploadResult("✅ ElevenLabs 음성 생성 완료");
+      loadAudioDocs();
+    } catch (e: any) {
+      setUploadResult(`❌ 생성 실패: ${e.message}`);
+    } finally {
+      setSingleGenerating(false);
+    }
+  };
+
   const handleSingleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedDocId) return alert("파일과 항목을 선택하세요.");
@@ -428,7 +532,11 @@ export default function AdminPage() {
 
   const deleteSingleAudio = async (docId: string) => {
     if (!confirm("오디오를 삭제하시겠습니까?")) return;
-    await fetch("/api/admin/audio", { method: "DELETE", headers: authHeader, body: JSON.stringify({ docId, colName: audioColName }) });
+    await fetch("/api/admin/generate-audio", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ docId, colName: audioColName }),
+    });
     loadAudioDocs();
   };
 
@@ -676,9 +784,9 @@ export default function AdminPage() {
               <Music className="text-green-500" size={24} />
               <h2 className="text-xl font-black">정답 발음 오디오 관리</h2>
             </div>
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-6 text-sm text-blue-800">
-              💡 ElevenLabs MP3 또는 직접 녹음 파일을 업로드하세요.<br />
-              <span className="font-bold">담화는 라인별로 A·B 목소리를 각각 업로드할 수 있습니다.</span>
+            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-6 text-sm text-indigo-900">
+              💡 ElevenLabs를 통해 준호님의 목소리 또는 선택한 성우의 목소리로 고품질 음성을 자동 생성하여 저장합니다.<br />
+              <span className="font-bold">담화는 라인별로 A·B 역할을 지정하여 개별 또는 일괄 생성할 수 있습니다.</span>
             </div>
             <div className="flex gap-2 mb-6">
               {(["sori_curriculum_word", "sori_curriculum_sentence", "sori_curriculum_dialogue"] as const).map(col => (
@@ -701,43 +809,98 @@ export default function AdminPage() {
                 <div className="mb-4">
                   <label className="text-xs font-bold text-slate-500 block mb-1">항목 선택</label>
                   <select value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">— 항목을 선택하세요 —</option>
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">— 생성할 단어/문장을 선택하세요 —</option>
                     {audioDocs.filter(d => !d.audio_path).map(d => (
-                      <option key={d.id} value={d.id}>{d.text ?? d.id} {d.category ? `(${d.category})` : ""}</option>
+                      <option key={d.id} value={d.id}>📝 {d.text ?? d.id} {d.category ? `(${d.category})` : ""}</option>
                     ))}
                     {audioDocs.some(d => d.audio_path) && (
-                      <optgroup label="── 이미 등록됨 (교체하려면 아래 목록에서 삭제 후 재업로드) ──">
+                      <optgroup label="── 이미 등록됨 (선택 시 새 목소리로 덮어쓰기 가능) ──">
                         {audioDocs.filter(d => d.audio_path).map(d => (
-                          <option key={d.id} value={d.id} disabled style={{ color: "#94a3b8" }}>
-                            🎵 {d.text ?? d.id} {d.category ? `(${d.category})` : ""} — 등록됨
+                          <option key={d.id} value={d.id}>
+                            🎵 {d.text ?? d.id} {d.category ? `(${d.category})` : ""} (오디오 있음)
                           </option>
                         ))}
                       </optgroup>
                     )}
                   </select>
                 </div>
-                <input ref={fileInputRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleSingleUpload} disabled={!selectedDocId || uploading} className="hidden" />
-                <button onClick={() => fileInputRef.current?.click()} disabled={!selectedDocId || uploading}
-                  className="w-full py-4 bg-green-600 text-white rounded-xl font-black flex items-center justify-center gap-2 hover:bg-green-700 transition disabled:opacity-50">
-                  {uploading ? <><Loader2 size={20} className="animate-spin" /> 업로드 중...</> : <><Upload size={20} /> MP3 / WAV 파일 업로드</>}
-                </button>
+
+                {selectedDocId && (
+                  <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 mb-4 animate-in fade-in">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-indigo-700">생성할 텍스트</span>
+                      <span className="text-xs text-slate-400">ID: {selectedDocId}</span>
+                    </div>
+                    <p className="text-base font-bold text-slate-900 mb-3">
+                      {audioDocs.find(d => d.id === selectedDocId)?.text}
+                    </p>
+                    <div className="mb-3">
+                      <label className="text-xs font-bold text-slate-600 block mb-1">목소리(Voice) 선택</label>
+                      <select
+                        value={selectedVoiceForSingle}
+                        onChange={e => setSelectedVoiceForSingle(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 bg-white font-medium focus:ring-2 focus:ring-indigo-500"
+                      >
+                        {ELEVENLABS_VOICES.map(v => (
+                          <option key={v.id} value={v.id}>
+                            {v.name} ({v.description})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => handleSingleGenerate()}
+                      disabled={singleGenerating}
+                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-50"
+                    >
+                      {singleGenerating ? (
+                        <><Loader2 size={18} className="animate-spin" /> ElevenLabs 음성 생성 중...</>
+                      ) : (
+                        <><Wand2 size={18} /> ✨ ElevenLabs 음성 자동 생성 및 저장</>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* 수동 파일 업로드 (보조) */}
+                <div className="pt-2 pb-1 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+                  <span>직접 녹음 파일 올리기:</span>
+                  <input ref={fileInputRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleSingleUpload} disabled={!selectedDocId || uploading} className="hidden" />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={!selectedDocId || uploading}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-bold underline disabled:opacity-50">
+                    {uploading ? "업로드 중..." : "MP3 파일 수동 업로드"}
+                  </button>
+                </div>
+
                 {uploadResult && (
                   <div className={`mt-3 p-3 rounded-xl text-xs font-bold ${uploadResult.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{uploadResult}</div>
                 )}
+
                 <div className="mt-8">
-                  <h3 className="font-bold text-slate-700 mb-3 text-sm">등록된 오디오 현황</h3>
+                  <h3 className="font-bold text-slate-700 mb-3 text-sm">등록된 오디오 현황 ({audioDocs.filter(d => d.audio_path).length}개)</h3>
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {audioDocs.filter(d => d.audio_path).map(d => (
-                      <div key={d.id} className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200">
-                        <div>
-                          <p className="font-bold text-sm text-slate-800">{d.text ?? d.id}</p>
-                          <p className="text-xs text-slate-400">{d.category}</p>
-                          <audio src={d.audio_path} controls className="mt-1 h-7 w-44" />
+                      <div key={d.id} className="flex items-center justify-between p-3 bg-green-50/60 rounded-xl border border-green-200">
+                        <div className="min-w-0 flex-1 mr-2">
+                          <p className="font-bold text-sm text-slate-800 truncate">{d.text ?? d.id}</p>
+                          <p className="text-xs text-slate-400 mb-1">{d.category}</p>
+                          <audio src={d.audio_path} controls className="h-7 w-48" />
                         </div>
-                        <button onClick={() => deleteSingleAudio(d.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition ml-2">
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              setSelectedDocId(d.id);
+                              window.scrollTo({ top: 400, behavior: "smooth" });
+                            }}
+                            className="text-xs bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-50 text-slate-600 transition"
+                          >
+                            🔄 목소리 교체
+                          </button>
+                          <button onClick={() => deleteSingleAudio(d.id)} className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition" title="삭제">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {audioDocs.filter(d => d.audio_path).length === 0 && (

@@ -392,22 +392,19 @@ export default function Home() {
     }
   };
 
-  // ── TTS ───────────────────────────────
-  const handleGoogleTTS = async (text: string, path?: string | null, voice?: string | null) => {
-    if (!text && !path) return;
-    if (path) { try { new Audio(path).play(); } catch (e) { console.error(e); } return; }
-    if (ttsLoading) return;
-    try {
-      setTtsLoading(true);
-      const cleanText = text.replace(/[\[\]]/g, "").replace(/-/g, " ").trim();
-      const formData = new FormData();
-      formData.append("action", "tts_simple");
-      formData.append("text", cleanText);
-      formData.append("voiceName", voice ?? "ko-KR-Chirp3-HD-Zephyr");
-      const res = await fetch("/api/chat", { method: "POST", body: formData });
-      const data = await res.json();
-      if (data.audioContent) new Audio(`data:audio/mp3;base64,${data.audioContent}`).play();
-    } catch (e) { console.error(e); } finally { setTtsLoading(false); }
+  // ── 오디오 재생 (사전 생성된 ElevenLabs 오디오 재생) ─────
+  const handleGoogleTTS = async (text: string, path?: string | null) => {
+    const audioUrl = path || currentProblem?.audio_path;
+    if (audioUrl) {
+      try {
+        const audio = new Audio(audioUrl);
+        audio.play().catch(e => console.error("오디오 재생 실패:", e));
+      } catch (e) {
+        console.error("오디오 로드 오류:", e);
+      }
+      return;
+    }
+    alert("등록된 발음 음성이 없습니다. 관리자 페이지(정답 발음 관리)에서 ElevenLabs 음성을 생성해주세요!");
   };
 
   // ── B: 출석 체크 보상 ─────────────────
