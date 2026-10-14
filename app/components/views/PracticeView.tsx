@@ -40,6 +40,7 @@ interface Props {
   onAnalyze: () => void;
   onNextDialogue: () => void;
   isAllMyLinesFinished: () => boolean;
+  isEmbedMode?: boolean;
 }
 
 export default function PracticeView({
@@ -49,7 +50,7 @@ export default function PracticeView({
   onBack, onSetMyRole, onSetTargetLine, onToggleShadowing,
   onPlayTTS, onRetry, onNext, onTranslate,
   onStartRecording, onStopRecording, onCancelAudio, onAnalyze, onNextDialogue,
-  isAllMyLinesFinished,
+  isAllMyLinesFinished, isEmbedMode,
 }: Props) {
   const [countdown, setCountdown] = useState<number | null>(null);
 
@@ -219,10 +220,12 @@ export default function PracticeView({
               </div>
             )}
           </div>
-          {/* 광고 #3: 분석 결과 확인 후 */}
-          <div className="w-full bg-slate-50 rounded-xl overflow-hidden my-2 border border-slate-100">
-            <AdUnit slot="SLOT_ID_3" format="rectangle" />
-          </div>
+          {/* 광고 #3: 분석 결과 확인 후 (Embed 모드에서는 숨김) */}
+          {!isEmbedMode && (
+            <div className="w-full bg-slate-50 rounded-xl overflow-hidden my-2 border border-slate-100">
+              <AdUnit slot="SLOT_ID_3" format="rectangle" />
+            </div>
+          )}
           <div className="flex flex-col gap-2 shrink-0 bg-white pt-2 border-t">
             <button onClick={onRetry} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2">
               <Mic size={18} /> 다시 녹음하기

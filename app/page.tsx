@@ -12,7 +12,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Login from "./components/Login";
 import CheckinModal from "./components/CheckinModal";
-import LicenseModal, { useDeepLink } from "./components/LicenseModal";
+import LicenseModal, { useDeepLink, DeepLinkParams } from "./components/LicenseModal";
 import HomeView from "./components/views/HomeView";
 import PracticeView from "./components/views/PracticeView";
 import AudioWaveform from "./components/AudioWaveform";
@@ -97,6 +97,9 @@ export default function Home() {
   // ── 뷰 / 코스 ─────────────────────────
   const [viewMode, setViewMode] = useState("home");
   const [courseType, setCourseType] = useState<"word" | "sentence" | "dialogue" | null>(null);
+  // ── Embed 모드 (한업 HanUp 연동) ───────
+  const [isEmbedMode, setIsEmbedMode] = useState(false);
+  const [embedUser, setEmbedUser] = useState<{ id?: string; name?: string }>({});
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [problemList, setProblemList] = useState<any[]>([]);
@@ -143,26 +146,49 @@ export default function Home() {
   const { spendToken, claimCheckin } = useTokenTransaction();
   const feedbackVoices = useFeedbackVoices();
 
-  // ── E: 딥링크 처리 ──────────────────
-  useDeepLink(async (step, unit) => {
-    if (!currentUser) return;
-    // step/unit 필터링해서 바로 연습 모드로 이동
-    try {
-      const snap = await getDocs(
-        query(
-          collection(db, "sori_curriculum_word"),
-          where("step", "==", step),
-          where("unit", "==", unit)
-        )
-      );
-      if (!snap.empty) {
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setProblemList(list);
-        setCourseType("word");
-        initPractice(list);
-        setViewMode("practice");
-      }
-    } catch (e) { console.error("Deep link error:", e); }
+  // ── E: 딥링크 / 한업 Embed 처리 ──────────────────
+  useDeepLink(async (params: DeepLinkParams) => {
+    if (params.embed) {
+      setIsEmbedMode(true);
+      setEmbedUser({ id: params.userId, name: params.userName });
+    }
+
+    // A. 외부 플랫폼(한업)에서 특정 문장(sentence)을 전달한 경우: DB 조회 없이 즉시 가상 문제 생성
+    if (params.sentence) {
+      const virtualProblem = {
+        id: `embed-${Date.now()}`,
+        category: "한업 연동",
+        text: params.sentence,
+        pronunciation: params.sentence,
+        tip: "연음과 받침 발음에 유의하여 또렷하게 읽어보세요.",
+      };
+      setCourseType("sentence");
+      setCurrentProblem(virtualProblem);
+      setProblemList([virtualProblem]);
+      setViewMode("practice");
+      return;
+    }
+
+    // B. 기존 교재 step/unit 딥링크인 경우
+    if (params.step && params.unit) {
+      if (!currentUser) return;
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "sori_curriculum_word"),
+            where("step", "==", params.step),
+            where("unit", "==", params.unit)
+          )
+        );
+        if (!snap.empty) {
+          const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setProblemList(list);
+          setCourseType("word");
+          initPractice(list);
+          setViewMode("practice");
+        }
+      } catch (e) { console.error("Deep link error:", e); }
+    }
   });
 
   // ── 인증 / 유저 로드 ──────────────────
@@ -746,13 +772,17 @@ export default function Home() {
     </p>
   );
 
-  // ── 발음 분석 — A: 서버 토큰 차감 ────
+  // ── 발음 분석 — A: 서버 토큰 차감 (Embed 모드 대응) ────
   const analyzeAudio = async () => {
     if (!audioBlob || !currentProblem) return;
     const currency = userRole === "guest" ? "heart" : "token";
     const cost = 1;
-    if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
+
+    // Embed 모드가 아닐 때만 토큰/하트 검증
+    if (!isEmbedMode) {
+      if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
+      if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
+    }
     setLoading(true); setResult(null); setTranslation(null);
 
     let targetText = currentProblem.text; let contextInfo = "";
@@ -763,7 +793,8 @@ export default function Home() {
 
     const formData = new FormData();
     formData.append("audio", audioBlob); formData.append("targetText", targetText);
-    formData.append("context", contextInfo); formData.append("userNick", userAlias || "학습자");
+    formData.append("context", contextInfo);
+    formData.append("userNick", embedUser.name || userAlias || "학습자");
 
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
@@ -771,30 +802,44 @@ export default function Home() {
       if (data.error) { alert(data.error); } else {
         setResult(data);
 
+        // 상위 창(한업 HanUp)으로 채점 결과 postMessage 전송
+        if (typeof window !== "undefined") {
+          window.parent.postMessage({
+            type: "SORI_EVALUATION_COMPLETE",
+            payload: {
+              userId: embedUser.id,
+              targetText,
+              ...data,
+            },
+          }, "*");
+        }
+
         // 효과음 + 멘트 재생
         const isSilence = !data.recognized || data.recognized === "(침묵)" || data.recognized === "(잡음)";
         const tier = getTier(data.score, isSilence);
         const voiceUrl = feedbackVoices[tier] ?? null;
         playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
 
-        // A: 서버에서 토큰 차감
-        const reason = courseType === "word" ? "발음 분석 (word)" : courseType === "sentence" ? "발음 분석 (sentence)" : "발음 분석 (dialogue)";
-        const spendRes = await spendToken(reason as any, currency);
-        if (spendRes.success) {
-          if (currency === "heart") setHearts(p => p - 1);
-          else setTokens(spendRes.remaining ?? Math.max(0, tokens - cost));
-        }
+        // Standalone 단독 실행(비-Embed)이며 로그인 유저인 경우에만 토큰 차감 및 DB 저장
+        if (!isEmbedMode && currentUser) {
+          const reason = courseType === "word" ? "발음 분석 (word)" : courseType === "sentence" ? "발음 분석 (sentence)" : "발음 분석 (dialogue)";
+          const spendRes = await spendToken(reason as any, currency);
+          if (spendRes.success) {
+            if (currency === "heart") setHearts(p => p - 1);
+            else setTokens(spendRes.remaining ?? Math.max(0, tokens - cost));
+          }
 
-        await updateDoc(doc(db, "sori_users", currentUser.email), { points: increment(courseType === "word" ? 2 : 3) });
-        await updateDailyProgress();
-        if (courseType === "dialogue" && targetLineIndex !== null) {
-          if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]);
+          await updateDoc(doc(db, "sori_users", currentUser.email), { points: increment(courseType === "word" ? 2 : 3) });
+          await updateDailyProgress();
+          if (courseType === "dialogue" && targetLineIndex !== null) {
+            if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]);
+          }
+          await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
+            text: targetText, score: data.score, recognized: data.recognized,
+            correct: data.correct, feedback: data.explanation, advice: data.advice,
+            type: courseType, date: serverTimestamp(),
+          });
         }
-        await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
-          text: targetText, score: data.score, recognized: data.recognized,
-          correct: data.correct, feedback: data.explanation, advice: data.advice,
-          type: courseType, date: serverTimestamp(),
-        });
       }
     } catch (e) { alert("서버 오류"); } finally { setLoading(false); }
   };
@@ -849,72 +894,76 @@ export default function Home() {
     return myLines.every(i => completedLines.includes(i));
   };
 
-  // ── 로딩 / 비로그인 화면 ──────────────
+  // ── 로딩 / 비로그인 화면 (Embed 모드는 로그인 없이 즉시 직행) ──
   if (isAuthChecking) return <div className="flex h-screen items-center justify-center bg-slate-50">로딩 중...</div>;
 
-  if (!currentUser) {
+  if (!currentUser && !isEmbedMode) {
     return <LandingPage onUserChange={handleUserChange} />;
   }
 
   // ── 메인 앱 ───────────────────────────
   return (
     <main className="flex h-[100dvh] flex-col bg-slate-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden">
-      {/* 헤더 */}
-      <header className="bg-white px-5 py-3 flex justify-between items-center flex-none z-40 border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode("home")}>
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">S</div>
-          <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* 관리자 어드민 버튼 — admin 계정에서만 표시 */}
-          {userRole === "admin" && (
-            <a
-              href="/admin"
-              className="flex items-center gap-1 bg-slate-800 text-white px-2.5 py-1 rounded-full text-xs font-bold hover:bg-slate-700 transition"
+      {/* 헤더 (Embed 모드에서는 숨김) */}
+      {!isEmbedMode && (
+        <header className="bg-white px-5 py-3 flex justify-between items-center flex-none z-40 border-b border-slate-100 shadow-sm">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode("home")}>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">S</div>
+            <span className="font-bold text-lg text-slate-800">Sori-Tutor</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* 관리자 어드민 버튼 — admin 계정에서만 표시 */}
+            {userRole === "admin" && (
+              <a
+                href="/admin"
+                className="flex items-center gap-1 bg-slate-800 text-white px-2.5 py-1 rounded-full text-xs font-bold hover:bg-slate-700 transition"
+              >
+                ⚙️ 어드민
+              </a>
+            )}
+            {/* E: 교재 연동 버튼 */}
+            <button
+              onClick={() => setShowLicenseModal(true)}
+              className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-bold hover:bg-amber-100 transition"
             >
-              ⚙️ 어드민
-            </a>
-          )}
-          {/* E: 교재 연동 버튼 */}
-          <button
-            onClick={() => setShowLicenseModal(true)}
-            className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-bold hover:bg-amber-100 transition"
-          >
-            <BookOpen size={12} /> 교재 연동
-          </button>
-          <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1">
-            <span className="text-2xl">📮</span>
-            {hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white" />}
-          </button>
-          <button onClick={handleLogout} className="text-xl hover:scale-110 transition" title="로그아웃">👋</button>
-        </div>
-      </header>
+              <BookOpen size={12} /> 교재 연동
+            </button>
+            <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1">
+              <span className="text-2xl">📮</span>
+              {hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white" />}
+            </button>
+            <button onClick={handleLogout} className="text-xl hover:scale-110 transition" title="로그아웃">👋</button>
+          </div>
+        </header>
+      )}
 
-      {/* 토큰/하트 표시 바 */}
-      <div className="bg-white px-5 py-2 flex justify-between items-center border-b border-slate-50 text-sm flex-none">
-        <div className="flex gap-2">
-          <button onClick={fetchRanking} className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full font-bold hover:bg-yellow-100 transition">
-            <Trophy size={14} /> 랭킹
-          </button>
-          <button onClick={fetchHistory} className="flex items-center gap-1 bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-bold hover:bg-slate-200 transition">
-            내 기록
-          </button>
+      {/* 토큰/하트 표시 바 (Embed 모드에서는 숨김) */}
+      {!isEmbedMode && (
+        <div className="bg-white px-5 py-2 flex justify-between items-center border-b border-slate-50 text-sm flex-none">
+          <div className="flex gap-2">
+            <button onClick={fetchRanking} className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full font-bold hover:bg-yellow-100 transition">
+              <Trophy size={14} /> 랭킹
+            </button>
+            <button onClick={fetchHistory} className="flex items-center gap-1 bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-bold hover:bg-slate-200 transition">
+              내 기록
+            </button>
+          </div>
+          <div
+            className="flex items-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 transition"
+            onClick={() => setShowPaymentModal(true)}
+          >
+            {userRole === "guest" ? (
+              [1, 2, 3].map(i => <Heart key={i} size={16} className={i <= hearts ? "text-red-500 fill-red-500" : "text-slate-300"} />)
+            ) : (
+              <>
+                <SoriIcon size={20} />
+                <span className="font-bold text-slate-700 text-sm">{Math.floor(tokens)}</span>
+                <span className="text-[10px] text-slate-400 font-bold">Sori</span>
+              </>
+            )}
+          </div>
         </div>
-        <div
-          className="flex items-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 transition"
-          onClick={() => setShowPaymentModal(true)}
-        >
-          {userRole === "guest" ? (
-            [1, 2, 3].map(i => <Heart key={i} size={16} className={i <= hearts ? "text-red-500 fill-red-500" : "text-slate-300"} />)
-          ) : (
-            <>
-              <SoriIcon size={20} />
-              <span className="font-bold text-slate-700 text-sm">{Math.floor(tokens)}</span>
-              <span className="text-[10px] text-slate-400 font-bold">Sori</span>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* 콘텐츠 영역 */}
       <div className="flex-1 overflow-y-auto p-5 scrollbar-hide pb-24">
@@ -1172,7 +1221,15 @@ export default function Home() {
             recording={recording}
             audioUrl={audioUrl}
             analyser={analyserRef.current}
-            onBack={() => setViewMode("home")}
+            onBack={() => {
+              if (isEmbedMode) {
+                if (typeof window !== "undefined") {
+                  window.parent.postMessage({ type: "SORI_EMBED_CLOSE" }, "*");
+                }
+              } else {
+                setViewMode("home");
+              }
+            }}
             onSetMyRole={setMyRole}
             onSetTargetLine={(i) => { setTargetLineIndex(i); setResult(null); setAudioUrl(null); }}
             onToggleShadowing={() => setIsShadowingMode(p => !p)}
@@ -1186,6 +1243,7 @@ export default function Home() {
             onAnalyze={analyzeAudio}
             onNextDialogue={handleNextProblem}
             isAllMyLinesFinished={isAllMyLinesFinished}
+            isEmbedMode={isEmbedMode}
           />
         )}
 

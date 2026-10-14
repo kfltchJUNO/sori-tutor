@@ -10,22 +10,48 @@ import { auth } from "@/lib/firebase";
 // ──────────────────────────────────────────
 // useDeepLink 훅
 // QR 코드 링크: https://sori-tutor.vercel.app/?step=2&unit=3&mode=practice
+// 한업 Embed 링크: https://sori-tutor.vercel.app/?sentence=...&embed=true&userId=...&userName=...
 // ──────────────────────────────────────────
-export function useDeepLink(onNavigate: (step: number, unit: number) => void) {
+export interface DeepLinkParams {
+  step?: number;
+  unit?: number;
+  mode?: string;
+  sentence?: string;
+  embed?: boolean;
+  userId?: string;
+  userName?: string;
+}
+
+export function useDeepLink(onNavigate: (params: DeepLinkParams) => void) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const step = params.get("step");
     const unit = params.get("unit");
     const mode = params.get("mode");
+    const sentence = params.get("sentence");
+    const embed = params.get("embed") === "true";
+    const userId = params.get("userId") ?? undefined;
+    const userName = params.get("userName") ?? undefined;
 
-    if (step && unit && mode === "practice") {
-      onNavigate(Number(step), Number(unit));
-      // URL 파라미터 제거 (히스토리 오염 방지)
-      const clean = window.location.pathname;
-      window.history.replaceState({}, "", clean);
+    if (sentence || (step && unit && mode === "practice")) {
+      onNavigate({
+        step: step ? Number(step) : undefined,
+        unit: unit ? Number(unit) : undefined,
+        mode: mode ?? undefined,
+        sentence: sentence ? decodeURIComponent(sentence) : undefined,
+        embed,
+        userId,
+        userName: userName ? decodeURIComponent(userName) : undefined,
+      });
+
+      // 히스토리 오염 방지 (embed 모드가 아닐 때만 파라미터 정리)
+      if (!embed) {
+        const clean = window.location.pathname;
+        window.history.replaceState({}, "", clean);
+      }
     }
-  }, []);
+  }, [onNavigate]);
 }
 
 // ──────────────────────────────────────────
