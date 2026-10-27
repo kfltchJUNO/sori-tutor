@@ -1,6 +1,9 @@
 "use client";
 // app/admin/page.tsx
 
+import DonggukSection from "./DonggukSection";
+// app/admin/page.tsx
+
 import { useEffect, useState, useRef } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -42,7 +45,7 @@ interface CurriculumDoc {
 
 interface ParsedLine { role: string; text: string; }
 
-type Tab = "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "users" | "charges" | "inquiries";
+type Tab = "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "dongguk" | "users" | "charges" | "inquiries";
 
 // ── 점수대 정보 ────────────────────────────────────────────
 const SCORE_TIERS = [

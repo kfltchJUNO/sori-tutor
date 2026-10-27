@@ -1,22 +1,24 @@
 "use client";
 // components/views/HomeView.tsx
-import { Mic, Star, MessageSquare, MessageCircle, Trophy } from "lucide-react";
+import { Mic, Star, MessageSquare, MessageCircle, Trophy, GraduationCap, Clock, CheckCircle2 } from "lucide-react";
 import SoriIcon from "@/app/components/SoriIcon";
 import type { SoriUser, CourseType } from "@/types";
 
 interface Props {
   user: SoriUser;
-  onSelectCourse: (type: CourseType) => void;
+  onSelectCourse: (type: "word" | "sentence" | "dialogue") => void;
   onEnterFreeTalking: () => void;
   onFetchRanking: () => void;
   onFetchHistory: () => void;
   onOpenNickname: () => void;
+  onOpenDonggukModal: () => void;
+  onEnterDonggukCourse: () => void;
 }
 
 // Tailwind 동적 클래스 문제 방지 — 정적 클래스로 정의
 const COURSES = [
   {
-    id: "word" as CourseType,
+    id: "word" as const,
     t: "단어 발음 연습", d: "기초 어휘 마스터",
     icon: <Mic size={22} />,
     iconBg: "bg-blue-100", iconText: "text-blue-600",
@@ -24,7 +26,7 @@ const COURSES = [
     hoverText: "group-hover:text-blue-700",
   },
   {
-    id: "sentence" as CourseType,
+    id: "sentence" as const,
     t: "문장 억양 연습", d: "자연스러운 억양 익히기",
     icon: <Star size={22} />,
     iconBg: "bg-indigo-100", iconText: "text-indigo-600",
@@ -32,7 +34,7 @@ const COURSES = [
     hoverText: "group-hover:text-indigo-700",
   },
   {
-    id: "dialogue" as CourseType,
+    id: "dialogue" as const,
     t: "실전 회화", d: "AI와 역할극 대화",
     icon: <MessageSquare size={22} />,
     iconBg: "bg-purple-100", iconText: "text-purple-600",
@@ -44,7 +46,10 @@ const COURSES = [
 export default function HomeView({
   user, onSelectCourse, onEnterFreeTalking,
   onFetchRanking, onFetchHistory, onOpenNickname,
+  onOpenDonggukModal, onEnterDonggukCourse,
 }: Props) {
+  const donggukStatus = user.dongguk_status || "none";
+
   return (
     <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
 
@@ -99,6 +104,65 @@ export default function HomeView({
           내 기록
         </button>
       </div>
+
+      {/* 🏫 동국대학교 학생 인증 & 1급 발음 전용 카드 */}
+      {donggukStatus === "approved" ? (
+        <div
+          onClick={onEnterDonggukCourse}
+          className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 shadow-md cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition flex items-center justify-between gap-3 border border-amber-400"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-black text-xl shrink-0">
+              <GraduationCap size={24} className="text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="bg-white text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <CheckCircle2 size={10} /> 승인 완료
+                </span>
+                <h4 className="font-black text-white text-base">동국한국어 1급</h4>
+              </div>
+              <p className="text-xs text-amber-100 mt-0.5">초급 발음 변화 공식 & 문장 연습하기</p>
+            </div>
+          </div>
+          <span className="bg-white/20 hover:bg-white/30 px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition">
+            학습 시작 →
+          </span>
+        </div>
+      ) : donggukStatus === "pending" ? (
+        <div className="bg-amber-50/90 border-2 border-amber-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
+              <Clock size={20} className="animate-spin text-amber-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-amber-900 text-sm">동국대 학생 승인 대기 중 ⏳</h4>
+              <p className="text-xs text-amber-700">선생님 확인 후 1급 코스가 바로 열려요!</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-bold bg-white text-amber-700 border border-amber-300 px-3 py-1 rounded-full shrink-0 shadow-sm">
+            확인 중
+          </span>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-lg shrink-0 shadow-sm">
+              <GraduationCap size={20} />
+            </div>
+            <div>
+              <h4 className="font-black text-slate-800 text-sm">동국대학교 1급 학생이신가요?</h4>
+              <p className="text-xs text-slate-500">선생님 연결 요청 후 1급 맞춤 발음 연습 이용</p>
+            </div>
+          </div>
+          <button
+            onClick={onOpenDonggukModal}
+            className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow transition"
+          >
+            학생 인증 →
+          </button>
+        </div>
+      )}
 
       {/* 코스 선택 */}
       <div className="grid gap-3">

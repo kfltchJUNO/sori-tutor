@@ -252,6 +252,7 @@ interface ScoringResult {
   explanation: string;
   advice: string;
   errorTypes: string[];
+  ruleFormula?: string;
 }
 
 async function runScoring(
@@ -281,6 +282,12 @@ async function runScoring(
 - 완벽해도 최대 90점. 100점·95점 절대 금지.
 - recognized와 targetText가 같더라도 연음·억양 오류 가능성 감안해 90점 이하
 
+[초급 1급 눈높이 맞춤 발음 규칙 지침 - 필수]
+- 비음화, 유음화, 연음, 구개음화 같은 어려운 문법 학술 용어는 '절대' 사용 금지!
+- 'correct': 반드시 소리 나는 대로의 발음 표기(예: '[장년에 한구게 와써요]')로 적기.
+- 'ruleFormula': '? 받침 + ? = [??]' 형태의 직관적인 변화 공식만 적기 (예: 'ㄱ 받침 + ㄴ = [ㅇ]', 'ㄱ 받침 + 모음 = [ㄱ 연음]', 변화 없으면 '소리 그대로 발음').
+- 'explanation': ${userNick}님이 이해하기 쉽게 어려운 용어 없이 친절한 구어체로 설명.
+
 [오류 유형 감지]
 1. 받침 누락: 작→자, 먹→머
 2. 받침 대치: 국→굿, 밥→밫
@@ -294,7 +301,8 @@ async function runScoring(
 JSON만 출력. 다른 텍스트 절대 금지.
 {
   "score": ${simBasedScore - 10}~${Math.min(simBasedScore + 10, 90)} 범위 정수,
-  "correct": "올바른 발음 표기",
+  "correct": "[소리 나는 대로 발음 표기]",
+  "ruleFormula": "? 받침 + ? = [??]",
   "explanation": "${userNick}님, (구체적 오류 지적. 오류 없으면 잘한 점)",
   "advice": "(혀 위치·입 모양 등 실용적 조언)",
   "errorTypes": ["오류유형1", "오류유형2"]
@@ -310,6 +318,7 @@ JSON만 출력. 다른 텍스트 절대 금지.
     explanation?: string;
     advice?: string;
     errorTypes?: string[];
+    ruleFormula?: string;
   };
 
   // 범위 강제 적용
@@ -324,6 +333,7 @@ JSON만 출력. 다른 텍스트 절대 금지.
     explanation: data.explanation ?? "",
     advice:      data.advice      ?? "",
     errorTypes:  data.errorTypes  ?? [],
+    ruleFormula: data.ruleFormula ?? undefined,
   };
 }
 
@@ -469,6 +479,7 @@ export async function POST(req: Request): Promise<Response> {
       explanation: finalExplanation,
       advice:      scored.advice,
       syllableResults,
+      ruleFormula: scored.ruleFormula,
     });
 
   } catch (error: unknown) {

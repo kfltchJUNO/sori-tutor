@@ -14,9 +14,12 @@ export interface SoriUser {
   last_checkin_date?: string;
   shared_memory: string;
   chat_count: number;
+  dongguk_status?: "none" | "pending" | "approved";
+  dongguk_student_id?: string;
+  dongguk_applied_at?: string;
 }
 
-export type SeriesId = "step-korean" | "basecamp-korean";
+export type SeriesId = "step-korean" | "basecamp-korean" | "dongguk-1";
 
 export interface CurriculumItem {
   id: string;
@@ -50,7 +53,17 @@ export interface DialogueItem extends CurriculumItem {
   audio_paths?: string[];
 }
 
-export type CourseType = "word" | "sentence" | "dialogue";
+export interface DonggukSentenceItem {
+  id: string;
+  text: string;
+  pronunciation: string;
+  rule_formula?: string; // 예: "ㄱ 받침 + ㄴ = [ㅇ]"
+  chapter: number;
+  audio_path?: string;
+  created_at?: any;
+}
+
+export type CourseType = "word" | "sentence" | "dialogue" | "dongguk";
 
 export interface SyllableMatch {
   char: string;
@@ -65,6 +78,7 @@ export interface AnalysisResult {
   correct: string;
   explanation: string;
   advice: string;
+  ruleFormula?: string;
   syllableResults?: SyllableMatch[];
 }
 

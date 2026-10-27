@@ -94,7 +94,11 @@ export default function PracticeView({
       {/* 상단 컨트롤 */}
       <div className="flex justify-between items-center mb-4">
         <button onClick={onBack}><X size={20} /></button>
-        {courseType === "dialogue" ? (
+        {courseType === "dongguk" ? (
+          <div className="flex items-center gap-1.5 text-xs font-black text-amber-800 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
+            <span>🏫</span> 동국한국어 1급 발음 마스터
+          </div>
+        ) : courseType === "dialogue" ? (
           <div className="flex gap-2">
             {(["A", "B"] as const).map((r) => (
               <button
@@ -182,11 +186,21 @@ export default function PracticeView({
             )}
             <div className="flex justify-center"><div className="w-0.5 h-3 bg-slate-300" /></div>
             <div>
-              <span className="text-xs font-bold text-slate-400 block mb-1">정답 소리</span>
-              <div className="text-lg font-bold text-green-600 bg-white p-2 rounded border border-green-100">
-                {result.correct}
+              <span className="text-xs font-bold text-slate-400 block mb-1">소리 나는 대로 발음</span>
+              <div className="text-lg font-black text-green-700 bg-green-50 p-2.5 rounded-xl border border-green-200 tracking-wide">
+                {result.correct.startsWith("[") ? result.correct : `[${result.correct}]`}
               </div>
             </div>
+            {(result.ruleFormula || currentProblem?.rule_formula) && (
+              <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-3 text-amber-950 animate-in fade-in">
+                <div className="flex items-center gap-1.5 font-black text-xs text-amber-700 mb-1">
+                  <span>📌</span> 초급 발음 변화 공식
+                </div>
+                <div className="text-base font-black text-amber-900 tracking-wide font-mono">
+                  {result.ruleFormula || currentProblem?.rule_formula}
+                </div>
+              </div>
+            )}
           </div>
           <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3">
             <div className="flex justify-end mb-1">
@@ -308,7 +322,7 @@ export default function PracticeView({
                   <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
                 )}
                 <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">
-                  💡 {courseType === "word" ? currentProblem.tip : currentProblem.translation}
+                  💡 {courseType === "word" ? currentProblem.tip : courseType === "dongguk" ? (currentProblem.rule_formula ? `규칙: ${currentProblem.rule_formula}` : currentProblem.tip || "천천히 또렷하게 읽어보세요.") : currentProblem.translation}
                 </div>
               </div>
             </div>

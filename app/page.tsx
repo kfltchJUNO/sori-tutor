@@ -17,7 +17,7 @@ import HomeView from "./components/views/HomeView";
 import PracticeView from "./components/views/PracticeView";
 import AudioWaveform from "./components/AudioWaveform";
 import SoriIcon from "./components/SoriIcon";
-import { PERSONAS } from "@/types";
+import { PERSONAS, CourseType } from "@/types";
 
 import { db, auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
@@ -96,10 +96,15 @@ export default function Home() {
 
   // ── 뷰 / 코스 ─────────────────────────
   const [viewMode, setViewMode] = useState("home");
-  const [courseType, setCourseType] = useState<"word" | "sentence" | "dialogue" | null>(null);
+  const [courseType, setCourseType] = useState<CourseType | null>(null);
   // ── Embed 모드 (한업 HanUp 연동) ───────
   const [isEmbedMode, setIsEmbedMode] = useState(false);
   const [embedUser, setEmbedUser] = useState<{ id?: string; name?: string }>({});
+  // ── 동국대학교 1급 학생 연동 ─────────────
+  const [donggukStatus, setDonggukStatus] = useState<"none" | "pending" | "approved">("none");
+  const [showDonggukModal, setShowDonggukModal] = useState(false);
+  const [donggukStudentIdInput, setDonggukStudentIdInput] = useState("");
+  const [donggukApplying, setDonggukApplying] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [problemList, setProblemList] = useState<any[]>([]);
@@ -221,6 +226,7 @@ export default function Home() {
 
       setUserRole(role);
       setUserAlias(data.alias ?? "");
+      setDonggukStatus(data.dongguk_status ?? "none");
       setSharedMemory(data.shared_memory ?? "");
       setChatCount(data.chat_count ?? 0);
       setPurchasedSteps(userSteps);
@@ -669,6 +675,82 @@ export default function Home() {
     } catch (e) { alert("오류"); } finally { setLoading(false); }
   };
 
+  // ── 동국대학교 학생 연결 신청 ────────
+  const handleDonggukApply = async () => {
+    if (!currentUser) return alert("로그인 후 이용해주세요.");
+    if (!donggukStudentIdInput.trim()) return alert("학번 또는 이름을 입력해주세요.");
+    setDonggukApplying(true);
+    try {
+      const userRef = doc(db, "sori_users", currentUser.email);
+      await updateDoc(userRef, {
+        dongguk_status: "pending",
+        dongguk_student_id: donggukStudentIdInput.trim(),
+        dongguk_applied_at: serverTimestamp(),
+      });
+      setDonggukStatus("pending");
+      setShowDonggukModal(false);
+      setDonggukStudentIdInput("");
+      alert("선생님께 연결 요청을 보냈습니다! ⏳\n승인이 완료되면 바로 1급 코스가 열립니다.");
+    } catch (e) {
+      console.error(e);
+      alert("신청 중 오류가 발생했습니다.");
+    } finally {
+      setDonggukApplying(false);
+    }
+  };
+
+  // ── 동국한국어 1급 코스 진입 ─────────
+  const enterDonggukCourse = async () => {
+    setLoading(true);
+    setCourseType("dongguk");
+    setResult(null);
+    setCompletedLines([]);
+    try {
+      const snap = await getDocs(
+        query(collection(db, "sori_curriculum_dongguk"), orderBy("chapter", "asc"))
+      );
+      let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (list.length === 0) {
+        list = [
+          {
+            id: "dongguk-sample-1",
+            text: "작년에 한국에 왔어요",
+            pronunciation: "[장년에 한구게 와써요]",
+            rule_formula: "ㄱ 받침 + ㄴ = [ㅇ]",
+            chapter: 1,
+            tip: "받침 [ㄱ] 뒤에 [ㄴ]이 오면 [ㅇ]으로 소리나요.",
+          },
+          {
+            id: "dongguk-sample-2",
+            text: "한국말을 잘하고 싶어요",
+            pronunciation: "[한국마를 자라고 시퍼요]",
+            rule_formula: "받침 + 모음 = [연음]",
+            chapter: 1,
+            tip: "받침 뒤에 모음(ㅇ)이 오면 받침이 다음 글자 첫소리로 넘어가요.",
+          },
+          {
+            id: "dongguk-sample-3",
+            text: "국립중앙박물관에 가요",
+            pronunciation: "[궁닙쯩앙방물과네 가요]",
+            rule_formula: "ㄱ 받침 + ㄹ/ㅁ = [ㅇ/ㄴ]",
+            chapter: 2,
+            tip: "선생님이 어드민 페이지에서 새로운 문장을 계속 추가해 주실 거예요!",
+          },
+        ];
+      }
+
+      setProblemList(list);
+      initPractice(list);
+      setViewMode("practice");
+    } catch (e) {
+      console.error("Dongguk course load error:", e);
+      alert("문장 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── 커리큘럼 선택 ─────────────────────
   const selectCourse = async (type: "word" | "sentence" | "dialogue") => {
     setCourseType(type); setResult(null); setCompletedLines([]);
@@ -778,8 +860,8 @@ export default function Home() {
     const currency = userRole === "guest" ? "heart" : "token";
     const cost = 1;
 
-    // Embed 모드가 아닐 때만 토큰/하트 검증
-    if (!isEmbedMode) {
+    // Embed 모드이거나 동국대 코스일 때는 토큰/하트 무료 통과
+    if (!isEmbedMode && courseType !== "dongguk") {
       if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
       if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
     }
@@ -821,7 +903,7 @@ export default function Home() {
         playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
 
         // Standalone 단독 실행(비-Embed)이며 로그인 유저인 경우에만 토큰 차감 및 DB 저장
-        if (!isEmbedMode && currentUser) {
+        if (!isEmbedMode && currentUser && courseType !== "dongguk") {
           const reason = courseType === "word" ? "발음 분석 (word)" : courseType === "sentence" ? "발음 분석 (sentence)" : "발음 분석 (dialogue)";
           const spendRes = await spendToken(reason as any, currency);
           if (spendRes.success) {
@@ -1007,12 +1089,15 @@ export default function Home() {
                 free_hearts: hearts, tokens, points: 0,
                 streak, today_count: todayCount,
                 last_access_date: "", shared_memory: sharedMemory, chat_count: chatCount,
+                dongguk_status: donggukStatus,
               }}
               onSelectCourse={selectCourse}
               onEnterFreeTalking={enterFreeTalking}
               onFetchRanking={fetchRanking}
               onFetchHistory={fetchHistory}
               onOpenNickname={() => setShowNicknameModal(true)}
+              onOpenDonggukModal={() => setShowDonggukModal(true)}
+              onEnterDonggukCourse={enterDonggukCourse}
             />
 
             {/* 광고 #4: 홈 화면 하단 */}
@@ -1289,6 +1374,42 @@ export default function Home() {
       )}
 
       {/* E: 라이선스 모달 */}
+      {showDonggukModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🏫</span>
+                <h3 className="font-black text-lg text-slate-800">동국대학교 1급 학생 인증</h3>
+              </div>
+              <button onClick={() => setShowDonggukModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              동국대학교 한국어 1급 수업 학생이신가요?<br />
+              학번이나 반/이름을 입력하고 요청하시면, 선생님 승인 후 <strong>동국한국어 1급 발음 코스</strong>를 무료로 이용할 수 있습니다.
+            </p>
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1">학번 (또는 반 / 이름)</label>
+              <input
+                value={donggukStudentIdInput}
+                onChange={e => setDonggukStudentIdInput(e.target.value)}
+                placeholder="예: 2026123456 (또는 1급 3반 마이클)"
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800"
+              />
+            </div>
+            <button
+              onClick={handleDonggukApply}
+              disabled={donggukApplying}
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-xl shadow-md transition disabled:opacity-50"
+            >
+              {donggukApplying ? "전송 중..." : "선생님께 연결 요청하기"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showLicenseModal && (
         <LicenseModal
           onClose={() => setShowLicenseModal(false)}
