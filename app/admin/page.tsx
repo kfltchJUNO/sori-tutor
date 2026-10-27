@@ -638,6 +638,7 @@ export default function AdminPage() {
   if (!isAdmin) return <div className="flex h-screen items-center justify-center text-red-500 font-bold">관리자 권한이 없습니다.</div>;
 
   const TABS: { id: Tab; label: string }[] = [
+    { id: "dongguk",  label: "🏫 동국대 1급" },
     { id: "generate", label: "✨ AI 생성" },
     { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },
     { id: "audio",    label: "🎵 오디오" },
@@ -665,6 +666,15 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6">
+
+        {/* ──── 동국대 1급 관리 ──── */}
+        {activeTab === "dongguk" && (
+          <DonggukSection
+            idToken={idToken}
+            voices={ELEVENLABS_VOICES}
+            defaultVoiceId={DEFAULT_MALE_VOICE_ID}
+          />
+        )}
 
         {/* ──── AI 생성 ──── */}
         {activeTab === "generate" && (
