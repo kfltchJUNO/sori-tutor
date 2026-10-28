@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import {
   Sparkles, CheckCircle, XCircle, Upload, Trash2,
-  RefreshCw, Loader2, Music, Volume2, Wand2,
+  RefreshCw, Loader2, Music, Volume2, Wand2, Plus,
 } from "lucide-react";
 import { ELEVENLABS_VOICES, DEFAULT_MALE_VOICE_ID } from "@/lib/elevenlabsVoices";
 
@@ -400,6 +400,24 @@ export default function AdminPage() {
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // ── 새 에셋 등록 상태 ─────────────────────
+  const [assetInputText, setAssetInputText] = useState("");
+  const [assetPronunciation, setAssetPronunciation] = useState("");
+  const [assetTip, setAssetTip] = useState("");
+  const [assetRuleFormula, setAssetRuleFormula] = useState("");
+  const [assetMeaningKo, setAssetMeaningKo] = useState("");
+  const [assetCategory, setAssetCategory] = useState("일상");
+  const [assetScript, setAssetScript] = useState("");
+  const [assetTranslation, setAssetTranslation] = useState("");
+  const [assetAutoVoice, setAssetAutoVoice] = useState(true);
+  const [assetVoiceId, setAssetVoiceId] = useState(DEFAULT_MALE_VOICE_ID);
+  const [assetAnalyzing, setAssetAnalyzing] = useState(false);
+  const [assetSaving, setAssetSaving] = useState(false);
+
+  // ── 오디오 일괄 생성 상태 ───────────────────
+  const [batchAudioGenerating, setBatchAudioGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState("");
+
   // ── 인증 ─────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -570,6 +588,151 @@ export default function AdminPage() {
     if (!confirm("삭제하시겠습니까?")) return;
     await deleteDoc(doc(db, `sori_curriculum_${curriculumType}`, id));
     setCurriculumList(prev => prev.filter(i => i.id !== id));
+  };
+
+  // ── AI 에셋 발음·규칙·의미 자동 완성 ─────────────
+  const handleAssetAutoFill = async () => {
+    if (!assetInputText.trim()) return alert("먼저 단어, 문장, 또는 대화 상황을 입력해 주세요.");
+    setAssetAnalyzing(true);
+    try {
+      const res = await fetch("/api/admin/pronunciation-helper", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({ text: assetInputText.trim(), type: curriculumType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      if (curriculumType === "word") {
+        if (data.pronunciation) setAssetPronunciation(data.pronunciation);
+        if (data.tip) setAssetTip(data.tip);
+        if (data.meaning_ko) setAssetMeaningKo(data.meaning_ko);
+        if (data.category) setAssetCategory(data.category);
+      } else if (curriculumType === "dialogue") {
+        if (data.script) setAssetScript(data.script);
+        if (data.translation) setAssetTranslation(data.translation);
+        if (data.category) setAssetCategory(data.category);
+      } else {
+        if (data.pronunciation) setAssetPronunciation(data.pronunciation);
+        if (data.rule_formula) setAssetRuleFormula(data.rule_formula);
+        if (data.tip) setAssetTip(data.tip);
+        if (data.meaning_ko) setAssetMeaningKo(data.meaning_ko);
+        if (data.category) setAssetCategory(data.category);
+      }
+      alert("✨ AI 분석 완료!\n자동 입력된 발음 표기, 규칙, 뜻을 확인한 후 등록하세요.");
+    } catch (e: any) {
+      console.error(e);
+      alert(`AI 분석 실패: ${e.message}`);
+    } finally {
+      setAssetAnalyzing(false);
+    }
+  };
+
+  // ── 새 에셋 직접 등록 (음성 자동 생성 포함) ─────────────
+  const handleCreateAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assetInputText.trim()) return alert("내용을 입력하세요.");
+    setAssetSaving(true);
+    try {
+      const colName = `sori_curriculum_${curriculumType}`;
+      let docData: any = {
+        category: assetCategory.trim() || "기타",
+        source: "admin_manual",
+        has_audio: false,
+        created_at: serverTimestamp(),
+      };
+
+      if (curriculumType === "word") {
+        docData.text = assetInputText.trim();
+        docData.pronunciation = assetPronunciation.trim() || assetInputText.trim();
+        if (assetTip.trim()) docData.tip = assetTip.trim();
+        if (assetMeaningKo.trim()) docData.meaning_ko = assetMeaningKo.trim();
+      } else if (curriculumType === "dialogue") {
+        docData.title = assetInputText.trim();
+        docData.script = assetScript.trim();
+        if (assetTranslation.trim()) docData.translation = assetTranslation.trim();
+      } else {
+        docData.text = assetInputText.trim();
+        docData.pronunciation = assetPronunciation.trim() || assetInputText.trim();
+        if (assetRuleFormula.trim()) docData.rule_formula = assetRuleFormula.trim();
+        if (assetMeaningKo.trim()) docData.meaning_ko = assetMeaningKo.trim();
+        if (assetTip.trim()) docData.tip = assetTip.trim();
+      }
+
+      const docRef = await addDoc(collection(db, colName), docData);
+
+      // 음성 즉시 생성 옵션이 켜져 있고 단어/문장인 경우 ElevenLabs 자동 호출
+      if (assetAutoVoice && curriculumType !== "dialogue") {
+        const textToSpeak = assetPronunciation.trim() || assetInputText.trim();
+        await fetch("/api/admin/generate-audio", {
+          method: "POST",
+          headers: authHeader,
+          body: JSON.stringify({
+            docId: docRef.id,
+            colName,
+            text: textToSpeak,
+            voiceId: assetVoiceId,
+          }),
+        });
+      }
+
+      alert("🎉 에셋 등록 완료!" + (assetAutoVoice && curriculumType !== "dialogue" ? " (ElevenLabs 음성까지 자동 생성됨)" : ""));
+      // 폼 초기화
+      setAssetInputText("");
+      setAssetPronunciation("");
+      setAssetTip("");
+      setAssetRuleFormula("");
+      setAssetMeaningKo("");
+      setAssetScript("");
+      setAssetTranslation("");
+
+      // 목록 새로고침
+      const snap = await getDocs(collection(db, colName));
+      setCurriculumList(snap.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc));
+    } catch (e: any) {
+      console.error(e);
+      alert(`등록 실패: ${e.message}`);
+    } finally {
+      setAssetSaving(false);
+    }
+  };
+
+  // ── 오디오 일괄 생성 ─────────────
+  const handleBatchGenerateAudio = async () => {
+    const targets = audioDocs.filter(d => !d.audio_path);
+    if (targets.length === 0) return alert("생성할 오디오가 없습니다.");
+    if (!confirm(`오디오가 없는 ${targets.length}개 항목의 음성을 일괄 생성하시겠습니까?`)) return;
+
+    setBatchAudioGenerating(true);
+    let successCount = 0;
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const item = targets[i];
+        setBatchProgress(`${i + 1}/${targets.length} 생성 중... (${item.text ?? item.id})`);
+        const text = item.text || item.title;
+        if (!text) continue;
+
+        const res = await fetch("/api/admin/generate-audio", {
+          method: "POST",
+          headers: authHeader,
+          body: JSON.stringify({
+            docId: item.id,
+            colName: audioColName,
+            text,
+            voiceId: selectedVoiceForSingle,
+          }),
+        });
+        if (res.ok) successCount++;
+      }
+      alert(`🎉 ${successCount}개 항목의 오디오 일괄 생성이 완료되었습니다!`);
+      await loadAudioDocs();
+    } catch (e: any) {
+      console.error(e);
+      alert(`일괄 생성 중 오류 발생: ${e.message}`);
+    } finally {
+      setBatchAudioGenerating(false);
+      setBatchProgress("");
+    }
   };
 
   // ── 사용자 ───────────────────────────────────────────────
@@ -821,6 +984,27 @@ export default function AdminPage() {
               ))}
             </div>
 
+            {audioColName !== "sori_curriculum_dialogue" && audioDocs.filter(d => !d.audio_path).length > 0 && (
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-amber-900 text-sm">
+                    ⚡ 음성이 없는 항목: {audioDocs.filter(d => !d.audio_path).length}개
+                  </p>
+                  <p className="text-xs text-amber-700">
+                    아래 버튼을 누르면 모든 미등록 항목의 오디오가 ElevenLabs를 통해 자동으로 생성됩니다.
+                  </p>
+                </div>
+                <button
+                  onClick={handleBatchGenerateAudio}
+                  disabled={batchAudioGenerating}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  {batchAudioGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {batchAudioGenerating ? batchProgress || "생성 중..." : "전체 일괄 자동 생성"}
+                </button>
+              </div>
+            )}
+
             {audioColName === "sori_curriculum_dialogue" ? (
               <div className="space-y-4">
                 {audioDocs.length === 0
@@ -986,8 +1170,8 @@ export default function AdminPage() {
 
         {/* ──── 커리큘럼 ──── */}
         {activeTab === "curriculum" && (
-          <div>
-            <div className="flex gap-2 mb-4">
+          <div className="space-y-6">
+            <div className="flex gap-2">
               {(["word", "sentence", "dialogue"] as const).map(t => (
                 <button key={t} onClick={() => setCurriculumType(t)}
                   className={`px-4 py-2 rounded-full text-sm font-bold transition ${curriculumType === t ? "bg-blue-600 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
@@ -995,20 +1179,209 @@ export default function AdminPage() {
                 </button>
               ))}
             </div>
-            {loading ? <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div> : (
-              <div className="space-y-2">
-                {curriculumList.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div>
-                      <p className="font-bold text-slate-800">{item.text ?? item.title ?? "—"}</p>
-                      <p className="text-xs text-slate-400">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
-                    </div>
-                    <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
-                  </div>
-                ))}
-                {curriculumList.length === 0 && <p className="text-center text-slate-400 py-10">데이터 없음</p>}
+
+            {/* 새 에셋 등록 폼 (AI 자동 완성 포함) */}
+            <form onSubmit={handleCreateAsset} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="font-black text-slate-800 flex items-center gap-2">
+                  <Sparkles size={18} className="text-blue-600" />
+                  새 {curriculumType === "word" ? "단어" : curriculumType === "sentence" ? "문장" : "담화"} 에셋 등록
+                </h3>
+                <span className="text-xs text-slate-400">내용 입력 후 AI 자동 완성을 누르면 발음/규칙이 자동 생성됩니다.</span>
               </div>
-            )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-600">
+                    {curriculumType === "word" ? "단어 (원문) *" : curriculumType === "sentence" ? "문장 (원문) *" : "대화 주제/상황 *"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAssetAutoFill}
+                    disabled={assetAnalyzing || !assetInputText.trim()}
+                    className="flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm transition disabled:opacity-50"
+                  >
+                    {assetAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    {assetAnalyzing ? "AI 분석 중..." : "✨ AI 자동 완성"}
+                  </button>
+                </div>
+                <input
+                  value={assetInputText}
+                  onChange={e => setAssetInputText(e.target.value)}
+                  placeholder={
+                    curriculumType === "word" ? "예: 한국어" :
+                    curriculumType === "sentence" ? "예: 한국말을 잘하고 싶어요" :
+                    "예: 카페에서 커피 주문하기"
+                  }
+                  required
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              {curriculumType !== "dialogue" ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">소리나는 대로 발음 표기 *</label>
+                      <input
+                        value={assetPronunciation}
+                        onChange={e => setAssetPronunciation(e.target.value)}
+                        placeholder="예: [한구거]"
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">카테고리</label>
+                      <input
+                        value={assetCategory}
+                        onChange={e => setAssetCategory(e.target.value)}
+                        placeholder="예: 일상, 음식, 학교"
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {curriculumType === "sentence" ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 block mb-1">쉬운 발음 규칙 공식 (받침 + ? = [??])</label>
+                        <input
+                          value={assetRuleFormula}
+                          onChange={e => setAssetRuleFormula(e.target.value)}
+                          placeholder="예: 말[ㄹ] + 을[ㅇ] = [마를] (연음)"
+                          className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 block mb-1">문장 의미/해석</label>
+                        <input
+                          value={assetMeaningKo}
+                          onChange={e => setAssetMeaningKo(e.target.value)}
+                          placeholder="예: 한국어를 잘하고 싶습니다."
+                          className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 block mb-1">단어 뜻 풀이</label>
+                        <input
+                          value={assetMeaningKo}
+                          onChange={e => setAssetMeaningKo(e.target.value)}
+                          placeholder="예: 대한민국의 언어"
+                          className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 block mb-1">발음 팁/설명</label>
+                        <input
+                          value={assetTip}
+                          onChange={e => setAssetTip(e.target.value)}
+                          placeholder="예: 받침 뒤에 모음이 오면 연음돼요"
+                          className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 음성 자동 생성 옵션 */}
+                  <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={assetAutoVoice}
+                        onChange={e => setAssetAutoVoice(e.target.checked)}
+                        className="w-4 h-4 text-indigo-600 rounded"
+                      />
+                      <span className="text-xs font-bold text-indigo-900">등록 시 일레븐랩스 정답 음성 자동 생성</span>
+                    </label>
+                    {assetAutoVoice && (
+                      <select
+                        value={assetVoiceId}
+                        onChange={e => setAssetVoiceId(e.target.value)}
+                        className="text-xs border border-indigo-200 rounded-lg p-1.5 bg-white font-medium"
+                      >
+                        {ELEVENLABS_VOICES.map(v => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">대화 스크립트 (A:...|B:... 형식) *</label>
+                    <textarea
+                      value={assetScript}
+                      onChange={e => setAssetScript(e.target.value)}
+                      placeholder="A: 안녕하세요.|B: 네, 반갑습니다."
+                      rows={4}
+                      required
+                      className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">해석/번역</label>
+                      <input
+                        value={assetTranslation}
+                        onChange={e => setAssetTranslation(e.target.value)}
+                        placeholder="A: Hello.|B: Nice to meet you."
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">카테고리</label>
+                      <input
+                        value={assetCategory}
+                        onChange={e => setAssetCategory(e.target.value)}
+                        placeholder="예: 식당, 쇼핑"
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <button
+                type="submit"
+                disabled={assetSaving}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {assetSaving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {assetSaving ? "에셋 등록 중..." : "에셋 등록하기 🚀"}
+              </button>
+            </form>
+
+            {/* 기존 에셋 목록 */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+              <h3 className="font-black text-slate-800 text-sm">등록된 에셋 목록 ({curriculumList.length}개)</h3>
+              {loading ? (
+                <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {curriculumList.map(item => (
+                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-800 text-sm">{item.text ?? item.title ?? "—"}</p>
+                          {item.has_audio ? (
+                            <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">음성 있음</span>
+                          ) : (
+                            <span className="text-[10px] bg-slate-200 text-slate-500 font-bold px-1.5 py-0.5 rounded">음성 없음</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
+                      </div>
+                      <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    </div>
+                  ))}
+                  {curriculumList.length === 0 && <p className="text-center text-slate-400 py-10">데이터 없음</p>}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
