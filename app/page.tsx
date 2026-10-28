@@ -1083,13 +1083,6 @@ export default function Home() {
                 ⚙️ 어드민
               </a>
             )}
-            {/* E: 교재 연동 버튼 */}
-            <button
-              onClick={() => setShowLicenseModal(true)}
-              className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-bold hover:bg-amber-100 transition"
-            >
-              <BookOpen size={12} /> 교재 연동
-            </button>
             <button onClick={fetchInbox} className="relative text-slate-600 hover:text-blue-600 transition p-1">
               <span className="text-2xl">📮</span>
               {hasNewMail && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white" />}
@@ -1133,35 +1126,6 @@ export default function Home() {
         {/* ── 홈 — C: HomeView 컴포넌트 ── */}
         {viewMode === "home" && (
           <div className="space-y-4">
-            {/* E: 교재 연동 배너 */}
-            {purchasedSteps.length === 0 && (
-              <button
-                onClick={() => setShowLicenseModal(true)}
-                className="w-full p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl flex items-center gap-3 hover:border-amber-400 transition group"
-              >
-                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                  <BookOpen size={20} />
-                </div>
-                <div className="text-left">
-                  <p className="font-bold text-amber-800 text-sm">STEP Korean 교재 연동</p>
-                  <p className="text-xs text-amber-600">교재 구매 시 라이선스 키로 심화 커리큘럼 잠금 해제</p>
-                </div>
-                <span className="ml-auto text-amber-400 text-xs font-bold">연동하기 →</span>
-              </button>
-            )}
-            {purchasedSteps.length > 0 && (
-              <div className="w-full p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-2">
-                <span className="text-green-600 font-bold text-sm">✅ 활성화된 교재:</span>
-                <div className="flex gap-1 flex-wrap">
-                  {purchasedSteps.map(s => (
-                    <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                      Step {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <HomeView
               user={{
                 email: currentUser.email, name: currentUser.displayName,
@@ -1527,14 +1491,6 @@ export default function Home() {
             </button>
           </div>
         </div>
-      )}
-
-      {showLicenseModal && (
-        <LicenseModal
-          onClose={() => setShowLicenseModal(false)}
-          purchasedSteps={purchasedSteps}
-          onUnlock={(step) => setPurchasedSteps(prev => [...new Set([...prev, step])])}
-        />
       )}
 
       {/* 소리 충전소 */}

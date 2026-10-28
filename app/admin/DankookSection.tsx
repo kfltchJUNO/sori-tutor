@@ -45,6 +45,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
   const [newMeaningKo, setNewMeaningKo] = useState("");
   const [newChapter, setNewChapter] = useState(1);
   const [addingSentence, setAddingSentence] = useState(false);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
 
   // ── 음성 생성 상태 ─────────────────────
   const [generatingVoiceId, setGeneratingVoiceId] = useState<string | null>(null);
@@ -108,6 +109,34 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
       console.error(e);
     } finally {
       setLoadingSentences(false);
+    }
+  };
+
+  // ── AI 발음/규칙 공식 자동 분석 ───
+  const handleAIAutoFill = async () => {
+    if (!newText.trim()) return alert("먼저 분석할 문장을 입력해 주세요.");
+    setAiAnalyzing(true);
+    try {
+      const res = await fetch("/api/admin/pronunciation-helper", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: newText.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      if (data.pronunciation) setNewPronunciation(data.pronunciation);
+      if (data.rule_formula) setNewRuleFormula(data.rule_formula);
+      if (data.meaning_ko) setNewMeaningKo(data.meaning_ko);
+      alert("✨ AI 발음 분석 완료!\n자동 입력된 발음 표기, 규칙, 의미를 확인하고 필요시 수정한 뒤 등록해 주세요.");
+    } catch (e: any) {
+      console.error(e);
+      alert(`AI 분석 실패: ${e.message}`);
+    } finally {
+      setAiAnalyzing(false);
     }
   };
 
@@ -370,7 +399,20 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
 
             <form onSubmit={handleAddSentence} className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <div className="md:col-span-2">
-                <label className="text-xs font-bold text-slate-600 block mb-1">연습할 문장 (원문) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-600">
+                    연습할 문장 (원문) <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAIAutoFill}
+                    disabled={aiAnalyzing || !newText.trim()}
+                    className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-sm transition disabled:opacity-50"
+                  >
+                    {aiAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    {aiAnalyzing ? "AI 분석 중..." : "AI 발음·규칙·의미 자동완성"}
+                  </button>
+                </div>
                 <input
                   value={newText}
                   onChange={e => setNewText(e.target.value)}
