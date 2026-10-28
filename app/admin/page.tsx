@@ -2,6 +2,7 @@
 // app/admin/page.tsx
 
 import DonggukSection from "./DonggukSection";
+import DankookSection from "./DankookSection";
 // app/admin/page.tsx
 
 import { useEffect, useState, useRef } from "react";
@@ -45,7 +46,7 @@ interface CurriculumDoc {
 
 interface ParsedLine { role: string; text: string; }
 
-type Tab = "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "dongguk" | "users" | "charges" | "inquiries";
+type Tab = "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "dongguk" | "dankook" | "users" | "charges" | "inquiries";
 
 // ── 점수대 정보 ────────────────────────────────────────────
 const SCORE_TIERS = [
@@ -639,6 +640,7 @@ export default function AdminPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "dongguk",  label: "🏫 동국대 1급" },
+    { id: "dankook",  label: "🐻 단국대 관리" },
     { id: "generate", label: "✨ AI 생성" },
     { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },
     { id: "audio",    label: "🎵 오디오" },
@@ -670,6 +672,15 @@ export default function AdminPage() {
         {/* ──── 동국대 1급 관리 ──── */}
         {activeTab === "dongguk" && (
           <DonggukSection
+            idToken={idToken}
+            voices={ELEVENLABS_VOICES}
+            defaultVoiceId={DEFAULT_MALE_VOICE_ID}
+          />
+        )}
+
+        {/* ──── 단국대 관리 ──── */}
+        {activeTab === "dankook" && (
+          <DankookSection
             idToken={idToken}
             voices={ELEVENLABS_VOICES}
             defaultVoiceId={DEFAULT_MALE_VOICE_ID}

@@ -98,6 +98,10 @@ export default function PracticeView({
           <div className="flex items-center gap-1.5 text-xs font-black text-amber-800 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
             <span>🏫</span> 동국한국어 1급 발음 마스터
           </div>
+        ) : courseType === "dankook" ? (
+          <div className="flex items-center gap-1.5 text-xs font-black text-blue-800 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-200">
+            <span>🐻</span> 단국한국어 발음 마스터
+          </div>
         ) : courseType === "dialogue" ? (
           <div className="flex gap-2">
             {(["A", "B"] as const).map((r) => (
@@ -208,7 +212,7 @@ export default function PracticeView({
                 onClick={onTranslate}
                 className="text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded-lg shadow-sm flex items-center gap-1 hover:bg-blue-50 transition"
               >
-                <Languages size={12} /> 번역 (1<SoriIcon size={12} className="inline ml-0.5" />)
+                <Languages size={12} /> {courseType === "dongguk" || courseType === "dankook" ? "무료 번역" : <>번역 (1<SoriIcon size={12} className="inline ml-0.5" />)</>}
               </button>
             </div>
             <div className="flex items-start gap-2">
@@ -322,7 +326,7 @@ export default function PracticeView({
                   <p className="text-xl text-slate-500 font-serif mb-8 italic">{currentProblem.pronunciation}</p>
                 )}
                 <div className="bg-slate-50 text-slate-600 text-sm font-medium p-3 rounded-xl inline-block border border-slate-200">
-                  💡 {courseType === "word" ? currentProblem.tip : courseType === "dongguk" ? (currentProblem.rule_formula ? `규칙: ${currentProblem.rule_formula}` : currentProblem.tip || "천천히 또렷하게 읽어보세요.") : currentProblem.translation}
+                  💡 {courseType === "word" ? currentProblem.tip : (courseType === "dongguk" || courseType === "dankook") ? (currentProblem.rule_formula ? `규칙: ${currentProblem.rule_formula}` : currentProblem.tip || "천천히 또렷하게 읽어보세요.") : currentProblem.translation}
                 </div>
               </div>
             </div>

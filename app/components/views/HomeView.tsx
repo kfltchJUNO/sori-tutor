@@ -2,7 +2,7 @@
 // components/views/HomeView.tsx
 import { Mic, Star, MessageSquare, MessageCircle, Trophy, GraduationCap, Clock, CheckCircle2 } from "lucide-react";
 import SoriIcon from "@/app/components/SoriIcon";
-import type { SoriUser, CourseType } from "@/types";
+import type { SoriUser } from "@/types";
 
 interface Props {
   user: SoriUser;
@@ -13,6 +13,8 @@ interface Props {
   onOpenNickname: () => void;
   onOpenDonggukModal: () => void;
   onEnterDonggukCourse: () => void;
+  onOpenDankookModal: () => void;
+  onEnterDankookCourse: () => void;
 }
 
 // Tailwind 동적 클래스 문제 방지 — 정적 클래스로 정의
@@ -47,8 +49,10 @@ export default function HomeView({
   user, onSelectCourse, onEnterFreeTalking,
   onFetchRanking, onFetchHistory, onOpenNickname,
   onOpenDonggukModal, onEnterDonggukCourse,
+  onOpenDankookModal, onEnterDankookCourse,
 }: Props) {
   const donggukStatus = user.dongguk_status || "none";
+  const dankookStatus = user.dankook_status || "none";
 
   return (
     <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
@@ -118,11 +122,11 @@ export default function HomeView({
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="bg-white text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <CheckCircle2 size={10} /> 승인 완료
+                  <CheckCircle2 size={10} /> 승인 완료 (전액 무료)
                 </span>
                 <h4 className="font-black text-white text-base">동국한국어 1급</h4>
               </div>
-              <p className="text-xs text-amber-100 mt-0.5">초급 발음 변화 공식 & 문장 연습하기</p>
+              <p className="text-xs text-amber-100 mt-0.5">초급 발음 공식 & 무료 번역 이용</p>
             </div>
           </div>
           <span className="bg-white/20 hover:bg-white/30 px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition">
@@ -152,12 +156,71 @@ export default function HomeView({
             </div>
             <div>
               <h4 className="font-black text-slate-800 text-sm">동국대학교 1급 학생이신가요?</h4>
-              <p className="text-xs text-slate-500">선생님 연결 요청 후 1급 맞춤 발음 연습 이용</p>
+              <p className="text-xs text-slate-500">선생님 연결 요청 후 1급 발음 코스 & 번역 무료 이용</p>
             </div>
           </div>
           <button
             onClick={onOpenDonggukModal}
             className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow transition"
+          >
+            학생 인증 →
+          </button>
+        </div>
+      )}
+
+      {/* 🐻 단국대학교 학생 인증 & 전용 발음 카드 */}
+      {dankookStatus === "approved" ? (
+        <div
+          onClick={onEnterDankookCourse}
+          className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white rounded-2xl p-4 shadow-md cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition flex items-center justify-between gap-3 border border-blue-400"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-black text-xl shrink-0">
+              🐻
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="bg-white text-blue-700 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <CheckCircle2 size={10} /> 승인 완료 (전액 무료)
+                </span>
+                <h4 className="font-black text-white text-base">단국한국어 발음 마스터</h4>
+              </div>
+              <p className="text-xs text-blue-100 mt-0.5">단국대 맞춤 발음 연습 & 무료 번역 이용</p>
+            </div>
+          </div>
+          <span className="bg-white/20 hover:bg-white/30 px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition">
+            학습 시작 →
+          </span>
+        </div>
+      ) : dankookStatus === "pending" ? (
+        <div className="bg-blue-50/90 border-2 border-blue-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg shrink-0">
+              <Clock size={20} className="animate-spin text-blue-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-blue-900 text-sm">단국대 학생 승인 대기 중 ⏳</h4>
+              <p className="text-xs text-blue-700">선생님 확인 후 단국대 전용 코스가 열려요!</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-bold bg-white text-blue-700 border border-blue-300 px-3 py-1 rounded-full shrink-0 shadow-sm">
+            확인 중
+          </span>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-lg shrink-0 shadow-sm">
+              🐻
+            </div>
+            <div>
+              <h4 className="font-black text-slate-800 text-sm">단국대학교 학생이신가요?</h4>
+              <p className="text-xs text-slate-500">선생님 연결 요청 후 전용 발음 코스 & 번역 무료</p>
+            </div>
+          </div>
+          <button
+            onClick={onOpenDankookModal}
+            className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow transition"
           >
             학생 인증 →
           </button>

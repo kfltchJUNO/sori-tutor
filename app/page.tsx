@@ -105,6 +105,11 @@ export default function Home() {
   const [showDonggukModal, setShowDonggukModal] = useState(false);
   const [donggukStudentIdInput, setDonggukStudentIdInput] = useState("");
   const [donggukApplying, setDonggukApplying] = useState(false);
+  // ── 단국대학교 학생 연동 ─────────────
+  const [dankookStatus, setDankookStatus] = useState<"none" | "pending" | "approved">("none");
+  const [showDankookModal, setShowDankookModal] = useState(false);
+  const [dankookStudentIdInput, setDankookStudentIdInput] = useState("");
+  const [dankookApplying, setDankookApplying] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [problemList, setProblemList] = useState<any[]>([]);
@@ -227,6 +232,7 @@ export default function Home() {
       setUserRole(role);
       setUserAlias(data.alias ?? "");
       setDonggukStatus(data.dongguk_status ?? "none");
+      setDankookStatus(data.dankook_status ?? "none");
       setSharedMemory(data.shared_memory ?? "");
       setChatCount(data.chat_count ?? 0);
       setPurchasedSteps(userSteps);
@@ -623,12 +629,15 @@ export default function Home() {
     } catch (e) { alert("피드백 생성 실패"); } finally { setLoading(false); }
   };
 
-  // ── 번역 — A: 서버 토큰 차감 ─────────
+  // ── 번역 — A: 서버 토큰 차감 (동국대/단국대 코스는 무료 제공) ─────────
   const handleTranslateFeedback = async () => {
+    const isUnivCourse = courseType === "dongguk" || courseType === "dankook";
     const currency = userRole === "guest" ? "heart" : "token";
-    if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
-    if (!confirm("번역하시겠습니까? (1 소리)")) return;
+    if (!isUnivCourse) {
+      if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
+      if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
+      if (!confirm("번역하시겠습니까? (1 소리)")) return;
+    }
     setLoading(true);
     try {
       const formData = new FormData();
@@ -642,10 +651,12 @@ export default function Home() {
       if (data.error) { alert(data.error); return; }
       setTranslation(data.translatedText);
 
-      const spendRes = await spendToken("피드백 번역", currency);
-      if (spendRes.success) {
-        if (currency === "heart") setHearts(p => p - 1);
-        else setTokens(spendRes.remaining ?? Math.max(0, tokens - 1));
+      if (!isUnivCourse) {
+        const spendRes = await spendToken("피드백 번역", currency);
+        if (spendRes.success) {
+          if (currency === "heart") setHearts(p => p - 1);
+          else setTokens(spendRes.remaining ?? Math.max(0, tokens - 1));
+        }
       }
       if (!showTranslateModal && viewMode === "freetalking") setShowTranslateModal(true);
     } catch (e) { alert("번역 실패"); } finally { setLoading(false); }
@@ -746,6 +757,74 @@ export default function Home() {
     } catch (e) {
       console.error("Dongguk course load error:", e);
       alert("문장 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 단국대학교 학생 연결 신청 ────────
+  const handleDankookApply = async () => {
+    if (!currentUser) return alert("로그인 후 이용해주세요.");
+    if (!dankookStudentIdInput.trim()) return alert("학번 또는 이름을 입력해주세요.");
+    setDankookApplying(true);
+    try {
+      const userRef = doc(db, "sori_users", currentUser.email);
+      await updateDoc(userRef, {
+        dankook_status: "pending",
+        dankook_student_id: dankookStudentIdInput.trim(),
+        dankook_applied_at: serverTimestamp(),
+      });
+      setDankookStatus("pending");
+      setShowDankookModal(false);
+      setDankookStudentIdInput("");
+      alert("선생님께 인증 요청을 보냈습니다! 🐻\n선생님 확인이 완료되면 단국대 코스가 열립니다.");
+    } catch (e) {
+      console.error(e);
+      alert("신청 중 오류가 발생했습니다.");
+    } finally {
+      setDankookApplying(false);
+    }
+  };
+
+  // ── 단국대 코스 진입 ─────────
+  const enterDankookCourse = async () => {
+    setLoading(true);
+    setCourseType("dankook");
+    setResult(null);
+    setCompletedLines([]);
+    try {
+      const snap = await getDocs(
+        query(collection(db, "sori_curriculum_dankook"), orderBy("chapter", "asc"))
+      );
+      let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (list.length === 0) {
+        list = [
+          {
+            id: "dankook-sample-1",
+            text: "단국대학교에서 한국어를 배워요",
+            pronunciation: "[단국때학꾜에서 한구거를 배워요]",
+            rule_formula: "국[ㄱ] + 대[ㄷ] = 때 (된소리되기)",
+            chapter: 1,
+            meaning_ko: "단국대학교에서 한국어를 배웁니다.",
+          },
+          {
+            id: "dankook-sample-2",
+            text: "친구들과 같이 도서관에 가요",
+            pronunciation: "[친구들과 가치 도서관에 가요]",
+            rule_formula: "같이 [가치] : 구개음화 (ㅌ + 이 = ㅊ)",
+            chapter: 1,
+            meaning_ko: "친구들과 함께 도서관에 갑니다.",
+          },
+        ];
+      }
+
+      setProblemList(list);
+      initPractice(list);
+      setViewMode("practice");
+    } catch (e) {
+      console.error("Dankook course load error:", e);
+      alert("단국대 문장 목록을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -860,8 +939,9 @@ export default function Home() {
     const currency = userRole === "guest" ? "heart" : "token";
     const cost = 1;
 
-    // Embed 모드이거나 동국대 코스일 때는 토큰/하트 무료 통과
-    if (!isEmbedMode && courseType !== "dongguk") {
+    // Embed 모드이거나 대학 코스(동국대, 단국대)일 때는 토큰/하트 무료 통과
+    const isFreeCourse = isEmbedMode || courseType === "dongguk" || courseType === "dankook";
+    if (!isFreeCourse) {
       if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
       if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
     }
@@ -902,8 +982,8 @@ export default function Home() {
         const voiceUrl = feedbackVoices[tier] ?? null;
         playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
 
-        // Standalone 단독 실행(비-Embed)이며 로그인 유저인 경우에만 토큰 차감 및 DB 저장
-        if (!isEmbedMode && currentUser && courseType !== "dongguk") {
+        // Standalone 단독 실행(비-Embed)이며 일반 유료 코스인 경우에만 토큰 차감 및 DB 저장
+        if (!isFreeCourse && currentUser) {
           const reason = courseType === "word" ? "발음 분석 (word)" : courseType === "sentence" ? "발음 분석 (sentence)" : "발음 분석 (dialogue)";
           const spendRes = await spendToken(reason as any, currency);
           if (spendRes.success) {
@@ -1090,6 +1170,7 @@ export default function Home() {
                 streak, today_count: todayCount,
                 last_access_date: "", shared_memory: sharedMemory, chat_count: chatCount,
                 dongguk_status: donggukStatus,
+                dankook_status: dankookStatus,
               }}
               onSelectCourse={selectCourse}
               onEnterFreeTalking={enterFreeTalking}
@@ -1098,6 +1179,8 @@ export default function Home() {
               onOpenNickname={() => setShowNicknameModal(true)}
               onOpenDonggukModal={() => setShowDonggukModal(true)}
               onEnterDonggukCourse={enterDonggukCourse}
+              onOpenDankookModal={() => setShowDankookModal(true)}
+              onEnterDankookCourse={enterDankookCourse}
             />
 
             {/* 광고 #4: 홈 화면 하단 */}
@@ -1405,6 +1488,42 @@ export default function Home() {
               className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-xl shadow-md transition disabled:opacity-50"
             >
               {donggukApplying ? "전송 중..." : "선생님께 연결 요청하기"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showDankookModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🐻</span>
+                <h3 className="font-black text-lg text-slate-800">단국대학교 학생 인증</h3>
+              </div>
+              <button onClick={() => setShowDankookModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              단국대학교 한국어 수업 학생이신가요?<br />
+              학번이나 반/이름을 입력하고 요청하시면, 선생님 승인 후 <strong>단국대 전용 발음 및 번역 코스</strong>를 100% 무료로 이용할 수 있습니다.
+            </p>
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1">학번 (또는 반 / 이름)</label>
+              <input
+                value={dankookStudentIdInput}
+                onChange={e => setDankookStudentIdInput(e.target.value)}
+                placeholder="예: 32201234 (또는 초급 1반 안나)"
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+              />
+            </div>
+            <button
+              onClick={handleDankookApply}
+              disabled={dankookApplying}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition disabled:opacity-50"
+            >
+              {dankookApplying ? "전송 중..." : "선생님께 인증 요청하기"}
             </button>
           </div>
         </div>
