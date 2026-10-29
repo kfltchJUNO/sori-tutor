@@ -499,10 +499,7 @@ export default function Home() {
     setSelectedPersona(personaId);
     const persona = PERSONAS.find(p => p.id === personaId);
     const name = persona?.name ?? "";
-    const code = name.charCodeAt(name.length - 1);
-    const hasBatchim = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 > 0;
-    const suffix = hasBatchim ? "이에요" : "예요";
-    const greeting = `안녕하세요! 저는 ${name}${suffix}. 우리 대화할까요?`;
+    const greeting = persona?.greeting || `안녕하세요! 저는 ${name}입니다. 우리 대화할까요?`;
 
     // 1. 말풍선 즉시 표시 (진입하자마자 즉각 렌더링)
     setChatHistory([{ role: "model", text: greeting }]);
@@ -1218,11 +1215,14 @@ export default function Home() {
           <div className="flex flex-col h-full pb-24">
             {chatStatus === "select_persona" && (
               <div className="animate-in fade-in zoom-in space-y-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-2">
                   <button onClick={() => setViewMode("home")} className="p-2 bg-white rounded-full border shadow-sm hover:bg-slate-50 transition"><ChevronLeft size={20} /></button>
-                  <h2 className="text-lg font-bold text-slate-800">대화 친구를 선택하세요</h2>
+                  <h2 className="text-lg font-bold text-slate-800">대화 상대를 선택하세요</h2>
                   <div className="w-9" />
                 </div>
+                <p className="text-xs text-center text-slate-500 mb-3">
+                  👔 <strong>준호·채원</strong>과는 격식 있는 <strong>높임말</strong>을, ☕ <strong>민우·유진</strong>과는 친근한 <strong>반말</strong>을 연습해 보세요!
+                </p>
                 <div className="grid grid-cols-2 gap-4 pb-20">
                   {PERSONAS.map(p => (
                     <div
@@ -1231,32 +1231,31 @@ export default function Home() {
                         if (p.available) {
                           startChatWithPersona(p.id);
                         } else {
-                          alert(`🌸 ${p.name}이는 곧 찾아올 예정이에요!\n지금은 한국인 친구 준호와 대화해보세요.`);
+                          alert(`🌸 ${p.name}이는 곧 찾아올 예정이에요!`);
                         }
                       }}
                       className={`p-4 rounded-3xl border-2 transition-all relative flex flex-col items-center text-center ${
                         p.available
-                          ? "cursor-pointer hover:scale-[1.03] shadow-md border-blue-400 bg-gradient-to-b from-blue-50/60 to-white"
+                          ? `cursor-pointer hover:scale-[1.03] shadow-md ${p.color} bg-gradient-to-b to-white`
                           : "cursor-not-allowed opacity-60 border-slate-200 bg-slate-50/70"
                       }`}
                     >
-                      {!p.available ? (
-                        <div className="absolute top-3 right-3 bg-pink-100 text-pink-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-pink-200">
-                          준비 중 🌸
-                        </div>
-                      ) : (
-                        <div className="absolute top-3 right-3 bg-green-100 text-green-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> 대화 가능
-                        </div>
-                      )}
+                      <div className={`absolute top-3 right-3 text-[10px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                        p.speechStyle === "honorific"
+                          ? "bg-blue-100 text-blue-700 border-blue-200"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${p.speechStyle === "honorific" ? "bg-blue-500" : "bg-emerald-500"}`} />
+                        {p.speechStyle === "honorific" ? "높임말" : "반말"}
+                      </div>
                       <div className="w-24 h-24 rounded-full overflow-hidden mb-3 border-4 border-white shadow-md mt-3">
                         <img src={p.img} alt={p.name} className="w-full h-full object-cover object-top" />
                       </div>
                       <h3 className="text-xl font-black text-slate-800 mb-0.5">{p.name}</h3>
-                      <span className="text-[11px] font-bold text-blue-600 bg-blue-100/70 px-2.5 py-0.5 rounded-full mb-2">
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full mb-2 ${p.badgeColor || "text-blue-600 bg-blue-100/70"}`}>
                         {p.role}
                       </span>
-                      <p className="text-xs text-slate-500 leading-snug px-1 break-keep">{p.desc}</p>
+                      <p className="text-xs text-slate-600 leading-snug px-1 break-keep">{p.desc}</p>
                     </div>
                   ))}
                 </div>

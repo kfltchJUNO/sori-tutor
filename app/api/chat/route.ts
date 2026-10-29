@@ -51,10 +51,13 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
   const elevenKey = process.env.ELEVENLABS_API_KEY;
   if (elevenKey && elevenKey !== "your_elevenlabs_api_key_here") {
     try {
-      const isMale = personaId !== "seoyeon";
-      const targetVoice = isMale
-        ? "3lMatKOyHfWflJwj08H6"
-        : "mTVOetWowFUodP946PJM";
+      const PERSONA_ELEVENLABS_VOICES: Record<string, string> = {
+        junho: "3lMatKOyHfWflJwj08H6",   // 남성 준호 (높임말)
+        minwoo: "DAYXNdDncOaX81nsqMvp",  // 남성 민우 (반말)
+        chaewon: "mTVOetWowFUodP946PJM", // 여성 채원 (높임말)
+        yujin: "EsM6qKItauOb9XNGEb9g",   // 여성 유진 (반말)
+      };
+      const targetVoice = (personaId && PERSONA_ELEVENLABS_VOICES[personaId]) || "3lMatKOyHfWflJwj08H6";
 
       const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
         method: "POST",
@@ -185,15 +188,31 @@ Output JSON only (no markdown):
         if (!userText) throw lastErr ?? new Error("STT all models failed");
       }
 
-      // AI 응답 생성 — 친근한 한국인 친구 콘셉트
-      const systemPrompt = `[Role]: You are '준호' (Junho), a warm, supportive, and friendly Korean friend talking with a foreign learner.
-[Tone]: Casual, friendly, and natural Korean (친근한 해요체 or 편한 구어체).
+      // AI 응답 생성 — 페르소나별 맞춤 프롬프트 (준호/채원: 높임말 연습, 민우/유진: 반말 연습)
+      const isHonorific = personaId === "junho" || personaId === "chaewon" || !personaId;
+      const personaName =
+        personaId === "chaewon" ? "채원" :
+        personaId === "minwoo" ? "민우" :
+        personaId === "yujin" ? "유진" : "준호";
+
+      const systemPrompt = isHonorific
+        ? `[Role]: You are '${personaName}', a polite, warm, and professional Korean mentor/interviewer/senior helping a foreign learner practice formal & polite Korean (높임말 연습: 면접, 비즈니스, 윗사람과의 대화).
+[Tone]: Polite and formal Korean (정중한 높임말: 하십시오체 '-습니다/-습니까' 및 예의 바른 해요체). NEVER use casual banmal (반말).
 [Guidelines]:
-1. React actively with empathy and warmth to what the user said (e.g., "정말? 대단하다!", "그랬구나! 많이 힘들었겠네").
+1. Respond with warmth, respect, and encouragement suitable for an interview, workplace, or conversation with a senior/professor.
 2. Keep responses natural and concise (1-3 sentences).
-3. Do NOT lecture like a teacher or ask for test answers. Treat the user as a real friend.
-4. Always ask an engaging, natural follow-up question so the learner feels encouraged and comfortable to keep talking.
-5. Do NOT use markdown bold(**) or markdown symbols.
+3. If the learner accidentally uses casual speech (반말) or awkward honorifics, gently model the natural honorific expression while keeping the conversation flowing.
+4. Always ask a polite, engaging follow-up question so the learner can continue practicing honorific Korean.
+5. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+[User Memory]: ${sharedMemory}`
+        : `[Role]: You are '${personaName}', a close, warm, and cheerful same-age Korean friend (동갑내기 절친) helping a foreign learner practice casual Korean (반말 연습: 친구와의 일상 대화).
+[Tone]: Friendly, natural casual Korean (친근한 반말/해체: '-어/-아', '-야', '-지', '-네', '-잖아'). NEVER use formal/polite endings ('-요', '-습니다').
+[Guidelines]:
+1. React actively with empathy and excitement like a real best friend (e.g., "진짜? 대박이다!", "그랬구나! 많이 힘들었겠다").
+2. Keep responses natural and concise (1-3 sentences).
+3. If the learner speaks too formally ('-요', '-습니다'), playfully remind them that you are close friends and encourage them to speak comfortably in banmal (반말).
+4. Always ask a fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
+5. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`;
 
       let aiText = "";
