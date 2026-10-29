@@ -17,8 +17,8 @@ function getStorageBucket() {
 }
 
 // 한국어 TTS 자연스러운 호흡(쉼표·문장 간 휴지) 보정 헬퍼
-function formatKoreanTextForBreathing(raw: string): string {
-  let s = raw.trim();
+function formatKoreanTextForBreathing(raw: string, isClonedVoice = false): string {
+  let s = raw.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
   if (!s) return s;
 
   // 1. 문두 감탄사/인사말 뒤에 쉼표가 없으면 쉼표 추가하여 첫 호흡 확보
@@ -27,8 +27,11 @@ function formatKoreanTextForBreathing(raw: string): string {
     "$1, "
   );
 
-  // 2. 문장과 문장 사이(., ?, ! 뒤)에 짧은 호흡 휴지(...)를 넣어 숨 가쁘게 이어지지 않도록 보정
-  s = s.replace(/([.?!])\s+(?=[가-힣A-Za-z0-9])/g, "$1 ... ");
+  // 2. 말줄임표(...)는 클론 보이스에서 환각 발화를 유발할 수 있으므로 일반 마침표로 정리
+  s = s.replace(/\.{2,}|…/g, ".");
+  if (isClonedVoice) {
+    s = s.replace(/!+/g, ".");
+  }
 
   // 3. 문장 끝에 마침표/물음표/느낌표가 없으면 마침표 추가
   if (!/[.?!~]$/.test(s)) {
@@ -46,8 +49,9 @@ async function synthesizeWithElevenLabs(text: string, voiceId: string): Promise<
   }
 
   const targetVoiceId = voiceId || process.env.ELEVENLABS_VOICE_JUNHO || DEFAULT_MALE_VOICE_ID;
+  const isClonedVoice = targetVoiceId === DEFAULT_MALE_VOICE_ID;
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${targetVoiceId}?output_format=mp3_44100_128`;
-  const formattedText = formatKoreanTextForBreathing(text);
+  const formattedText = formatKoreanTextForBreathing(text, isClonedVoice);
 
   const response = await fetch(url, {
     method: "POST",
@@ -60,8 +64,8 @@ async function synthesizeWithElevenLabs(text: string, voiceId: string): Promise<
       text: formattedText,
       model_id: "eleven_multilingual_v2",
       voice_settings: {
-        stability: 0.65,
-        similarity_boost: 0.8,
+        stability: isClonedVoice ? 0.75 : 0.65,
+        similarity_boost: isClonedVoice ? 0.75 : 0.8,
         style: 0.0,
         use_speaker_boost: true,
         speed: 0.92,

@@ -35,7 +35,7 @@ async function generateWithFallback(
 }
 
 // ── 특수문자 제거 및 자연스러운 호흡(쉼표·휴지) 보정 (TTS용) ────
-function cleanTextForTTS(text: string): string {
+function cleanTextForTTS(text: string, isClonedVoice = false): string {
   let s = text
     .replace(/\*\*/g, "").replace(/\*/g, "")
     .replace(/__/g, "").replace(/`/g, "")
@@ -48,8 +48,11 @@ function cleanTextForTTS(text: string): string {
     "$1, "
   );
 
-  // 2. 문장과 문장 사이에 짧은 호흡 휴지(...) 추가
-  s = s.replace(/([.?!])\s+(?=[가-힣A-Za-z0-9])/g, "$1 ... ");
+  // 2. 말줄임표(...)는 클론 보이스에서 환각 발화를 유발할 수 있으므로 일반 마침표로 정리
+  s = s.replace(/\.{2,}|…/g, ".");
+  if (isClonedVoice) {
+    s = s.replace(/!+/g, ".");
+  }
 
   // 3. 문장 끝 마침표 보정
   if (!/[.?!~]$/.test(s)) {
@@ -101,6 +104,8 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
         yujin: "EsM6qKItauOb9XNGEb9g",   // 여성 유진 (반말)
       };
       const targetVoice = (personaId && PERSONA_ELEVENLABS_VOICES[personaId]) || "3lMatKOyHfWflJwj08H6";
+      const isClonedVoice = targetVoice === "3lMatKOyHfWflJwj08H6";
+      const textForEl = cleanTextForTTS(text, isClonedVoice);
 
       const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
         method: "POST",
@@ -110,9 +115,14 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
           Accept: "audio/mpeg",
         },
         body: JSON.stringify({
-          text: cleaned,
+          text: textForEl,
           model_id: "eleven_multilingual_v2",
-          voice_settings: { stability: 0.65, similarity_boost: 0.8, speed: 0.92 },
+          voice_settings: {
+            stability: isClonedVoice ? 0.75 : 0.65,
+            similarity_boost: isClonedVoice ? 0.75 : 0.8,
+            style: 0.0,
+            speed: 0.92,
+          },
         }),
       });
 

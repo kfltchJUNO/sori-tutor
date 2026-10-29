@@ -16,12 +16,17 @@ function getBucket() {
   return getStorage().bucket(process.env.FIREBASE_STORAGE_BUCKET);
 }
 
-// 자연스러운 호흡을 위한 전처리
-function formatTextForNaturalBreathing(raw: string): string {
+// 자연스러운 호흡 및 클론 보이스 환각(Hallucination) 방지를 위한 전처리
+function formatTextForNaturalBreathing(raw: string, isClonedVoice: boolean): string {
   let t = raw.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
   if (!t) return raw;
-  if (!/[.?!~…]$/.test(t)) t += ".";
-  t = t.replace(/([.?!])\s+(?=[가-힣])/g, "$1 ... ");
+  // 말줄임표(...)는 클론 보이스에서 외계어/환각 발화를 유발하므로 일반 마침표/쉼표로 정규화
+  t = t.replace(/\.{2,}|…/g, ".");
+  // 클론 보이스의 경우 느낌표(!)가 연속되면 억양이 튀면서 한국어 발음이 깨지므로 마침표로 완화
+  if (isClonedVoice) {
+    t = t.replace(/!+/g, ".");
+  }
+  if (!/[.?!~]$/.test(t)) t += ".";
   return t;
 }
 
@@ -30,8 +35,11 @@ async function generateElevenLabsBuffer(text: string, voiceId: string): Promise<
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY 환경변수가 설정되지 않았습니다.");
 
-  const naturalText = formatTextForNaturalBreathing(text);
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+  // 준호(대표 클론 보이스) 여부 확인
+  const isClonedVoice = voiceId === DEFAULT_MALE_VOICE_ID;
+  const naturalText = formatTextForNaturalBreathing(text, isClonedVoice);
+
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
     method: "POST",
     headers: {
       "xi-api-key": apiKey,
@@ -42,9 +50,11 @@ async function generateElevenLabsBuffer(text: string, voiceId: string): Promise<
       text: naturalText,
       model_id: "eleven_multilingual_v2",
       voice_settings: {
-        stability: 0.60,
-        similarity_boost: 0.80,
-        style: 0.20,
+        // 클론 보이스(IVC)는 stability가 낮거나 style > 0이면 대본에 없는 엉뚱한 말(환각)을 뱉으므로
+        // stability를 높이고(0.78) style은 반드시 0.0으로 고정
+        stability: isClonedVoice ? 0.78 : 0.70,
+        similarity_boost: isClonedVoice ? 0.75 : 0.80,
+        style: 0.0,
         use_speaker_boost: true,
         speed: 0.94,
       },
