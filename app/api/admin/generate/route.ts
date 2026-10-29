@@ -80,11 +80,30 @@ export async function POST(req: NextRequest) {
     if (!apiKey) throw new Error("API Key missing");
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const MODEL_CANDIDATES = [
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-3.8-flash",
+      "gemini-3.6-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-flash",
+    ];
 
     const prompt = buildPrompt(type, step, unit, category, count, grammarHint);
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, "").trim();
+    let text = "";
+    let lastError: any = null;
+    for (const modelName of MODEL_CANDIDATES) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(prompt);
+        text = result.response.text().replace(/```json|```/g, "").trim();
+        if (text) break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`[admin/generate] ${modelName} failed, trying next:`, err);
+      }
+    }
+    if (!text) throw lastError || new Error("All Gemini models failed");
     const items: any[] = JSON.parse(text);
 
     // sori_drafts에 각 항목 저장
