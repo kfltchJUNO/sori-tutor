@@ -70,7 +70,7 @@ function parseScript(script: string): ParsedLine[] {
   });
 }
 
-// ── 담화 라인별 업로드/생성/대사수정 컴포넌트 ──────────────────────────
+// ── 담화 라인별 미리듣기/저장/대사수정 컴포넌트 ──────────────────────────
 function LineAudioRow({
   line, lineIndex, allLines, docId, colName, existingUrl, idToken, onRefresh
 }: {
@@ -84,6 +84,8 @@ function LineAudioRow({
   const [editedText, setEditedText] = useState(line.text);
   const [savingText, setSavingText] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [savingAudio, setSavingAudio] = useState(false);
+  const [previewBase64, setPreviewBase64] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
@@ -115,35 +117,62 @@ function LineAudioRow({
     }
   };
 
-  // ElevenLabs 자동 생성 (대사가 수정되었다면 먼저 Firestore에 대사 저장 후 음성 생성)
-  const handleGenerate = async () => {
+  // 1단계: ElevenLabs 음성 생성 (미리듣기 — 아직 DB 저장 전)
+  const handleGeneratePreview = async () => {
     if (!editedText.trim()) return alert("대사를 입력해주세요.");
     setGenerating(true); setResult(null);
     try {
-      if (isTextChanged) {
-        await saveUpdatedLineToFirestore(editedText);
-      }
       const res = await adminFetch("/api/admin/generate-audio", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          docId,
-          colName,
-          lineIndex,
+          action: "preview",
           text: editedText.trim(),
           voiceId: selectedVoice,
         }),
       }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResult(isTextChanged ? "✅ 대사 수정 & 음성 재생성 완료" : "✅ 생성 완료");
-      onRefresh();
+      setPreviewBase64(data.audioBase64);
+      setResult("🎧 생성됨 — 들어보고 [💾 저장] 또는 [🔄 재생성]을 선택하세요");
+      new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
     } catch (e: any) {
       setResult("❌ " + e.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // 2단계: 들어본 미리듣기 음성을 확정 저장
+  const handleConfirmSave = async () => {
+    if (!previewBase64) return;
+    setSavingAudio(true); setResult(null);
+    try {
+      if (isTextChanged) {
+        await saveUpdatedLineToFirestore(editedText);
+      }
+      const res = await adminFetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save",
+          docId,
+          colName,
+          lineIndex,
+          text: editedText.trim(),
+          voiceId: selectedVoice,
+          audioBase64: previewBase64,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setPreviewBase64(null);
+      setResult("✅ 저장 완료!");
+      onRefresh();
+    } catch (e: any) {
+      setResult("❌ 저장 실패: " + e.message);
+    } finally {
+      setSavingAudio(false);
     }
   };
 
@@ -155,6 +184,7 @@ function LineAudioRow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ docId, colName, lineIndex }),
       }, idToken);
+      setPreviewBase64(null);
       onRefresh();
     } catch (e: any) {
       alert("삭제 실패: " + e.message);
@@ -162,65 +192,103 @@ function LineAudioRow({
   };
 
   return (
-    <div className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border ${existingUrl ? "bg-green-50/50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
-      <div className="flex items-start sm:items-center gap-2.5 flex-1 min-w-0">
-        <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mt-1 sm:mt-0 ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
-          {line.role}
-        </span>
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <input
-              value={editedText}
-              onChange={e => setEditedText(e.target.value)}
-              placeholder="대사를 입력하거나 수정하세요"
-              className={`w-full text-sm font-medium text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                isTextChanged ? "border-amber-400 bg-amber-50/40" : "border-slate-200"
-              }`}
-            />
-            {isTextChanged && (
-              <button
-                onClick={handleSaveTextOnly}
-                disabled={savingText}
-                className="shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1.5 rounded-lg transition disabled:opacity-50"
-              >
-                {savingText ? "저장중..." : "대사만 저장"}
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {existingUrl ? (
-              <audio src={existingUrl} controls className="h-7 w-48" />
-            ) : (
-              <span className="text-xs text-slate-900">오디오 미생성</span>
-            )}
-            {result && <span className={`text-[11px] font-bold ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</span>}
+    <div className={`flex flex-col gap-2.5 p-3 rounded-xl border ${previewBase64 ? "bg-indigo-50/70 border-indigo-300" : existingUrl ? "bg-green-50/50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5 flex-1 min-w-0">
+          <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mt-1 sm:mt-0 ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+            {line.role}
+          </span>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <input
+                value={editedText}
+                onChange={e => setEditedText(e.target.value)}
+                placeholder="대사를 입력하거나 수정하세요"
+                className={`w-full text-sm font-medium text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  isTextChanged ? "border-amber-400 bg-amber-50/40" : "border-slate-200"
+                }`}
+              />
+              {isTextChanged && (
+                <button
+                  onClick={handleSaveTextOnly}
+                  disabled={savingText}
+                  className="shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1.5 rounded-lg transition disabled:opacity-50"
+                >
+                  {savingText ? "저장중..." : "대사만 저장"}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {existingUrl ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-green-700">저장됨:</span>
+                  <audio src={existingUrl} controls className="h-7 w-44" />
+                </div>
+              ) : (
+                <span className="text-xs text-slate-900">오디오 미등록</span>
+              )}
+              {result && <span className={`text-[11px] font-bold ${result.startsWith("❌") ? "text-red-500" : "text-indigo-700"}`}>{result}</span>}
+            </div>
           </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-        <select
-          value={selectedVoice}
-          onChange={e => setSelectedVoice(e.target.value)}
-          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-900 font-medium focus:outline-none"
-        >
-          {ELEVENLABS_VOICES.map(v => (
-            <option key={v.id} value={v.id}>{v.name}</option>
-          ))}
-        </select>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 transition"
-        >
-          {generating ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-          {isTextChanged ? "수정 & 재생성" : existingUrl ? "재생성" : "생성"}
-        </button>
-        {existingUrl && (
-          <button onClick={handleDelete} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="오디오 삭제">
-            <Trash2 size={14} />
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+          <select
+            value={selectedVoice}
+            onChange={e => setSelectedVoice(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-900 font-medium focus:outline-none"
+          >
+            {ELEVENLABS_VOICES.map(v => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleGeneratePreview}
+            disabled={generating || savingAudio}
+            className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 transition"
+          >
+            {generating ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+            {previewBase64 ? "🔄 재생성" : existingUrl ? "🎧 새로 생성" : "🎧 음성 생성"}
           </button>
-        )}
+          {existingUrl && (
+            <button onClick={handleDelete} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="오디오 삭제">
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* 미리듣기 영역: 들어보고 저장 또는 재생성 선택 */}
+      {previewBase64 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-indigo-200 shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-indigo-700">🎧 미리듣기:</span>
+            <audio src={`data:audio/mp3;base64,${previewBase64}`} controls className="h-8 w-48" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleGeneratePreview}
+              disabled={generating || savingAudio}
+              className="flex items-center gap-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2.5 py-1.5 rounded-lg font-bold transition disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={generating ? "animate-spin" : ""} /> 재생성
+            </button>
+            <button
+              onClick={handleConfirmSave}
+              disabled={savingAudio || generating}
+              className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-black transition shadow-xs disabled:opacity-50"
+            >
+              {savingAudio ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              💾 이 음성으로 저장
+            </button>
+            <button
+              onClick={() => { setPreviewBase64(null); setResult(null); }}
+              className="text-xs text-slate-900 hover:underline px-1.5"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -827,23 +895,26 @@ export default function AdminPage() {
   };
 
   // ── 오디오 탭 ────────────────────────────────────────────
-  const loadAudioDocs = async () => {
+  const loadAudioDocs = async (keepSelected: boolean = false) => {
     try {
       const snap = await getDocs(collection(db, audioColName));
       setAudioDocs(snap.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc));
-      setSelectedDocId("");
+      if (!keepSelected) setSelectedDocId("");
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => { if (isAdmin && activeTab === "audio") loadAudioDocs(); }, [isAdmin, activeTab, audioColName]);
+  useEffect(() => { if (isAdmin && activeTab === "audio") loadAudioDocs(false); }, [isAdmin, activeTab, audioColName]);
 
   const [selectedVoiceForSingle, setSelectedVoiceForSingle] = useState(DEFAULT_MALE_VOICE_ID);
   const [singleGenerating, setSingleGenerating] = useState(false);
+  const [singleSavingAudio, setSingleSavingAudio] = useState(false);
+  const [singlePreviewBase64, setSinglePreviewBase64] = useState<string | null>(null);
   const [singleEditText, setSingleEditText] = useState("");
   const [singleSavingText, setSingleSavingText] = useState(false);
 
   // 항목 선택 시 수정용 텍스트 동기화
   useEffect(() => {
+    setSinglePreviewBase64(null);
     if (!selectedDocId) {
       setSingleEditText("");
       return;
@@ -861,7 +932,7 @@ export default function AdminPage() {
         text: singleEditText.trim(),
       });
       setUploadResult("✅ 텍스트 수정 저장 완료");
-      await loadAudioDocs();
+      await loadAudioDocs(true);
     } catch (e: any) {
       setUploadResult(`❌ 저장 실패: ${e.message}`);
     } finally {
@@ -876,28 +947,52 @@ export default function AdminPage() {
     try {
       await deleteDoc(doc(db, audioColName, docId));
       if (selectedDocId === docId) setSelectedDocId("");
-      await loadAudioDocs();
+      await loadAudioDocs(false);
     } catch (e: any) {
       alert("항목 삭제 실패: " + e.message);
     }
   };
 
-  // ElevenLabs 단일 생성 (단어/문장 — 텍스트가 수정되었으면 먼저 저장 후 생성)
-  const handleSingleGenerate = async (docIdToUse?: string, voiceIdToUse?: string) => {
-    const targetDocId = docIdToUse || selectedDocId;
-    if (!targetDocId) return alert("항목을 선택하세요.");
-    const docObj = audioDocs.find(d => d.id === targetDocId);
-    const targetText = (targetDocId === selectedDocId && singleEditText.trim())
-      ? singleEditText.trim()
-      : (docObj?.text || "");
+  // 1단계: ElevenLabs 단일 음성 생성 (미리듣기 — 저장 전 들어보기)
+  const handleSinglePreview = async () => {
+    if (!selectedDocId) return alert("항목을 선택하세요.");
+    const docObj = audioDocs.find(d => d.id === selectedDocId);
+    const targetText = singleEditText.trim() || docObj?.text || "";
     if (!targetText) return alert("오디오를 생성할 텍스트가 없습니다.");
 
-    const targetVoice = voiceIdToUse || selectedVoiceForSingle;
     setSingleGenerating(true); setUploadResult(null);
     try {
-      // 텍스트가 기존과 다르면 먼저 Firestore 업데이트
+      const res = await adminFetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "preview",
+          text: targetText,
+          voiceId: selectedVoiceForSingle,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSinglePreviewBase64(data.audioBase64);
+      setUploadResult("🎧 음성이 생성되었습니다! 아래에서 들어보시고 [💾 이 음성으로 저장] 또는 [🔄 재생성]을 눌러주세요.");
+      new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
+    } catch (e: any) {
+      setUploadResult(`❌ 생성 실패: ${e.message}`);
+    } finally {
+      setSingleGenerating(false);
+    }
+  };
+
+  // 2단계: 들어본 단일 음성을 확정 저장 (선택 항목 유지하여 아래 리스트로 사라지지 않게 함)
+  const handleSingleConfirmSave = async () => {
+    if (!selectedDocId || !singlePreviewBase64) return;
+    const docObj = audioDocs.find(d => d.id === selectedDocId);
+    const targetText = singleEditText.trim() || docObj?.text || "";
+
+    setSingleSavingAudio(true); setUploadResult(null);
+    try {
       if (docObj && docObj.text !== targetText) {
-        await updateDoc(doc(db, audioColName, targetDocId), {
+        await updateDoc(doc(db, audioColName, selectedDocId), {
           text: targetText,
         });
       }
@@ -905,20 +1000,23 @@ export default function AdminPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          docId: targetDocId,
+          action: "save",
+          docId: selectedDocId,
           colName: audioColName,
           text: targetText,
-          voiceId: targetVoice,
+          voiceId: selectedVoiceForSingle,
+          audioBase64: singlePreviewBase64,
         }),
       }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setUploadResult("✅ 텍스트 반영 및 ElevenLabs 음성 생성 완료");
-      loadAudioDocs();
+      setSinglePreviewBase64(null);
+      setUploadResult("✅ 음성이 확정 저장되었습니다!");
+      await loadAudioDocs(true);
     } catch (e: any) {
-      setUploadResult(`❌ 생성 실패: ${e.message}`);
+      setUploadResult(`❌ 저장 실패: ${e.message}`);
     } finally {
-      setSingleGenerating(false);
+      setSingleSavingAudio(false);
     }
   };
 
@@ -984,6 +1082,12 @@ export default function AdminPage() {
   const [editItemTranslation, setEditItemTranslation] = useState("");
   const [editItemVoiceId, setEditItemVoiceId] = useState(DEFAULT_MALE_VOICE_ID);
   const [editItemSaving, setEditItemSaving] = useState(false);
+  const [editItemPreviewing, setEditItemPreviewing] = useState(false);
+  const [editItemPreviewBase64, setEditItemPreviewBase64] = useState<string | null>(null);
+
+  // 새 에셋 등록 시 미리듣기 상태
+  const [assetPreviewing, setAssetPreviewing] = useState(false);
+  const [assetPreviewBase64, setAssetPreviewBase64] = useState<string | null>(null);
 
   const startEditItem = (item: CurriculumDoc) => {
     setEditingItemId(item.id);
@@ -992,6 +1096,32 @@ export default function AdminPage() {
     setEditItemScript(item.script ?? "");
     setEditItemTranslation(item.translation ?? "");
     setEditItemVoiceId((item as any).voice_id || DEFAULT_MALE_VOICE_ID);
+    setEditItemPreviewBase64(null);
+  };
+
+  // 커리큘럼 기존 항목 수정 시 음성 미리듣기 생성
+  const handleEditItemVoicePreview = async () => {
+    if (!editItemText.trim()) return alert("내용을 입력해주세요.");
+    setEditItemPreviewing(true);
+    try {
+      const res = await adminFetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({
+          action: "preview",
+          text: editItemText.trim(),
+          voiceId: editItemVoiceId,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEditItemPreviewBase64(data.audioBase64);
+      new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
+    } catch (e: any) {
+      alert("음성 미리듣기 실패: " + e.message);
+    } finally {
+      setEditItemPreviewing(false);
+    }
   };
 
   const handleSaveEditedItem = async (item: CurriculumDoc, regenerateAudio: boolean) => {
@@ -1035,10 +1165,12 @@ export default function AdminPage() {
             method: "POST",
             headers: authHeader,
             body: JSON.stringify({
+              action: "save",
               docId: item.id,
               colName,
               text: editItemText.trim(),
               voiceId: editItemVoiceId,
+              audioBase64: editItemPreviewBase64 || undefined,
             }),
           }, idToken);
           const data = await res.json();
@@ -1049,7 +1181,8 @@ export default function AdminPage() {
       const snap = await getDocs(collection(db, colName));
       setCurriculumList(snap.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc));
       setEditingItemId(null);
-      alert(regenerateAudio ? "✅ 수정 및 음성 재생성이 완료되었습니다!" : "✅ 내용 수정이 저장되었습니다!");
+      setEditItemPreviewBase64(null);
+      alert(regenerateAudio ? "✅ 수정 및 음성 저장이 완료되었습니다!" : "✅ 내용 수정이 저장되었습니다!");
     } catch (e: any) {
       alert("수정 실패: " + e.message);
     } finally {
@@ -1101,7 +1234,32 @@ export default function AdminPage() {
     }
   };
 
-  // ── 새 에셋 직접 등록 (음성 자동 생성 포함) ─────────────
+  // ── 새 에셋 음성 미리듣기 생성 (저장 전 들어보기) ─────────────
+  const handleAssetVoicePreview = async () => {
+    if (!assetInputText.trim()) return alert("먼저 단어 또는 문장을 입력해 주세요.");
+    setAssetPreviewing(true);
+    try {
+      const res = await adminFetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: authHeader,
+        body: JSON.stringify({
+          action: "preview",
+          text: assetInputText.trim(),
+          voiceId: assetVoiceId,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAssetPreviewBase64(data.audioBase64);
+      new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
+    } catch (e: any) {
+      alert("음성 미리듣기 실패: " + e.message);
+    } finally {
+      setAssetPreviewing(false);
+    }
+  };
+
+  // ── 새 에셋 직접 등록 (미리 들어본 음성이 있으면 그대로 저장) ─────────────
   const handleCreateAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assetInputText.trim()) return alert("내용을 입력하세요.");
@@ -1134,22 +1292,24 @@ export default function AdminPage() {
 
       const docRef = await addDoc(collection(db, colName), docData);
 
-      // 음성 즉시 생성 옵션이 켜져 있고 단어/문장인 경우 ElevenLabs 자동 호출
-      if (assetAutoVoice && curriculumType !== "dialogue") {
+      // 미리듣기한 음성이 있거나, 음성 자동 생성 옵션이 켜져 있는 경우 저장
+      if ((assetPreviewBase64 || assetAutoVoice) && curriculumType !== "dialogue") {
         const textToSpeak = assetInputText.trim();
         await adminFetch("/api/admin/generate-audio", {
           method: "POST",
           headers: authHeader,
           body: JSON.stringify({
+            action: "save",
             docId: docRef.id,
             colName,
             text: textToSpeak,
             voiceId: assetVoiceId,
+            audioBase64: assetPreviewBase64 || undefined,
           }),
         }, idToken);
       }
 
-      alert("🎉 에셋 등록 완료!" + (assetAutoVoice && curriculumType !== "dialogue" ? " (ElevenLabs 음성까지 자동 생성됨)" : ""));
+      alert("🎉 에셋 등록 완료!" + ((assetPreviewBase64 || assetAutoVoice) && curriculumType !== "dialogue" ? " (음성까지 함께 저장됨)" : ""));
       // 폼 초기화
       setAssetInputText("");
       setAssetPronunciation("");
@@ -1158,6 +1318,7 @@ export default function AdminPage() {
       setAssetMeaningKo("");
       setAssetScript("");
       setAssetTranslation("");
+      setAssetPreviewBase64(null);
 
       // 목록 새로고침
       const snap = await getDocs(collection(db, colName));
@@ -1556,7 +1717,10 @@ export default function AdminPage() {
                       <label className="text-xs font-bold text-slate-900 block mb-1">목소리(Voice) 선택</label>
                       <select
                         value={selectedVoiceForSingle}
-                        onChange={e => setSelectedVoiceForSingle(e.target.value)}
+                        onChange={e => {
+                          setSelectedVoiceForSingle(e.target.value);
+                          setSinglePreviewBase64(null);
+                        }}
                         className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-900 bg-white font-medium focus:ring-2 focus:ring-indigo-500"
                       >
                         {ELEVENLABS_VOICES.map(v => (
@@ -1566,17 +1730,54 @@ export default function AdminPage() {
                         ))}
                       </select>
                     </div>
+
+                    {/* 현재 이미 등록된 오디오가 있는 경우 표시 */}
+                    {audioDocs.find(d => d.id === selectedDocId)?.audio_path && (
+                      <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-green-200">
+                        <span className="text-xs font-bold text-green-700">🎵 현재 저장된 음성:</span>
+                        <audio src={audioDocs.find(d => d.id === selectedDocId)?.audio_path} controls className="h-8 w-56" />
+                      </div>
+                    )}
+
+                    {/* 1단계: 음성 생성(들어보기) 버튼 */}
                     <button
-                      onClick={() => handleSingleGenerate()}
-                      disabled={singleGenerating}
+                      onClick={handleSinglePreview}
+                      disabled={singleGenerating || singleSavingAudio}
                       className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-50"
                     >
                       {singleGenerating ? (
                         <><Loader2 size={18} className="animate-spin" /> ElevenLabs 음성 생성 중...</>
                       ) : (
-                        <><Wand2 size={18} /> ✨ (수정된 텍스트로) ElevenLabs 음성 자동 생성 및 저장</>
+                        <><Volume2 size={18} /> 🎧 {singlePreviewBase64 ? "음성 다시 생성 (재생성)" : "ElevenLabs 음성 생성해서 먼저 들어보기"}</>
                       )}
                     </button>
+
+                    {/* 2단계: 들어보고 [저장] 또는 [재생성] 선택 박스 */}
+                    {singlePreviewBase64 && (
+                      <div className="p-4 bg-white rounded-xl border-2 border-indigo-400 shadow-md space-y-3 animate-in fade-in">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <span className="text-xs font-black text-indigo-800">🎧 방금 생성된 음성 (들어보고 결정하세요):</span>
+                          <audio src={`data:audio/mp3;base64,${singlePreviewBase64}`} controls className="h-9 w-full sm:w-64" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSinglePreview}
+                            disabled={singleGenerating || singleSavingAudio}
+                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                          >
+                            <RefreshCw size={14} className={singleGenerating ? "animate-spin" : ""} /> 🔄 다시 생성 (재생성)
+                          </button>
+                          <button
+                            onClick={handleSingleConfirmSave}
+                            disabled={singleSavingAudio || singleGenerating}
+                            className="flex-[2] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                          >
+                            {singleSavingAudio ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                            💾 이 음성으로 확정 저장
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1801,27 +2002,63 @@ export default function AdminPage() {
                     </div>
                   )}
 
-                  {/* 음성 자동 생성 옵션 */}
-                  <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={assetAutoVoice}
-                        onChange={e => setAssetAutoVoice(e.target.checked)}
-                        className="w-4 h-4 text-indigo-600 rounded"
-                      />
-                      <span className="text-xs font-bold text-indigo-900">등록 시 일레븐랩스 정답 음성 자동 생성</span>
-                    </label>
-                    {assetAutoVoice && (
-                      <select
-                        value={assetVoiceId}
-                        onChange={e => setAssetVoiceId(e.target.value)}
-                        className="text-xs border border-indigo-200 rounded-lg p-1.5 bg-white font-medium"
-                      >
-                        {ELEVENLABS_VOICES.map(v => (
-                          <option key={v.id} value={v.id}>{v.name}</option>
-                        ))}
-                      </select>
+                  {/* 음성 미리 생성해 들어보기 & 자동 생성 옵션 */}
+                  <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={assetAutoVoice}
+                          onChange={e => setAssetAutoVoice(e.target.checked)}
+                          className="w-4 h-4 text-indigo-600 rounded"
+                        />
+                        <span className="text-xs font-bold text-indigo-900">일레븐랩스 정답 음성 포함</span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={assetVoiceId}
+                          onChange={e => {
+                            setAssetVoiceId(e.target.value);
+                            setAssetPreviewBase64(null);
+                          }}
+                          className="text-xs border border-indigo-200 rounded-lg p-1.5 bg-white font-bold text-slate-900"
+                        >
+                          {ELEVENLABS_VOICES.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleAssetVoicePreview}
+                          disabled={assetPreviewing || !assetInputText.trim()}
+                          className="flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-xs transition disabled:opacity-50"
+                        >
+                          {assetPreviewing ? <Loader2 size={12} className="animate-spin" /> : <Volume2 size={12} />}
+                          {assetPreviewBase64 ? "🔄 음성 재생성" : "🎧 음성 먼저 생성해 들어보기"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {assetPreviewBase64 && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-indigo-200">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-indigo-700">🎧 미리듣기 완료:</span>
+                          <audio src={`data:audio/mp3;base64,${assetPreviewBase64}`} controls className="h-8 w-52" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                            ✓ 아래 [에셋 등록하기]를 누르면 이 음성이 그대로 저장됩니다!
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleAssetVoicePreview}
+                            disabled={assetPreviewing}
+                            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold px-2.5 py-1 rounded-lg"
+                          >
+                            🔄 재생성
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </>
@@ -1958,13 +2195,27 @@ export default function AdminPage() {
                               <span className="text-xs font-bold text-slate-900">목소리:</span>
                               <select
                                 value={editItemVoiceId}
-                                onChange={e => setEditItemVoiceId(e.target.value)}
+                                onChange={e => {
+                                  setEditItemVoiceId(e.target.value);
+                                  setEditItemPreviewBase64(null);
+                                }}
                                 className="border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-bold bg-white"
                               >
                                 {ELEVENLABS_VOICES.map(v => (
                                   <option key={v.id} value={v.id}>{v.name}</option>
                                 ))}
                               </select>
+                              {curriculumType !== "dialogue" && (
+                                <button
+                                  type="button"
+                                  onClick={handleEditItemVoicePreview}
+                                  disabled={editItemPreviewing || editItemSaving}
+                                  className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  {editItemPreviewing ? <Loader2 size={12} className="animate-spin" /> : <Volume2 size={12} />}
+                                  {editItemPreviewBase64 ? "🔄 재생성" : "🎧 음성 생성해 들어보기"}
+                                </button>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -1977,13 +2228,24 @@ export default function AdminPage() {
                               <button
                                 onClick={() => handleSaveEditedItem(item, true)}
                                 disabled={editItemSaving}
-                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1 disabled:opacity-50"
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1 disabled:opacity-50"
                               >
-                                {editItemSaving ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                수정 저장 & 음성 다시 생성
+                                {editItemSaving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                                {editItemPreviewBase64 ? "💾 들어본 음성으로 확정 저장" : "수정 저장 & 음성 자동 생성"}
                               </button>
                             </div>
                           </div>
+                          {editItemPreviewBase64 && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-indigo-50 rounded-xl border border-indigo-200 mt-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-indigo-800">🎧 미리듣기:</span>
+                                <audio src={`data:audio/mp3;base64,${editItemPreviewBase64}`} controls className="h-8 w-52" />
+                              </div>
+                              <span className="text-[11px] font-bold text-indigo-700">
+                                들어보고 마음에 들면 [💾 들어본 음성으로 확정 저장], 아니면 [🔄 재생성]을 누르세요!
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

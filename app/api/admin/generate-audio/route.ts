@@ -79,14 +79,28 @@ async function synthesizeWithElevenLabs(text: string, voiceId: string): Promise<
   return Buffer.from(arrayBuffer);
 }
 
-// ── 1) 음성 생성 (단일 / 담화 라인 / 전체 담화) ──────────────
+// ── 1) 음성 생성 (미리듣기 / 단일 저장 / 담화 라인 / 전체 담화) ──────────────
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth.error) return auth.error;
 
   try {
     const body = await req.json();
-    const { docId, colName, text, voiceId, lineIndex, isBatch, lines } = body;
+    const { action, docId, colName, text, voiceId, lineIndex, isBatch, lines, audioBase64 } = body;
+
+    // ── 0: 미리듣기 전용 (Storage/Firestore에 저장하지 않고 base64만 즉시 반환) ──
+    if (action === "preview") {
+      if (!text || !String(text).trim()) {
+        return NextResponse.json({ error: "생성할 텍스트(text)가 없습니다." }, { status: 400 });
+      }
+      const usedVoiceId = voiceId || DEFAULT_MALE_VOICE_ID;
+      const audioBuffer = await synthesizeWithElevenLabs(String(text).trim(), usedVoiceId);
+      return NextResponse.json({
+        success: true,
+        audioBase64: audioBuffer.toString("base64"),
+        voiceId: usedVoiceId,
+      });
+    }
 
     if (!docId || !colName) {
       return NextResponse.json({ error: "docId, colName 필수" }, { status: 400 });
@@ -127,13 +141,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, audio_paths: existing });
     }
 
-    // ── B: 단일 음성 생성 (단어, 문장, 또는 담화 1개 라인) ──
-    if (!text) {
-      return NextResponse.json({ error: "생성할 텍스트(text)가 없습니다." }, { status: 400 });
+    // ── B: 단일 음성 저장 (미리듣기한 audioBase64가 있으면 그대로 저장, 없으면 생성 후 저장) ──
+    if (!audioBase64 && !text) {
+      return NextResponse.json({ error: "생성할 텍스트(text) 또는 미리듣기 데이터(audioBase64)가 없습니다." }, { status: 400 });
     }
 
     const usedVoiceId = voiceId || DEFAULT_MALE_VOICE_ID;
-    const audioBuffer = await synthesizeWithElevenLabs(text, usedVoiceId);
+    const audioBuffer = audioBase64
+      ? Buffer.from(audioBase64, "base64")
+      : await synthesizeWithElevenLabs(text, usedVoiceId);
     const ts = Date.now();
 
     const isDialogueLine = lineIndex !== null && lineIndex !== undefined;

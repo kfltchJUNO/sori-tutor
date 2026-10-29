@@ -48,8 +48,12 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
   const [addingSentence, setAddingSentence] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
 
-  // ── 음성 생성 상태 ─────────────────────
+  // ── 음성 생성 & 미리듣기 상태 ─────────────────────
+  const [newPreviewBase64, setNewPreviewBase64] = useState<string | null>(null);
+  const [newPreviewing, setNewPreviewing] = useState(false);
   const [generatingVoiceId, setGeneratingVoiceId] = useState<string | null>(null);
+  const [savingVoiceId, setSavingVoiceId] = useState<string | null>(null);
+  const [previewAudioMap, setPreviewAudioMap] = useState<Record<string, string>>({});
   const [selectedVoices, setSelectedVoices] = useState<Record<string, string>>({});
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -139,7 +143,32 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     }
   };
 
-  // ── 문장 등록 ─────────────────────────
+  // ── 새 문장 등록 전 음성 미리듣기 생성 ─────────
+  const handlePreviewNewSentenceVoice = async () => {
+    if (!newText.trim()) return alert("먼저 목표 문장을 입력해 주세요.");
+    setNewPreviewing(true);
+    try {
+      const res = await adminFetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "preview",
+          text: newText.trim(),
+          voiceId: newVoiceId,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setNewPreviewBase64(data.audioBase64);
+      new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
+    } catch (e: any) {
+      alert(`미리듣기 생성 실패: ${e.message}`);
+    } finally {
+      setNewPreviewing(false);
+    }
+  };
+
+  // ── 문장 등록 (미리 들어본 음성이 있으면 그대로 저장) ─────────
   const handleAddSentence = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newText.trim()) return alert("문장을 입력하세요.");
@@ -155,17 +184,19 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
         created_at: serverTimestamp(),
       });
 
-      if (autoGenerateVoice) {
+      if (newPreviewBase64 || autoGenerateVoice) {
         const res = await adminFetch("/api/admin/generate-audio", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            action: "save",
             docId: docRef.id,
             colName: "sori_curriculum_dongguk",
             text: newText.trim(),
             voiceId: newVoiceId,
+            audioBase64: newPreviewBase64 || undefined,
           }),
         }, idToken);
         if (!res.ok) {
@@ -177,9 +208,10 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       setNewText("");
       setNewPronunciation("");
       setNewRuleFormula("");
+      setNewPreviewBase64(null);
       await loadSentences();
       alert(
-        autoGenerateVoice
+        newPreviewBase64 || autoGenerateVoice
           ? "새 문장과 선택한 성우의 음성이 함께 등록되었습니다! 🎉"
           : "새 문장이 등록되었습니다! 📝\n이제 아래에서 일레븐랩스로 음성을 생성할 수 있습니다."
       );
@@ -203,19 +235,16 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     }
   };
 
-  // ── 일레븐랩스 음성 생성 ───────────────
-  const handleGenerateAudio = async (item: DonggukSentenceItem) => {
+  // ── 1단계: 일레븐랩스 음성 생성 (미리듣기 — 저장 전 들어보기) ───────
+  const handleGeneratePreview = async (item: DonggukSentenceItem) => {
     const voiceId = selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId;
     setGeneratingVoiceId(item.id);
     try {
       const res = await adminFetch("/api/admin/generate-audio", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          docId: item.id,
-          colName: "sori_curriculum_dongguk",
+          action: "preview",
           text: item.text,
           voiceId,
         }),
@@ -223,17 +252,53 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // 로컬 상태 즉시 반영 (캐시 방지 URL 포함)
-      const newAudioUrl = data.audio_path || data.url;
-      setSentences(prev =>
-        prev.map(s => s.id === item.id ? { ...s, audio_path: newAudioUrl, voice_id: voiceId, has_audio: true } as any : s)
-      );
-      alert("🎉 일레븐랩스 음성 생성 및 저장이 완료되었습니다!");
+      setPreviewAudioMap(prev => ({ ...prev, [item.id]: data.audioBase64 }));
+      new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
     } catch (e: any) {
       console.error(e);
       alert(`음성 생성 실패: ${e.message}`);
     } finally {
       setGeneratingVoiceId(null);
+    }
+  };
+
+  // ── 2단계: 들어본 음성을 확정 저장 ───────────────
+  const handleConfirmSaveAudio = async (item: DonggukSentenceItem) => {
+    const base64 = previewAudioMap[item.id];
+    if (!base64) return;
+    const voiceId = selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId;
+    setSavingVoiceId(item.id);
+    try {
+      const res = await adminFetch("/api/admin/generate-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save",
+          docId: item.id,
+          colName: "sori_curriculum_dongguk",
+          text: item.text,
+          voiceId,
+          audioBase64: base64,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const newAudioUrl = data.audio_path || data.url;
+      setSentences(prev =>
+        prev.map(s => s.id === item.id ? { ...s, audio_path: newAudioUrl, voice_id: voiceId, has_audio: true } as any : s)
+      );
+      setPreviewAudioMap(prev => {
+        const copy = { ...prev };
+        delete copy[item.id];
+        return copy;
+      });
+      alert("✅ 음성이 저장되었습니다!");
+    } catch (e: any) {
+      console.error(e);
+      alert(`음성 저장 실패: ${e.message}`);
+    } finally {
+      setSavingVoiceId(null);
     }
   };
 
@@ -521,30 +586,66 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
               </div>
             </div>
 
-            <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoGenerateVoice}
-                  onChange={e => setAutoGenerateVoice(e.target.checked)}
-                  className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
-                />
-                등록과 동시에 일레븐랩스 음성 자동 생성
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-900">목소리 선택:</span>
-                <select
-                  value={newVoiceId}
-                  onChange={e => setNewVoiceId(e.target.value)}
-                  className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white font-bold text-slate-900"
-                >
-                  {voices.map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </select>
+            <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoGenerateVoice}
+                    onChange={e => setAutoGenerateVoice(e.target.checked)}
+                    className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                  />
+                  일레븐랩스 정답 음성 포함
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-900">목소리 선택:</span>
+                  <select
+                    value={newVoiceId}
+                    onChange={e => {
+                      setNewVoiceId(e.target.value);
+                      setNewPreviewBase64(null);
+                    }}
+                    className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white font-bold text-slate-900"
+                  >
+                    {voices.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handlePreviewNewSentenceVoice}
+                    disabled={newPreviewing || !newText.trim()}
+                    className="flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-xs transition disabled:opacity-50"
+                  >
+                    {newPreviewing ? <Loader2 size={12} className="animate-spin" /> : <Volume2 size={12} />}
+                    {newPreviewBase64 ? "🔄 음성 재생성" : "🎧 음성 먼저 생성해 들어보기"}
+                  </button>
+                </div>
               </div>
+
+              {newPreviewBase64 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-indigo-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-indigo-700">🎧 미리듣기 완료:</span>
+                    <audio src={`data:audio/mp3;base64,${newPreviewBase64}`} controls className="h-8 w-52" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                      ✓ 아래 [문장 등록하기]를 누르면 이 음성이 그대로 저장됩니다!
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handlePreviewNewSentenceVoice}
+                      disabled={newPreviewing}
+                      className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold px-2.5 py-1 rounded-lg"
+                    >
+                      🔄 재생성
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -584,74 +685,111 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                 {sentences.map(item => (
                   <div
                     key={item.id}
-                    className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    className={`bg-white p-4 rounded-2xl border shadow-sm space-y-3 ${
+                      previewAudioMap[item.id] ? "border-indigo-400 ring-2 ring-indigo-100" : "border-slate-200"
+                    }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-md">
-                          {item.chapter}과
-                        </span>
-                        <h4 className="font-black text-slate-900 text-base">{item.text}</h4>
-                      </div>
-                      <p className="text-xs text-green-700 font-bold">
-                        소리: {item.pronunciation}
-                      </p>
-                      {item.rule_formula && (
-                        <p className="text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-mono inline-block">
-                          📌 규칙: {item.rule_formula}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-md">
+                            {item.chapter}과
+                          </span>
+                          <h4 className="font-black text-slate-900 text-base">{item.text}</h4>
+                        </div>
+                        <p className="text-xs text-green-700 font-bold">
+                          소리: {item.pronunciation}
                         </p>
-                      )}
+                        {item.rule_formula && (
+                          <p className="text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-mono inline-block">
+                            📌 규칙: {item.rule_formula}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {item.audio_path ? (
+                          <div className="flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-xl border border-green-200">
+                            <button
+                              onClick={() => handlePlayAudio(item.audio_path, item.id)}
+                              className="flex items-center gap-1 text-xs font-bold text-green-700 hover:text-green-900"
+                            >
+                              <Volume2 size={14} />
+                              {playingId === item.id ? "정지" : "저장된 음성 듣기"}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">음성 없음</span>
+                        )}
+
+                        {/* 일레븐랩스 보이스 선택 & 생성(미리듣기) 버튼 */}
+                        <select
+                          value={selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId}
+                          onChange={e => setSelectedVoices(prev => ({ ...prev, [item.id]: e.target.value }))}
+                          className="text-xs border border-slate-200 rounded-lg p-1.5 bg-white font-medium text-slate-900"
+                        >
+                          {voices.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {v.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <button
+                          onClick={() => handleGeneratePreview(item)}
+                          disabled={generatingVoiceId === item.id || savingVoiceId === item.id}
+                          className="flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-black px-3 py-2 rounded-xl shadow-sm transition disabled:opacity-50"
+                        >
+                          {generatingVoiceId === item.id ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Volume2 size={12} />
+                          )}
+                          {previewAudioMap[item.id] ? "🔄 재생성" : item.audio_path ? "🎧 새로 생성해 들어보기" : "🎧 음성 생성해 들어보기"}
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteSentence(item.id)}
+                          className="p-2 text-slate-900 hover:text-red-500 rounded-lg hover:bg-red-50 transition"
+                          title="문장 삭제"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      {item.audio_path ? (
-                        <div className="flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-xl border border-green-200">
+                    {/* 미리듣기 후 [저장] 또는 [재생성] 선택 영역 */}
+                    {previewAudioMap[item.id] && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-indigo-50/80 rounded-xl border border-indigo-200">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-indigo-800">🎧 방금 생성된 음성:</span>
+                          <audio src={`data:audio/mp3;base64,${previewAudioMap[item.id]}`} controls className="h-8 w-52" />
+                        </div>
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handlePlayAudio(item.audio_path, item.id)}
-                            className="flex items-center gap-1 text-xs font-bold text-green-700 hover:text-green-900"
+                            onClick={() => handleGeneratePreview(item)}
+                            disabled={generatingVoiceId === item.id || savingVoiceId === item.id}
+                            className="flex items-center gap-1 text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-900 font-bold px-3 py-1.5 rounded-lg"
                           >
-                            <Volume2 size={14} />
-                            {playingId === item.id ? "정지" : "미리듣기"}
+                            <RefreshCw size={12} className={generatingVoiceId === item.id ? "animate-spin" : ""} /> 다시 생성
+                          </button>
+                          <button
+                            onClick={() => handleConfirmSaveAudio(item)}
+                            disabled={savingVoiceId === item.id || generatingVoiceId === item.id}
+                            className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-black px-3.5 py-1.5 rounded-lg shadow-xs disabled:opacity-50"
+                          >
+                            {savingVoiceId === item.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                            💾 이 음성으로 확정 저장
+                          </button>
+                          <button
+                            onClick={() => setPreviewAudioMap(prev => { const c = { ...prev }; delete c[item.id]; return c; })}
+                            className="text-xs text-slate-900 hover:underline px-1.5"
+                          >
+                            취소
                           </button>
                         </div>
-                      ) : (
-                        <span className="text-xs text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">음성 없음</span>
-                      )}
-
-                      {/* 일레븐랩스 보이스 선택 & 생성 버튼 */}
-                      <select
-                        value={selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId}
-                        onChange={e => setSelectedVoices(prev => ({ ...prev, [item.id]: e.target.value }))}
-                        className="text-xs border border-slate-200 rounded-lg p-1.5 bg-white font-medium text-slate-900"
-                      >
-                        {voices.map(v => (
-                          <option key={v.id} value={v.id}>
-                            {v.name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        onClick={() => handleGenerateAudio(item)}
-                        disabled={generatingVoiceId === item.id}
-                        className="flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-black px-3 py-2 rounded-xl shadow-sm transition disabled:opacity-50"
-                      >
-                        {generatingVoiceId === item.id ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Sparkles size={12} />
-                        )}
-                        {item.audio_path ? "음성 재생성" : "일레븐랩스 음성 생성"}
-                      </button>
-
-                      <button
-                        onClick={() => handleDeleteSentence(item.id)}
-                        className="p-2 text-slate-900 hover:text-red-500 rounded-lg hover:bg-red-50 transition"
-                        title="문장 삭제"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
