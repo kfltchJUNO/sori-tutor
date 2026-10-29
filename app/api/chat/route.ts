@@ -42,12 +42,39 @@ function cleanTextForTTS(text: string): string {
     .replace(/-/g, " ").trim();
 }
 
-// ── TTS 합성 헬퍼 (ElevenLabs 우선, Google Cloud TTS 폴백) ────
+// ── 16-bit 24kHz PCM → WAV 변환 헬퍼 (Gemini TTS 출력용) ─────
+function pcm16ToWavBase64(pcmBase64: string, sampleRate = 24000): string {
+  const pcmBuf = Buffer.from(pcmBase64, "base64");
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcmBuf.length;
+  const header = Buffer.alloc(44);
+
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  return Buffer.concat([header, pcmBuf]).toString("base64");
+}
+
+// ── TTS 합성 헬퍼 (1순위: ElevenLabs → 2순위: Gemini 무료 TTS → 3순위: Google Cloud TTS) ────
 async function synthesizeTTS(text: string, personaId?: string, voiceName?: string): Promise<string | null> {
   const cleaned = cleanTextForTTS(text);
   if (!cleaned) return null;
 
-  // 1. ElevenLabs API 시도
+  // 1. ElevenLabs API 시도 (1순위)
   const elevenKey = process.env.ELEVENLABS_API_KEY;
   if (elevenKey && elevenKey !== "your_elevenlabs_api_key_here") {
     try {
@@ -76,9 +103,61 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
       if (elRes.ok) {
         const buf = await elRes.arrayBuffer();
         return Buffer.from(buf).toString("base64");
+      } else {
+        console.warn(`ElevenLabs TTS 한도 초과 또는 실패 (${elRes.status}), Gemini 무료 TTS로 폴백합니다.`);
       }
     } catch (e) {
-      console.warn("ElevenLabs TTS 호출 오류:", e);
+      console.warn("ElevenLabs TTS 호출 오류 (Gemini TTS로 폴백):", e);
+    }
+  }
+
+  // 2. Gemini API 무료 TTS 폴백 (GOOGLE_API_KEY만으로 무료 한도 내에서 작동)
+  const geminiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  if (geminiKey) {
+    const GEMINI_TTS_MODELS = [
+      "gemini-3.8-flash-lite-tts",
+      "gemini-3.8-flash-tts",
+      "gemini-3.1-flash-tts-preview",
+      "gemini-2.5-flash-preview-tts",
+    ];
+    const GEMINI_PERSONA_VOICES: Record<string, string> = {
+      junho: "Charon",  // 남성 차분한 톤
+      minwoo: "Puck",   // 남성 밝은 톤
+      chaewon: "Kore",  // 여성 단정한 톤
+      yujin: "Aoede",   // 여성 친근한 톤
+    };
+    const geminiVoice = (personaId && GEMINI_PERSONA_VOICES[personaId]) || "Charon";
+
+    for (const ttsModel of GEMINI_TTS_MODELS) {
+      try {
+        const gemRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: cleaned }] }],
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: geminiVoice },
+                  },
+                },
+              },
+            }),
+          }
+        );
+        if (gemRes.ok) {
+          const gemData = await gemRes.json();
+          const inlineData = gemData?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+          if (inlineData?.data) {
+            return pcm16ToWavBase64(inlineData.data, 24000);
+          }
+        }
+      } catch (e) {
+        console.warn(`Gemini TTS [${ttsModel}] 폴백 오류:`, e);
+      }
     }
   }
 

@@ -486,7 +486,8 @@ export default function Home() {
       const res = await fetch("/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       if (data.audioContent) {
-        const audioSrc = `data:audio/mp3;base64,${data.audioContent}`;
+        const mime = data.audioContent.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
+        const audioSrc = `data:${mime};base64,${data.audioContent}`;
         new Audio(audioSrc).play().catch(e => console.warn(e));
         setChatHistory(prev => prev.map(m => m.text === text ? { ...m, audio: audioSrc } : m));
       }
@@ -518,7 +519,8 @@ export default function Home() {
       const res = await fetch("/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       if (data.audioContent) {
-        const audioSrc = `data:audio/mp3;base64,${data.audioContent}`;
+        const mime = data.audioContent.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
+        const audioSrc = `data:${mime};base64,${data.audioContent}`;
         setChatHistory([{ role: "model", text: greeting, audio: audioSrc }]);
         const audio = new Audio(audioSrc);
         audio.play().catch(err => {
@@ -558,13 +560,15 @@ export default function Home() {
       if (currency === "heart") setHearts(p => p - 1);
       else setTokens(spendRes.remaining ?? tokens - 2);
 
+      const audioMime = data.audioContent?.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
+      const replyAudioSrc = data.audioContent ? `data:${audioMime};base64,${data.audioContent}` : null;
       const newHistory = [
         ...chatHistory,
         { role: "user", text: data.userText },
-        { role: "model", text: data.aiText, audio: data.audioContent ? `data:audio/mp3;base64,${data.audioContent}` : null },
+        { role: "model", text: data.aiText, audio: replyAudioSrc },
       ];
       setChatHistory(newHistory);
-      if (data.audioContent) new Audio(`data:audio/mp3;base64,${data.audioContent}`).play();
+      if (replyAudioSrc) new Audio(replyAudioSrc).play();
       if (data.ended) setChatStatus("ended");
       setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) { alert("통신 오류"); } finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
