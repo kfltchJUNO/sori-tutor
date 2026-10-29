@@ -3,7 +3,7 @@
 // 동국대학교 1급 학생 승인 & 문장/일레븐랩스 음성 관리
 
 import { useEffect, useState, useRef } from "react";
-import { db } from "@/lib/firebase";
+import { db, adminFetch } from "@/lib/firebase";
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc,
   doc, serverTimestamp, query, orderBy, where,
@@ -118,14 +118,13 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     if (!newText.trim()) return alert("먼저 목표 문장을 입력해 주세요.");
     setAiAnalyzing(true);
     try {
-      const res = await fetch("/api/admin/pronunciation-helper", {
+      const res = await adminFetch("/api/admin/pronunciation-helper", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${idToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ text: newText.trim() }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -157,10 +156,9 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       });
 
       if (autoGenerateVoice) {
-        const res = await fetch("/api/admin/generate-audio", {
+        const res = await adminFetch("/api/admin/generate-audio", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${idToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -169,7 +167,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
             text: newText.trim(),
             voiceId: newVoiceId,
           }),
-        });
+        }, idToken);
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           console.error("Auto audio gen error:", errData);
@@ -210,10 +208,9 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     const voiceId = selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId;
     setGeneratingVoiceId(item.id);
     try {
-      const res = await fetch("/api/admin/generate-audio", {
+      const res = await adminFetch("/api/admin/generate-audio", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${idToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -222,7 +219,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           text: item.text,
           voiceId,
         }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 

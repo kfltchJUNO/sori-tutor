@@ -20,4 +20,32 @@ const db = getFirestore(app);
 const storage = getStorage(app); // 🔥 이 부분 확인
 const googleProvider = new GoogleAuthProvider();
 
+/**
+ * 관리자 API 요청 시 항상 최신 Firebase ID 토큰을 사용하고,
+ * 만료(401) 발생 시 강제 갱신(getIdToken(true)) 후 1회 자동 재시도하는 래퍼
+ */
+export async function adminFetch(
+  url: string,
+  init: RequestInit = {},
+  fallbackToken?: string
+): Promise<Response> {
+  const token = (await auth.currentUser?.getIdToken()) || fallbackToken || "";
+  const buildHeaders = (t: string) => {
+    const h = new Headers(init.headers);
+    if (t) h.set("Authorization", `Bearer ${t}`);
+    return h;
+  };
+
+  let res = await fetch(url, { ...init, headers: buildHeaders(token) });
+  if (res.status === 401 && auth.currentUser) {
+    try {
+      const refreshedToken = await auth.currentUser.getIdToken(true);
+      res = await fetch(url, { ...init, headers: buildHeaders(refreshedToken) });
+    } catch (e) {
+      console.error("[adminFetch] Token force-refresh failed:", e);
+    }
+  }
+  return res;
+}
+
 export { auth, db, googleProvider, storage }; // 🔥 export에 storage가 있는지 확인

@@ -6,8 +6,8 @@ import DankookSection from "./DankookSection";
 // app/admin/page.tsx
 
 import { useEffect, useState, useRef } from "react";
-import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { auth, db, adminFetch } from "@/lib/firebase";
+import { onIdTokenChanged } from "firebase/auth";
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc,
   doc, serverTimestamp, query, where, orderBy, limit, getDoc,
@@ -123,10 +123,9 @@ function LineAudioRow({
       if (isTextChanged) {
         await saveUpdatedLineToFirestore(editedText);
       }
-      const res = await fetch("/api/admin/generate-audio", {
+      const res = await adminFetch("/api/admin/generate-audio", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${idToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -136,7 +135,7 @@ function LineAudioRow({
           text: editedText.trim(),
           voiceId: selectedVoice,
         }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setResult(isTextChanged ? "✅ 대사 수정 & 음성 재생성 완료" : "✅ 생성 완료");
@@ -151,11 +150,11 @@ function LineAudioRow({
   const handleDelete = async () => {
     if (!confirm("이 라인의 오디오를 삭제할까요?")) return;
     try {
-      await fetch("/api/admin/generate-audio", {
+      await adminFetch("/api/admin/generate-audio", {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ docId, colName, lineIndex }),
-      });
+      }, idToken);
       onRefresh();
     } catch (e: any) {
       alert("삭제 실패: " + e.message);
@@ -287,10 +286,9 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
         voiceId: line.role === "B" ? roleBVoice : roleAVoice,
       }));
 
-      const res = await fetch("/api/admin/generate-audio", {
+      const res = await adminFetch("/api/admin/generate-audio", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${idToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -299,7 +297,7 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
           isBatch: true,
           lines: preparedLines,
         }),
-      });
+      }, idToken);
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -455,11 +453,10 @@ function FeedbackVoiceCard({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("tier", tier.id);
-      const res = await fetch("/api/admin/feedback-audio", {
+      const res = await adminFetch("/api/admin/feedback-audio", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}` },
         body: formData,
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setResult("✅ 업로드 완료");
@@ -474,11 +471,11 @@ function FeedbackVoiceCard({
 
   const handleDelete = async () => {
     if (!confirm("멘트 오디오를 삭제할까요?")) return;
-    await fetch("/api/admin/feedback-audio", {
+    await adminFetch("/api/admin/feedback-audio", {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tier: tier.id }),
-    });
+    }, idToken);
     onRefresh();
   };
 
@@ -596,9 +593,9 @@ export default function AdminPage() {
   const [batchAudioGenerating, setBatchAudioGenerating] = useState(false);
   const [batchProgress, setBatchProgress] = useState("");
 
-  // ── 인증 ─────────────────────────────────────────────────
+  // ── 인증 (ID 토큰 자동 갱신 포함) ─────────────────────────
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    const unsub = onIdTokenChanged(auth, async (user) => {
       if (!user) { setChecking(false); return; }
       try {
         const token = await user.getIdToken();
@@ -608,7 +605,19 @@ export default function AdminPage() {
       } catch {}
       setChecking(false);
     });
-    return () => unsub();
+    // 15분마다 토큰 강제 갱신 (1시간 만료 방지)
+    const refreshInterval = setInterval(async () => {
+      if (auth.currentUser) {
+        try {
+          const freshToken = await auth.currentUser.getIdToken(true);
+          setIdToken(freshToken);
+        } catch {}
+      }
+    }, 15 * 60 * 1000);
+    return () => {
+      unsub();
+      clearInterval(refreshInterval);
+    };
   }, []);
 
   const authHeader = { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" };
@@ -618,10 +627,10 @@ export default function AdminPage() {
     if (!genCategory.trim()) return alert("카테고리를 입력하세요.");
     setGenerating(true); setGenResult(null);
     try {
-      const res = await fetch("/api/admin/generate", {
+      const res = await adminFetch("/api/admin/generate", {
         method: "POST", headers: authHeader,
         body: JSON.stringify({ type: genType, step: genStep, unit: genUnit, category: genCategory, count: genCount, grammarHint: genGrammar || undefined }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setGenResult(`✅ ${data.count}개 초안 생성 완료! 승인 대기 탭에서 확인하세요.`);
@@ -644,7 +653,7 @@ export default function AdminPage() {
 
   const approveDraft = async (draftId: string, editedContent?: any) => {
     try {
-      const res = await fetch("/api/admin/approve", { method: "POST", headers: authHeader, body: JSON.stringify({ draftId, editedContent }) });
+      const res = await adminFetch("/api/admin/approve", { method: "POST", headers: authHeader, body: JSON.stringify({ draftId, editedContent }) }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setDrafts(prev => prev.filter(d => d.id !== draftId));
@@ -655,7 +664,7 @@ export default function AdminPage() {
   const rejectDraft = async (draftId: string) => {
     if (!confirm("반려하시겠습니까?")) return;
     try {
-      const res = await fetch("/api/admin/approve", { method: "DELETE", headers: authHeader, body: JSON.stringify({ draftId }) });
+      const res = await adminFetch("/api/admin/approve", { method: "DELETE", headers: authHeader, body: JSON.stringify({ draftId }) }, idToken);
       if (!res.ok) throw new Error("반려 실패");
       setDrafts(prev => prev.filter(d => d.id !== draftId));
     } catch (e: any) { alert(e.message); }
@@ -736,16 +745,16 @@ export default function AdminPage() {
           text: targetText,
         });
       }
-      const res = await fetch("/api/admin/generate-audio", {
+      const res = await adminFetch("/api/admin/generate-audio", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           docId: targetDocId,
           colName: audioColName,
           text: targetText,
           voiceId: targetVoice,
         }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setUploadResult("✅ 텍스트 반영 및 ElevenLabs 음성 생성 완료");
@@ -767,7 +776,7 @@ export default function AdminPage() {
       formData.append("docId", selectedDocId);
       formData.append("colName", audioColName);
       formData.append("audioType", "answer");
-      const res = await fetch("/api/admin/audio", { method: "POST", headers: { Authorization: `Bearer ${idToken}` }, body: formData });
+      const res = await adminFetch("/api/admin/audio", { method: "POST", body: formData }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setUploadResult("✅ 업로드 완료");
@@ -782,11 +791,11 @@ export default function AdminPage() {
 
   const deleteSingleAudio = async (docId: string) => {
     if (!confirm("오디오를 삭제하시겠습니까?")) return;
-    await fetch("/api/admin/generate-audio", {
+    await adminFetch("/api/admin/generate-audio", {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ docId, colName: audioColName }),
-    });
+    }, idToken);
     loadAudioDocs();
   };
 
@@ -853,7 +862,7 @@ export default function AdminPage() {
             index: idx,
             voiceId: line.role === "B" ? femaleVoice : editItemVoiceId,
           }));
-          const res = await fetch("/api/admin/generate-audio", {
+          const res = await adminFetch("/api/admin/generate-audio", {
             method: "POST",
             headers: authHeader,
             body: JSON.stringify({
@@ -862,11 +871,11 @@ export default function AdminPage() {
               isBatch: true,
               lines: preparedLines,
             }),
-          });
+          }, idToken);
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
         } else {
-          const res = await fetch("/api/admin/generate-audio", {
+          const res = await adminFetch("/api/admin/generate-audio", {
             method: "POST",
             headers: authHeader,
             body: JSON.stringify({
@@ -875,7 +884,7 @@ export default function AdminPage() {
               text: editItemText.trim(),
               voiceId: editItemVoiceId,
             }),
-          });
+          }, idToken);
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
         }
@@ -903,11 +912,11 @@ export default function AdminPage() {
     if (!assetInputText.trim()) return alert("먼저 단어, 문장, 또는 대화 상황을 입력해 주세요.");
     setAssetAnalyzing(true);
     try {
-      const res = await fetch("/api/admin/pronunciation-helper", {
+      const res = await adminFetch("/api/admin/pronunciation-helper", {
         method: "POST",
         headers: authHeader,
         body: JSON.stringify({ text: assetInputText.trim(), type: curriculumType }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -972,7 +981,7 @@ export default function AdminPage() {
       // 음성 즉시 생성 옵션이 켜져 있고 단어/문장인 경우 ElevenLabs 자동 호출
       if (assetAutoVoice && curriculumType !== "dialogue") {
         const textToSpeak = assetInputText.trim();
-        await fetch("/api/admin/generate-audio", {
+        await adminFetch("/api/admin/generate-audio", {
           method: "POST",
           headers: authHeader,
           body: JSON.stringify({
@@ -981,7 +990,7 @@ export default function AdminPage() {
             text: textToSpeak,
             voiceId: assetVoiceId,
           }),
-        });
+        }, idToken);
       }
 
       alert("🎉 에셋 등록 완료!" + (assetAutoVoice && curriculumType !== "dialogue" ? " (ElevenLabs 음성까지 자동 생성됨)" : ""));
@@ -1020,7 +1029,7 @@ export default function AdminPage() {
         const text = item.text || item.title;
         if (!text) continue;
 
-        const res = await fetch("/api/admin/generate-audio", {
+        const res = await adminFetch("/api/admin/generate-audio", {
           method: "POST",
           headers: authHeader,
           body: JSON.stringify({
@@ -1029,7 +1038,7 @@ export default function AdminPage() {
             text,
             voiceId: selectedVoiceForSingle,
           }),
-        });
+        }, idToken);
         if (res.ok) successCount++;
       }
       alert(`🎉 ${successCount}개 항목의 오디오 일괄 생성이 완료되었습니다!`);
@@ -1055,11 +1064,11 @@ export default function AdminPage() {
   const grantTokens = async (email: string, amount: number) => {
     if (!confirm(`${email}에 ${amount}토큰 지급?`)) return;
     try {
-      const res = await fetch("/api/admin/grant-tokens", {
+      const res = await adminFetch("/api/admin/grant-tokens", {
         method: "POST",
         headers: authHeader,
         body: JSON.stringify({ targetEmail: email, amount }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       alert(`지급 완료! (현재 잔액: ${data.newBalance})`);
@@ -1081,11 +1090,11 @@ export default function AdminPage() {
   const approveCharge = async (req: any) => {
     if (!confirm(`${req.depositor} (${req.amount}토큰) 승인?`)) return;
     try {
-      const res = await fetch("/api/admin/grant-tokens", {
+      const res = await adminFetch("/api/admin/grant-tokens", {
         method: "POST",
         headers: authHeader,
         body: JSON.stringify({ targetEmail: req.userId, amount: req.amount, reason: "충전 요청 승인" }),
-      });
+      }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       await updateDoc(doc(db, "sori_charge_requests", req.id), { status: "approved" });
