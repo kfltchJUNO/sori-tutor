@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 
 // ── 고성능 → 효율 → 속도 순 릴레이 (2026.06 기준 유효 모델) ─
+import { resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
+
 const MODEL_CANDIDATES: string[] = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
@@ -106,7 +108,34 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
       const targetVoice = (personaId && PERSONA_ELEVENLABS_VOICES[personaId]) || "3lMatKOyHfWflJwj08H6";
       const isClonedVoice = targetVoice === "3lMatKOyHfWflJwj08H6";
       const textForEl = cleanTextForTTS(text, isClonedVoice);
+      const { tag, stability } = resolveEmotionForV4(textForEl, "auto", undefined, isClonedVoice);
+      const v4Text = tag ? `${tag} ${textForEl}` : textForEl;
 
+      // 1-A. ElevenLabs v4 시도 (대화 문맥에 맞는 자연스러운 감정 오디오 태그 적용)
+      const v4Res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text: v4Text,
+          model_id: "eleven_v4",
+          voice_settings: {
+            stability,
+            similarity_boost: isClonedVoice ? 0.75 : 0.8,
+            use_speaker_boost: true,
+          },
+        }),
+      });
+
+      if (v4Res.ok) {
+        const buf = await v4Res.arrayBuffer();
+        return Buffer.from(buf).toString("base64");
+      }
+
+      // 1-B. eleven_v4 실패 시 eleven_multilingual_v2 폴백 ([tag] 제거본 사용)
       const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
         method: "POST",
         headers: {

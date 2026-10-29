@@ -16,7 +16,7 @@ import {
   Sparkles, CheckCircle, XCircle, Upload, Trash2,
   RefreshCw, Loader2, Music, Volume2, Wand2, Plus, Edit3,
 } from "lucide-react";
-import { ELEVENLABS_VOICES, DEFAULT_MALE_VOICE_ID } from "@/lib/elevenlabsVoices";
+import { ELEVENLABS_VOICES, DEFAULT_MALE_VOICE_ID, ELEVENLABS_EMOTIONS } from "@/lib/elevenlabsVoices";
 
 // ── 타입 ──────────────────────────────────────────────────
 interface Draft {
@@ -81,6 +81,7 @@ function LineAudioRow({
     ? (ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID)
     : DEFAULT_MALE_VOICE_ID;
   const [selectedVoice, setSelectedVoice] = useState(defaultVoice);
+  const [selectedEmotion, setSelectedEmotion] = useState<string>("auto");
   const [editedText, setEditedText] = useState(line.text);
   const [savingText, setSavingText] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -117,7 +118,7 @@ function LineAudioRow({
     }
   };
 
-  // 1단계: ElevenLabs 음성 생성 (미리듣기 — 아직 DB 저장 전)
+  // 1단계: ElevenLabs v4 음성 생성 (미리듣기 — 아직 DB 저장 전)
   const handleGeneratePreview = async () => {
     if (!editedText.trim()) return alert("대사를 입력해주세요.");
     setGenerating(true); setResult(null);
@@ -129,12 +130,14 @@ function LineAudioRow({
           action: "preview",
           text: editedText.trim(),
           voiceId: selectedVoice,
+          emotion: selectedEmotion,
         }),
       }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setPreviewBase64(data.audioBase64);
-      setResult("🎧 생성됨 — 들어보고 [💾 저장] 또는 [🔄 재생성]을 선택하세요");
+      const emotionInfo = data.detectedEmotion ? ` (${data.detectedEmotion})` : "";
+      setResult(`🎧 생성됨${emotionInfo} — 들어보고 [💾 저장] 또는 [🔄 재생성]을 선택하세요`);
       new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
     } catch (e: any) {
       setResult("❌ " + e.message);
@@ -231,7 +234,7 @@ function LineAudioRow({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center flex-wrap">
           <select
             value={selectedVoice}
             onChange={e => setSelectedVoice(e.target.value)}
@@ -239,6 +242,16 @@ function LineAudioRow({
           >
             {ELEVENLABS_VOICES.map(v => (
               <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+          <select
+            value={selectedEmotion}
+            onChange={e => setSelectedEmotion(e.target.value)}
+            className="text-xs border border-indigo-200 rounded-lg px-2 py-1.5 bg-indigo-50/50 text-slate-900 font-bold focus:outline-none"
+            title="ElevenLabs v4 감정 표현 선택"
+          >
+            {ELEVENLABS_EMOTIONS.map(em => (
+              <option key={em.id} value={em.id}>{em.label}</option>
             ))}
           </select>
           <button
@@ -509,6 +522,7 @@ function FeedbackVoiceCard({
 }) {
   const [customText, setCustomText] = useState<string>(tier.desc);
   const [selectedVoice, setSelectedVoice] = useState<string>(DEFAULT_MALE_VOICE_ID);
+  const [selectedEmotion, setSelectedEmotion] = useState<string>("auto");
   const [previewBase64, setPreviewBase64] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -518,7 +532,7 @@ function FeedbackVoiceCard({
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 1. ElevenLabs API 호출 → 즉시 미리듣기 (아직 저장 안 함)
+  // 1. ElevenLabs v4 API 호출 → 즉시 미리듣기 (아직 저장 안 함)
   const handleGeneratePreview = async () => {
     if (!customText.trim()) return alert("생성할 멘트 대사를 입력해주세요.");
     setPreviewing(true);
@@ -529,15 +543,18 @@ function FeedbackVoiceCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "preview",
+          tier: tier.id,
           text: customText.trim(),
           voiceId: selectedVoice,
+          emotion: selectedEmotion,
         }),
       }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setPreviewBase64(data.audioBase64);
-      setResult("🎧 미리듣기 음성이 생성되었습니다! 들어보시고 마음에 들면 [이 음성으로 저장]을 눌러주세요.");
+      const emotionInfo = data.detectedEmotion ? ` [적용 감정: ${data.detectedEmotion}]` : "";
+      setResult(`🎧 미리듣기 음성이 생성되었습니다!${emotionInfo} 들어보시고 마음에 들면 [이 음성으로 확정 저장]을 눌러주세요.`);
 
       // 생성 즉시 자동 재생
       if (audioRef.current) {
@@ -568,6 +585,7 @@ function FeedbackVoiceCard({
           tier: tier.id,
           text: customText.trim(),
           voiceId: selectedVoice,
+          emotion: selectedEmotion,
           audioBase64: useExistingPreview && previewBase64 ? previewBase64 : undefined,
         }),
       }, idToken);
@@ -692,17 +710,31 @@ function FeedbackVoiceCard({
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-wrap">
           <select
             value={selectedVoice}
             onChange={e => {
               setSelectedVoice(e.target.value);
               setPreviewBase64(null);
             }}
-            className="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-56"
+            className="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-52"
           >
             {ELEVENLABS_VOICES.map(v => (
               <option key={v.id} value={v.id}>{v.name} ({v.description})</option>
+            ))}
+          </select>
+
+          <select
+            value={selectedEmotion}
+            onChange={e => {
+              setSelectedEmotion(e.target.value);
+              setPreviewBase64(null);
+            }}
+            className="text-xs border border-indigo-200 rounded-lg px-2.5 py-2 bg-indigo-50/50 text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-52"
+            title="ElevenLabs v4 감정 표현 선택"
+          >
+            {ELEVENLABS_EMOTIONS.map(em => (
+              <option key={em.id} value={em.id}>{em.label}</option>
             ))}
           </select>
 
@@ -906,6 +938,7 @@ export default function AdminPage() {
   useEffect(() => { if (isAdmin && activeTab === "audio") loadAudioDocs(false); }, [isAdmin, activeTab, audioColName]);
 
   const [selectedVoiceForSingle, setSelectedVoiceForSingle] = useState(DEFAULT_MALE_VOICE_ID);
+  const [selectedEmotionForSingle, setSelectedEmotionForSingle] = useState<string>("auto");
   const [singleGenerating, setSingleGenerating] = useState(false);
   const [singleSavingAudio, setSingleSavingAudio] = useState(false);
   const [singlePreviewBase64, setSinglePreviewBase64] = useState<string | null>(null);
@@ -969,12 +1002,14 @@ export default function AdminPage() {
           action: "preview",
           text: targetText,
           voiceId: selectedVoiceForSingle,
+          emotion: selectedEmotionForSingle,
         }),
       }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSinglePreviewBase64(data.audioBase64);
-      setUploadResult("🎧 음성이 생성되었습니다! 아래에서 들어보시고 [💾 이 음성으로 저장] 또는 [🔄 재생성]을 눌러주세요.");
+      const emotionInfo = data.detectedEmotion ? ` [적용 감정: ${data.detectedEmotion}]` : "";
+      setUploadResult(`🎧 음성이 생성되었습니다!${emotionInfo} 아래에서 들어보시고 [💾 이 음성으로 확정 저장] 또는 [🔄 다시 생성]을 눌러주세요.`);
       new Audio(`data:audio/mp3;base64,${data.audioBase64}`).play().catch(() => {});
     } catch (e: any) {
       setUploadResult(`❌ 생성 실패: ${e.message}`);
@@ -1081,11 +1116,13 @@ export default function AdminPage() {
   const [editItemScript, setEditItemScript] = useState("");
   const [editItemTranslation, setEditItemTranslation] = useState("");
   const [editItemVoiceId, setEditItemVoiceId] = useState(DEFAULT_MALE_VOICE_ID);
+  const [editItemEmotion, setEditItemEmotion] = useState<string>("auto");
   const [editItemSaving, setEditItemSaving] = useState(false);
   const [editItemPreviewing, setEditItemPreviewing] = useState(false);
   const [editItemPreviewBase64, setEditItemPreviewBase64] = useState<string | null>(null);
 
   // 새 에셋 등록 시 미리듣기 상태
+  const [assetEmotion, setAssetEmotion] = useState<string>("auto");
   const [assetPreviewing, setAssetPreviewing] = useState(false);
   const [assetPreviewBase64, setAssetPreviewBase64] = useState<string | null>(null);
 
@@ -1096,6 +1133,7 @@ export default function AdminPage() {
     setEditItemScript(item.script ?? "");
     setEditItemTranslation(item.translation ?? "");
     setEditItemVoiceId((item as any).voice_id || DEFAULT_MALE_VOICE_ID);
+    setEditItemEmotion("auto");
     setEditItemPreviewBase64(null);
   };
 
@@ -1111,6 +1149,7 @@ export default function AdminPage() {
           action: "preview",
           text: editItemText.trim(),
           voiceId: editItemVoiceId,
+          emotion: editItemEmotion,
         }),
       }, idToken);
       const data = await res.json();
@@ -1246,6 +1285,7 @@ export default function AdminPage() {
           action: "preview",
           text: assetInputText.trim(),
           voiceId: assetVoiceId,
+          emotion: assetEmotion,
         }),
       }, idToken);
       const data = await res.json();
@@ -1713,22 +1753,39 @@ export default function AdminPage() {
                         </button>
                       )}
                     </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-900 block mb-1">목소리(Voice) 선택</label>
-                      <select
-                        value={selectedVoiceForSingle}
-                        onChange={e => {
-                          setSelectedVoiceForSingle(e.target.value);
-                          setSinglePreviewBase64(null);
-                        }}
-                        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-900 bg-white font-medium focus:ring-2 focus:ring-indigo-500"
-                      >
-                        {ELEVENLABS_VOICES.map(v => (
-                          <option key={v.id} value={v.id}>
-                            {v.name} ({v.description})
-                          </option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs font-bold text-slate-900 block mb-1">목소리(Voice) 선택</label>
+                        <select
+                          value={selectedVoiceForSingle}
+                          onChange={e => {
+                            setSelectedVoiceForSingle(e.target.value);
+                            setSinglePreviewBase64(null);
+                          }}
+                          className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-900 bg-white font-medium focus:ring-2 focus:ring-indigo-500"
+                        >
+                          {ELEVENLABS_VOICES.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {v.name} ({v.description})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-900 block mb-1">감정 표현 (ElevenLabs v4)</label>
+                        <select
+                          value={selectedEmotionForSingle}
+                          onChange={e => {
+                            setSelectedEmotionForSingle(e.target.value);
+                            setSinglePreviewBase64(null);
+                          }}
+                          className="w-full border border-indigo-200 rounded-lg p-2.5 text-sm text-slate-900 bg-white font-bold focus:ring-2 focus:ring-indigo-500"
+                        >
+                          {ELEVENLABS_EMOTIONS.map(em => (
+                            <option key={em.id} value={em.id}>{em.label}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     {/* 현재 이미 등록된 오디오가 있는 경우 표시 */}
@@ -2014,7 +2071,7 @@ export default function AdminPage() {
                         />
                         <span className="text-xs font-bold text-indigo-900">일레븐랩스 정답 음성 포함</span>
                       </label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <select
                           value={assetVoiceId}
                           onChange={e => {
@@ -2025,6 +2082,19 @@ export default function AdminPage() {
                         >
                           {ELEVENLABS_VOICES.map(v => (
                             <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={assetEmotion}
+                          onChange={e => {
+                            setAssetEmotion(e.target.value);
+                            setAssetPreviewBase64(null);
+                          }}
+                          className="text-xs border border-indigo-200 rounded-lg p-1.5 bg-white font-bold text-slate-900"
+                          title="ElevenLabs v4 감정 표현 선택"
+                        >
+                          {ELEVENLABS_EMOTIONS.map(em => (
+                            <option key={em.id} value={em.id}>{em.label}</option>
                           ))}
                         </select>
                         <button
@@ -2191,7 +2261,7 @@ export default function AdminPage() {
                             </div>
                           )}
                           <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-xs font-bold text-slate-900">목소리:</span>
                               <select
                                 value={editItemVoiceId}
@@ -2203,6 +2273,19 @@ export default function AdminPage() {
                               >
                                 {ELEVENLABS_VOICES.map(v => (
                                   <option key={v.id} value={v.id}>{v.name}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={editItemEmotion}
+                                onChange={e => {
+                                  setEditItemEmotion(e.target.value);
+                                  setEditItemPreviewBase64(null);
+                                }}
+                                className="border border-indigo-200 rounded-lg px-2 py-1 text-xs text-slate-900 font-bold bg-indigo-50/50"
+                                title="ElevenLabs v4 감정 표현 선택"
+                              >
+                                {ELEVENLABS_EMOTIONS.map(em => (
+                                  <option key={em.id} value={em.id}>{em.label}</option>
                                 ))}
                               </select>
                               {curriculumType !== "dialogue" && (

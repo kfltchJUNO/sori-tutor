@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/adminAuth";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
-import { DEFAULT_MALE_VOICE_ID } from "@/lib/elevenlabsVoices";
+import { DEFAULT_MALE_VOICE_ID, resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
 
 // 허용된 tier 목록
 const VALID_TIERS = ["perfect", "great", "good", "okay", "fail", "silence"] as const;
@@ -30,15 +30,51 @@ function formatTextForNaturalBreathing(raw: string, isClonedVoice: boolean): str
   return t;
 }
 
-// ElevenLabs TTS 호출
-async function generateElevenLabsBuffer(text: string, voiceId: string): Promise<Buffer> {
+// ElevenLabs TTS 호출 (1순위: eleven_v4 + 인라인 감정 오디오 태그 → 폴백: eleven_multilingual_v2)
+async function generateElevenLabsBuffer(
+  text: string,
+  voiceId: string,
+  emotion: string = "auto",
+  tier?: string
+): Promise<{ buffer: Buffer; detectedEmotion: string }> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY 환경변수가 설정되지 않았습니다.");
 
   // 준호(대표 클론 보이스) 여부 확인
   const isClonedVoice = voiceId === DEFAULT_MALE_VOICE_ID;
   const naturalText = formatTextForNaturalBreathing(text, isClonedVoice);
+  const { tag, stability, detectedLabel } = resolveEmotionForV4(naturalText, emotion, tier, isClonedVoice);
+  const v4Text = tag ? `${tag} ${naturalText}` : naturalText;
 
+  // 1순위: eleven_v4 호출 (style/speed 슬라이더 대신 인라인 [감정 태그]와 stability/similarity_boost 사용)
+  const v4Res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "audio/mpeg",
+    },
+    body: JSON.stringify({
+      text: v4Text,
+      model_id: "eleven_v4",
+      voice_settings: {
+        stability,
+        similarity_boost: isClonedVoice ? 0.75 : 0.80,
+        use_speaker_boost: true,
+      },
+    }),
+  });
+
+  if (v4Res.ok) {
+    return {
+      buffer: Buffer.from(await v4Res.arrayBuffer()),
+      detectedEmotion: detectedLabel,
+    };
+  }
+
+  console.warn(`eleven_v4 호출 실패 (${v4Res.status}), eleven_multilingual_v2로 자동 폴백합니다.`);
+
+  // 2순위 폴백: eleven_multilingual_v2 (괄호 태그를 그대로 읽지 않도록 naturalText만 전달)
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
     method: "POST",
     headers: {
@@ -50,8 +86,6 @@ async function generateElevenLabsBuffer(text: string, voiceId: string): Promise<
       text: naturalText,
       model_id: "eleven_multilingual_v2",
       voice_settings: {
-        // 클론 보이스(IVC)는 stability가 낮거나 style > 0이면 대본에 없는 엉뚱한 말(환각)을 뱉으므로
-        // stability를 높이고(0.78) style은 반드시 0.0으로 고정
         stability: isClonedVoice ? 0.78 : 0.70,
         similarity_boost: isClonedVoice ? 0.75 : 0.80,
         style: 0.0,
@@ -65,7 +99,10 @@ async function generateElevenLabsBuffer(text: string, voiceId: string): Promise<
     const errText = await res.text();
     throw new Error(`ElevenLabs 호출 실패 (${res.status}): ${errText}`);
   }
-  return Buffer.from(await res.arrayBuffer());
+  return {
+    buffer: Buffer.from(await res.arrayBuffer()),
+    detectedEmotion: detectedLabel,
+  };
 }
 
 // ── GET: 현재 등록된 멘트 URL 전체 조회 ──────────────────
@@ -91,11 +128,12 @@ export async function POST(req: NextRequest) {
     // 1. JSON 요청: ElevenLabs API로 생성 & 미리듣기(preview) 또는 저장(save)
     if (contentType.includes("application/json")) {
       const body = await req.json();
-      const { action, tier, text, voiceId, audioBase64 } = body as {
+      const { action, tier, text, voiceId, emotion, audioBase64 } = body as {
         action?: "preview" | "save";
         tier?: string;
         text?: string;
         voiceId?: string;
+        emotion?: string;
         audioBase64?: string;
       };
 
@@ -106,10 +144,11 @@ export async function POST(req: NextRequest) {
         if (!text?.trim()) {
           return NextResponse.json({ error: "생성할 대사를 입력해주세요." }, { status: 400 });
         }
-        const buffer = await generateElevenLabsBuffer(text.trim(), usedVoiceId);
+        const { buffer, detectedEmotion } = await generateElevenLabsBuffer(text.trim(), usedVoiceId, emotion || "auto", tier);
         return NextResponse.json({
           success: true,
           audioBase64: buffer.toString("base64"),
+          detectedEmotion,
         });
       }
 
@@ -125,7 +164,8 @@ export async function POST(req: NextRequest) {
         if (!text?.trim()) {
           return NextResponse.json({ error: "생성할 대사를 입력해주세요." }, { status: 400 });
         }
-        buffer = await generateElevenLabsBuffer(text.trim(), usedVoiceId);
+        const gen = await generateElevenLabsBuffer(text.trim(), usedVoiceId, emotion || "auto", tier);
+        buffer = gen.buffer;
       }
 
       const ts = Date.now();

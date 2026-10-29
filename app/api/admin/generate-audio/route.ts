@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/adminAuth";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
-import { DEFAULT_MALE_VOICE_ID } from "@/lib/elevenlabsVoices";
+import { DEFAULT_MALE_VOICE_ID, resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
 
 function getStorageBucket() {
   const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
@@ -41,8 +41,12 @@ function formatKoreanTextForBreathing(raw: string, isClonedVoice = false): strin
   return s;
 }
 
-// ElevenLabs TTS 생성 함수
-async function synthesizeWithElevenLabs(text: string, voiceId: string): Promise<Buffer> {
+// ElevenLabs TTS 생성 함수 (1순위: eleven_v4 + 인라인 감정 오디오 태그 → 폴백: eleven_multilingual_v2)
+async function synthesizeWithElevenLabs(
+  text: string,
+  voiceId: string,
+  emotion: string = "auto"
+): Promise<{ buffer: Buffer; detectedEmotion: string }> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey || apiKey === "your_elevenlabs_api_key_here") {
     throw new Error("ElevenLabs API 키가 설정되지 않았습니다. .env.local에 ELEVENLABS_API_KEY를 입력해주세요.");
@@ -52,7 +56,36 @@ async function synthesizeWithElevenLabs(text: string, voiceId: string): Promise<
   const isClonedVoice = targetVoiceId === DEFAULT_MALE_VOICE_ID;
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${targetVoiceId}?output_format=mp3_44100_128`;
   const formattedText = formatKoreanTextForBreathing(text, isClonedVoice);
+  const { tag, stability, detectedLabel } = resolveEmotionForV4(formattedText, emotion, undefined, isClonedVoice);
+  const v4Text = tag ? `${tag} ${formattedText}` : formattedText;
 
+  // 1순위: eleven_v4 호출 (자연스러운 감정 표현 및 인라인 오디오 태그 지원)
+  const v4Response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "audio/mpeg",
+    },
+    body: JSON.stringify({
+      text: v4Text,
+      model_id: "eleven_v4",
+      voice_settings: {
+        stability,
+        similarity_boost: isClonedVoice ? 0.75 : 0.8,
+        use_speaker_boost: true,
+      },
+    }),
+  });
+
+  if (v4Response.ok) {
+    const arrayBuffer = await v4Response.arrayBuffer();
+    return { buffer: Buffer.from(arrayBuffer), detectedEmotion: detectedLabel };
+  }
+
+  console.warn(`eleven_v4 호출 실패 (${v4Response.status}), eleven_multilingual_v2로 자동 폴백합니다.`);
+
+  // 2순위 폴백: eleven_multilingual_v2 ([tag]를 소리내어 읽지 않도록 formattedText만 전달)
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -80,7 +113,7 @@ async function synthesizeWithElevenLabs(text: string, voiceId: string): Promise<
   }
 
   const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return { buffer: Buffer.from(arrayBuffer), detectedEmotion: detectedLabel };
 }
 
 // ── 1) 음성 생성 (미리듣기 / 단일 저장 / 담화 라인 / 전체 담화) ──────────────
@@ -90,7 +123,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { action, docId, colName, text, voiceId, lineIndex, isBatch, lines, audioBase64 } = body;
+    const { action, docId, colName, text, voiceId, emotion, lineIndex, isBatch, lines, audioBase64 } = body;
 
     // ── 0: 미리듣기 전용 (Storage/Firestore에 저장하지 않고 base64만 즉시 반환) ──
     if (action === "preview") {
@@ -98,11 +131,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "생성할 텍스트(text)가 없습니다." }, { status: 400 });
       }
       const usedVoiceId = voiceId || DEFAULT_MALE_VOICE_ID;
-      const audioBuffer = await synthesizeWithElevenLabs(String(text).trim(), usedVoiceId);
+      const { buffer: audioBuffer, detectedEmotion } = await synthesizeWithElevenLabs(
+        String(text).trim(),
+        usedVoiceId,
+        emotion || "auto"
+      );
       return NextResponse.json({
         success: true,
         audioBase64: audioBuffer.toString("base64"),
         voiceId: usedVoiceId,
+        detectedEmotion,
       });
     }
 
@@ -123,7 +161,8 @@ export async function POST(req: NextRequest) {
         const item = lines[i];
         if (!item.text) continue;
         const usedVoiceId = item.voiceId || voiceId || DEFAULT_MALE_VOICE_ID;
-        const audioBuffer = await synthesizeWithElevenLabs(item.text, usedVoiceId);
+        const usedEmotion = item.emotion || emotion || "auto";
+        const { buffer: audioBuffer } = await synthesizeWithElevenLabs(item.text, usedVoiceId, usedEmotion);
         const storagePath = `curriculum/${colName}/${docId}/line_${i}_${usedVoiceId}_${ts}.mp3`;
         const fileRef = bucket.file(storagePath);
 
@@ -153,7 +192,7 @@ export async function POST(req: NextRequest) {
     const usedVoiceId = voiceId || DEFAULT_MALE_VOICE_ID;
     const audioBuffer = audioBase64
       ? Buffer.from(audioBase64, "base64")
-      : await synthesizeWithElevenLabs(text, usedVoiceId);
+      : (await synthesizeWithElevenLabs(text, usedVoiceId, emotion || "auto")).buffer;
     const ts = Date.now();
 
     const isDialogueLine = lineIndex !== null && lineIndex !== undefined;
