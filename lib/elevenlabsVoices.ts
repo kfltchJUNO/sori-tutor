@@ -11,24 +11,31 @@ export interface VoiceOption {
 
 export const ELEVENLABS_VOICES: VoiceOption[] = [
   {
-    id: process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_JUNHO || "srhGhMYcxqeTNVuSRvWg",
-    name: "준호 (기본 남성 - 내 목소리)",
+    id: process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_JUNHO || "3lMatKOyHfWflJwj08H6",
+    name: "준호 (남성 - 대표 음성)",
     gender: "male",
     description: "준호님 클론 보이스 (소리튜터 대표 남성 음성)",
     isDefault: true,
   },
   {
-    id: "EXAVITQu4vr4xnSDxMaL", // ElevenLabs 공식 다국어 여성 보이스 (Sarah - 친근하고 또렷함)
-    name: "서연 (여성 성우)",
-    gender: "female",
-    description: "차분하고 밝은 톤의 한국어 지원 여성 음성 (대화 상대용)",
+    id: "DAYXNdDncOaX81nsqMvp",
+    name: "민우 (남성)",
+    gender: "male",
+    description: "부드럽고 자연스러운 남성 음성",
   },
   {
-    id: "21m00Tcm4TlvDq8ikWAM", // ElevenLabs 공식 다국어 여성 보이스 (Rachel)
-    name: "민지 (차분한 여성)",
+    id: "mTVOetWowFUodP946PJM",
+    name: "채원 (여성)",
     gender: "female",
-    description: "차분하고 지적인 톤의 여성 음성",
+    description: "밝고 또렷한 표준 여성 음성 (대화 상대/해설용)",
+  },
+  {
+    id: "EsM6qKItauOb9XNGEb9g",
+    name: "유진 (여성)",
+    gender: "female",
+    description: "차분하고 친절한 여성 음성",
   },
 ];
 
-export const DEFAULT_MALE_VOICE_ID = "srhGhMYcxqeTNVuSRvWg";
+export const DEFAULT_MALE_VOICE_ID = "3lMatKOyHfWflJwj08H6";
+export const DEFAULT_FEMALE_VOICE_ID = "mTVOetWowFUodP946PJM";
