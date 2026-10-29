@@ -594,14 +594,13 @@ interface ScoringResult {
 
 async function runScoring(
   genAI: GoogleGenerativeAI,
-  base64Audio: string,
   recognized: string,
   targetText: string,
   context: string,
   userNick: string,
   metrics: EvaluationMetrics,
 ): Promise<ScoringResult> {
-  const minAllowed = Math.max(0, metrics.algoScore - 8);
+  const minAllowed = Math.max(0, metrics.algoScore - 6);
   const maxAllowed = Math.min(metrics.algoScore + 4, metrics.hardCeiling, 92);
 
   const errorListText = metrics.errorSummary.length > 0
@@ -609,7 +608,7 @@ async function runScoring(
     : "음절 단위 특이 오류 없음 (억양 및 자연스러움 평가)";
 
   const prompt = `당신은 엄격하고 정확한 한국어 발음 교정 전문가입니다.
-첨부된 학습자의 실제 음성 오디오와 블라인드 STT 결과를 함께 확인하여 채점 및 피드백을 작성하세요.
+블라인드 STT 결과와 음절 정밀 분석 결과를 바탕으로 채점 및 피드백을 작성하세요.
 
 [목표 문장]: "${targetText}" (표준 발음: [${toStandardPronunciation(targetText)}])
 [실제 들린 발음 (블라인드 STT)]: "${recognized}"
@@ -618,10 +617,9 @@ async function runScoring(
 [상황 맥락]: ${context || "일반 발음 연습"}
 
 [엄격한 채점 규칙]
-1. 만약 첨부된 오디오에 실제 말소리가 거의 없거나 침묵·잡음뿐이라면 무조건 score를 0으로 출력하세요.
-2. 감지된 음절 오류(받침 누락, 모음 오류, 자음 불일치)가 있다면 절대 높은 점수를 주지 마세요.
+1. 감지된 음절 오류(받침 누락, 모음 오류, 자음 불일치)가 있다면 절대 높은 점수를 주지 마세요.
    - 예: "학교에 가요"를 "하교에가여"로 발음한 경우 '학'의 [ㄱ] 받침 누락과 '요'→'여' 모음 오류가 모두 있으므로 반드시 두 오류를 모두 구체적으로 지적하고 ${maxAllowed}점 이하로 채점하세요.
-3. 점수는 반드시 ${minAllowed}~${maxAllowed} 사이의 정수로만 부여하세요.
+2. 점수는 반드시 ${minAllowed}~${maxAllowed} 사이의 정수로만 부여하세요.
 
 [초급 1급 눈높이 맞춤 발음 규칙 지침 - 필수]
 - 비음화, 유음화, 연음, 구개음화 같은 어려운 문법 학술 용어는 '절대' 사용 금지!
@@ -639,7 +637,7 @@ JSON만 출력하세요. 다른 텍스트 절대 금지.
   "errorTypes": ["받침 누락", "모음 오류"]
 }`;
 
-  const raw = await callGemini(genAI, prompt, base64Audio, 0.2);
+  const raw = await callGemini(genAI, prompt, undefined, 0.2);
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("채점 JSON 파싱 실패");
 
@@ -783,10 +781,10 @@ export async function POST(req: Request): Promise<Response> {
     const { suspected: liaisonFail, penalty: liaisonPenalty } =
       detectLiaisonFailure(targetText, audioFile.size);
 
-    // ── 2단계: AI 피드백 및 채점 (오디오 직접 청취 포함) ─────────
+    // ── 2단계: AI 피드백 및 채점 ─────────
     let scored: ScoringResult;
     try {
-      scored = await runScoring(genAI, base64Audio, recognized, targetText, context, userNick, metrics);
+      scored = await runScoring(genAI, recognized, targetText, context, userNick, metrics);
     } catch (e) {
       console.error("채점 실패:", e);
       const fallback = Math.max(0, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
