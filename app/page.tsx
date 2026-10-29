@@ -151,6 +151,7 @@ export default function Home() {
   const dataArrayRef = useRef<Uint8Array | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speechFramesRef = useRef<number>(0);
 
   // ── 훅 ────────────────────────────────
   const { spendToken, claimCheckin } = useTokenTransaction();
@@ -956,6 +957,10 @@ export default function Home() {
 
     const formData = new FormData();
     formData.append("audio", audioBlob); formData.append("targetText", targetText);
+    if (currentProblem?.pronunciation && courseType !== "dialogue") {
+      formData.append("targetPronunciation", currentProblem.pronunciation);
+    }
+    formData.append("speechFrames", String(speechFramesRef.current));
     formData.append("context", contextInfo);
     formData.append("userNick", embedUser.name || userAlias || "학습자");
 
@@ -1023,6 +1028,7 @@ export default function Home() {
       };
       mediaRecorderRef.current.start();
       setRecording(true); setResult(null);
+      speechFramesRef.current = 0;
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const audioContext = new AudioCtx();
       audioContextRef.current = audioContext;
@@ -1039,8 +1045,12 @@ export default function Home() {
     if (!analyserRef.current || !dataArrayRef.current) return;
     analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
     const avg = dataArrayRef.current.reduce((a, b) => a + b) / dataArrayRef.current.length;
-    if (avg > 15) { if (silenceTimer.current) { clearTimeout(silenceTimer.current); silenceTimer.current = null; } }
-    else { if (!silenceTimer.current) { silenceTimer.current = setTimeout(stopRecording, 1500); } }
+    if (avg > 18) {
+      speechFramesRef.current += 1;
+      if (silenceTimer.current) { clearTimeout(silenceTimer.current); silenceTimer.current = null; }
+    } else {
+      if (!silenceTimer.current) { silenceTimer.current = setTimeout(stopRecording, 1500); }
+    }
     animationFrameRef.current = requestAnimationFrame(detectSilence);
   };
 
