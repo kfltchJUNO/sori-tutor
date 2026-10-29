@@ -13,8 +13,11 @@ interface Props {
 export default function AdUnit({ slot, format = "auto", className = "" }: Props) {
   const insRef  = useRef<HTMLModElement>(null);
   const pushed  = useRef(false);
+  // 실제 숫자형 애드센스 슬롯 ID(예: "1234567890")가 아닐 경우(예: "SLOT_ID_4") 400 에러 방지를 위해 렌더링 생략
+  const isValidSlot = Boolean(slot && /^\d+$/.test(slot.trim()));
 
   useEffect(() => {
+    if (!isValidSlot) return;
     if (pushed.current) return;
     if (!insRef.current) return;
 
@@ -29,7 +32,9 @@ export default function AdUnit({ slot, format = "auto", className = "" }: Props)
     } catch (e) {
       // 오류 무시 (심사 전엔 광고 없음)
     }
-  }, []);
+  }, [isValidSlot]);
+
+  if (!isValidSlot) return null;
 
   return (
     <div className={`w-full overflow-hidden ${className}`}>

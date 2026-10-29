@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, limit, query } from "firebase/firestore";
 import Login from "./Login";
+import AdUnit from "./AdUnit";
 
 interface WordPreview { id: string; text: string; pronunciation: string; tip: string; }
 interface SentencePreview { id: string; text: string; translation: string; }
@@ -160,10 +161,7 @@ export default function LandingPage({ onUserChange }: { onUserChange: (u: any) =
       </section>
 
       {/* ── 광고 #1: 기능소개~미리보기 사이 (가로 배너) ───── */}
-      <div style={{ background: "#f1f5f9", padding: "16px 24px", textAlign: "center", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0" }}>
-        <p style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 2, textTransform: "uppercase" as const, marginBottom: 8 }}>Advertisement</p>
-        <ins className="adsbygoogle" style={{ display: "block" }} data-ad-client="ca-pub-4585319125929329" data-ad-slot="SLOT_ID_1" data-ad-format="horizontal" data-full-width-responsive="true" />
-      </div>
+      <AdUnit slot="SLOT_ID_1" format="horizontal" />
 
       {/* ── 오늘의 학습 미리보기 (실제 Firestore 데이터) ─────── */}
       <section id="preview" style={{ padding: "80px 24px", background: "linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%)" }}>
@@ -273,10 +271,7 @@ export default function LandingPage({ onUserChange }: { onUserChange: (u: any) =
       </section>
 
       {/* ── 광고 #2: How It Works~TOPIK 커리큘럼 사이 ─────── */}
-      <div style={{ background: "#f8fafc", padding: "16px 24px", textAlign: "center", borderBottom: "1px solid #e2e8f0" }}>
-        <p style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 2, textTransform: "uppercase" as const, marginBottom: 8 }}>Advertisement</p>
-        <ins className="adsbygoogle" style={{ display: "block" }} data-ad-client="ca-pub-4585319125929329" data-ad-slot="SLOT_ID_2" data-ad-format="auto" data-full-width-responsive="true" />
-      </div>
+      <AdUnit slot="SLOT_ID_2" format="auto" />
 
       {/* ── TOPIK 커리큘럼 ───────────────────────────────────── */}
       <section style={{ padding: "80px 24px", background: "#f8fafc" }}>
