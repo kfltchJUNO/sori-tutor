@@ -430,7 +430,7 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
   );
 }
 
-// ── 점수 피드백 멘트 업로드 카드 ─────────────────────────
+// ── 점수 피드백 멘트 생성(미리듣기/저장) & 업로드 카드 ─────────────────────────
 function FeedbackVoiceCard({
   tier, idToken, currentUrl, onRefresh
 }: {
@@ -439,12 +439,84 @@ function FeedbackVoiceCard({
   currentUrl: string;
   onRefresh: () => void;
 }) {
+  const [customText, setCustomText] = useState<string>(tier.desc);
+  const [selectedVoice, setSelectedVoice] = useState<string>(DEFAULT_MALE_VOICE_ID);
+  const [previewBase64, setPreviewBase64] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // 1. ElevenLabs API 호출 → 즉시 미리듣기 (아직 저장 안 함)
+  const handleGeneratePreview = async () => {
+    if (!customText.trim()) return alert("생성할 멘트 대사를 입력해주세요.");
+    setPreviewing(true);
+    setResult(null);
+    try {
+      const res = await adminFetch("/api/admin/feedback-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "preview",
+          text: customText.trim(),
+          voiceId: selectedVoice,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setPreviewBase64(data.audioBase64);
+      setResult("🎧 미리듣기 음성이 생성되었습니다! 들어보시고 마음에 들면 [이 음성으로 저장]을 눌러주세요.");
+
+      // 생성 즉시 자동 재생
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      const previewAudio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
+      audioRef.current = previewAudio;
+      previewAudio.play().catch(() => {});
+    } catch (e: any) {
+      setResult("❌ 미리듣기 생성 실패: " + e.message);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  // 2. 미리듣기한 음성 그대로 저장 (또는 바로 생성 & 저장)
+  const handleSaveGenerated = async (useExistingPreview: boolean) => {
+    if (!customText.trim() && !previewBase64) return alert("멘트 대사를 입력해주세요.");
+    setSaving(true);
+    setResult(null);
+    try {
+      const res = await adminFetch("/api/admin/feedback-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save",
+          tier: tier.id,
+          text: customText.trim(),
+          voiceId: selectedVoice,
+          audioBase64: useExistingPreview && previewBase64 ? previewBase64 : undefined,
+        }),
+      }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setPreviewBase64(null);
+      setResult("✅ ElevenLabs 피드백 음성이 저장되었습니다!");
+      onRefresh();
+    } catch (e: any) {
+      setResult("❌ 저장 실패: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 3. 수동 파일 업로드 (보조)
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -459,7 +531,7 @@ function FeedbackVoiceCard({
       }, idToken);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResult("✅ 업로드 완료");
+      setResult("✅ 파일 업로드 완료");
       onRefresh();
     } catch (e: any) {
       setResult("❌ " + e.message);
@@ -470,16 +542,17 @@ function FeedbackVoiceCard({
   };
 
   const handleDelete = async () => {
-    if (!confirm("멘트 오디오를 삭제할까요?")) return;
+    if (!confirm("등록된 멘트 오디오를 삭제할까요?")) return;
     await adminFetch("/api/admin/feedback-audio", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tier: tier.id }),
     }, idToken);
+    setPreviewBase64(null);
     onRefresh();
   };
 
-  const handlePreview = () => {
+  const handlePlayCurrent = () => {
     if (!currentUrl) return;
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; setPlaying(false); return; }
     const audio = new Audio(currentUrl);
@@ -490,44 +563,127 @@ function FeedbackVoiceCard({
   };
 
   return (
-    <div className={`rounded-2xl border-2 p-4 ${tier.color}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          <p className="font-black text-slate-900 text-sm mb-1">{tier.label}</p>
-          <p className="text-xs text-slate-900 italic mb-3">"{tier.desc}"</p>
+    <div className={`rounded-2xl border-2 p-4 space-y-3 ${tier.color}`}>
+      {/* 상단: 점수대 라벨 & 현재 등록된 음성 상태 */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <p className="font-black text-slate-900 text-sm">{tier.label}</p>
           {currentUrl ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">🎵 등록됨</span>
-              <button onClick={handlePreview}
-                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-bold border transition ${playing ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-900 border-slate-300 hover:bg-slate-50"}`}>
-                <Volume2 size={12} /> {playing ? "정지" : "미리듣기"}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">🎵 저장됨</span>
+              <button
+                onClick={handlePlayCurrent}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-bold border transition ${
+                  playing ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-900 border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <Volume2 size={12} /> {playing ? "정지" : "현재 저장된 음성 듣기"}
               </button>
             </div>
           ) : (
-            <span className="text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-full">미등록</span>
-          )}
-          {result && (
-            <p className={`text-xs font-bold mt-2 ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>
-              {result}
-            </p>
+            <span className="text-xs text-slate-900 bg-white/80 border border-slate-200 px-2 py-0.5 rounded-full">미등록</span>
           )}
         </div>
 
-        <div className="flex flex-col gap-2 shrink-0">
+        <div className="flex items-center gap-1.5">
           <input ref={fileRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleUpload} className="hidden" />
-          <button onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="flex items-center gap-1 text-xs bg-white border border-slate-300 px-3 py-2 rounded-xl font-bold hover:bg-slate-50 disabled:opacity-50 transition shadow-sm">
-            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-            {currentUrl ? "교체" : "업로드"}
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1 text-[11px] bg-white/90 border border-slate-300 text-slate-900 px-2.5 py-1 rounded-lg font-bold hover:bg-white disabled:opacity-50 transition"
+            title="직접 녹음하거나 보유한 MP3 파일 업로드"
+          >
+            {uploading ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+            파일 직접 업로드
           </button>
           {currentUrl && (
-            <button onClick={handleDelete}
-              className="flex items-center gap-1 text-xs bg-white border border-red-200 text-red-500 px-3 py-2 rounded-xl font-bold hover:bg-red-50 transition shadow-sm">
-              <Trash2 size={12} /> 삭제
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1 text-[11px] bg-white/90 border border-red-200 text-red-600 px-2.5 py-1 rounded-lg font-bold hover:bg-red-50 transition"
+            >
+              <Trash2 size={11} /> 삭제
             </button>
           )}
         </div>
       </div>
+
+      {/* 중단: 멘트 대사 수정 & 성우 선택 & ElevenLabs 생성 버튼 */}
+      <div className="bg-white/90 rounded-xl p-3 border border-slate-200/80 space-y-2.5">
+        <div>
+          <label className="text-[11px] font-bold text-slate-900 block mb-1">
+            ✏️ 피드백 멘트 대사 (자유롭게 수정 가능)
+          </label>
+          <input
+            value={customText}
+            onChange={e => {
+              setCustomText(e.target.value);
+              setPreviewBase64(null);
+            }}
+            placeholder="점수 피드백 대사를 입력하세요"
+            className="w-full text-sm font-medium text-slate-900 bg-white border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <select
+            value={selectedVoice}
+            onChange={e => {
+              setSelectedVoice(e.target.value);
+              setPreviewBase64(null);
+            }}
+            className="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-56"
+          >
+            {ELEVENLABS_VOICES.map(v => (
+              <option key={v.id} value={v.id}>{v.name} ({v.description})</option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2 flex-1">
+            <button
+              onClick={handleGeneratePreview}
+              disabled={previewing || saving}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg font-bold transition disabled:opacity-50 shadow-xs"
+            >
+              {previewing ? <Loader2 size={13} className="animate-spin" /> : <Volume2 size={13} />}
+              {previewing ? "생성 중..." : "🎧 생성해서 들어보기"}
+            </button>
+
+            <button
+              onClick={() => handleSaveGenerated(false)}
+              disabled={previewing || saving}
+              className="flex items-center justify-center gap-1 text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg font-bold transition disabled:opacity-50 shadow-xs"
+              title="미리듣기 없이 바로 생성 후 저장"
+            >
+              {saving && !previewBase64 ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+              바로 생성 & 저장
+            </button>
+          </div>
+        </div>
+
+        {/* 미리듣기 오디오가 생성된 경우: 플레이어 + [이 음성으로 저장] 버튼 노출 */}
+        {previewBase64 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-indigo-800 shrink-0">🎧 방금 생성된 음성:</span>
+              <audio src={`data:audio/mp3;base64,${previewBase64}`} controls className="h-8 w-52" />
+            </div>
+            <button
+              onClick={() => handleSaveGenerated(true)}
+              disabled={saving}
+              className="flex items-center justify-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-black transition shadow-sm disabled:opacity-50 shrink-0"
+            >
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
+              💾 이 음성으로 확정 저장
+            </button>
+          </div>
+        )}
+      </div>
+
+      {result && (
+        <p className={`text-xs font-bold ${result.startsWith("❌") ? "text-red-600" : "text-indigo-800"}`}>
+          {result}
+        </p>
+      )}
     </div>
   );
 }
@@ -1482,18 +1638,22 @@ export default function AdminPage() {
           <div>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-xl font-black flex items-center gap-2">🔊 점수대별 피드백 멘트</h2>
-                <p className="text-sm text-slate-900 mt-1">ElevenLabs로 생성한 MP3를 점수대별로 업로드하세요.</p>
+                <h2 className="text-xl font-black flex items-center gap-2">🔊 점수대별 피드백 멘트 (ElevenLabs 즉시 생성)</h2>
+                <p className="text-sm text-slate-900 mt-1">
+                  멘트 대사와 성우(준호·민우·채원·유진)를 선택해 <strong>바로 생성해서 들어보고 저장</strong>하세요!
+                </p>
               </div>
               <button onClick={loadFeedbackVoices} className="flex items-center gap-1 text-sm bg-white border border-slate-200 px-3 py-2 rounded-lg font-bold hover:bg-slate-50">
                 <RefreshCw size={14} /> 새로고침
               </button>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm text-amber-800">
-              <p className="font-bold mb-1">📋 업로드 가이드</p>
-              <p>ElevenLabs에서 아래 멘트를 준호님 목소리로 생성 후 각 점수대에 업로드하세요.<br />
-              효과음은 자동 재생되고, 효과음이 끝난 후 멘트가 이어서 재생됩니다.</p>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6 text-sm text-indigo-900">
+              <p className="font-bold mb-1">💡 사용 방법</p>
+              <p>
+                1. 원하는 멘트 대사로 수정하고 성우를 선택한 뒤 <strong>[🎧 생성해서 들어보기]</strong>를 누르면 즉시 음성이 재생됩니다.<br />
+                2. 목소리와 억양이 마음에 들면 <strong>[💾 이 음성으로 확정 저장]</strong>을 눌러 바로 반영하세요! (다시 API를 호출하지 않고 방금 들은 음성을 그대로 저장합니다.)
+              </p>
             </div>
 
             {loadingFeedback ? (
