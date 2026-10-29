@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 // app/admin/DonggukSection.tsx
 // 동국대학교 1급 학생 승인 & 문장/일레븐랩스 음성 관리
 
@@ -147,7 +147,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       await addDoc(collection(db, "sori_curriculum_dongguk"), {
         text: newText.trim(),
         pronunciation: newPronunciation.trim() || newText.trim(),
-        rule_formula: newRuleFormula.trim() || undefined,
+        rule_formula: newRuleFormula.trim() || "",
         chapter: Number(newChapter) || 1,
         has_audio: false,
         created_at: serverTimestamp(),

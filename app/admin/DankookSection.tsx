@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 // app/admin/DankookSection.tsx
 // 단국대학교 한국어 코스 학생 승인 & 문장/일레븐랩스 음성 관리
 
@@ -149,8 +149,8 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
       await addDoc(collection(db, "sori_curriculum_dankook"), {
         text: newText.trim(),
         pronunciation: newPronunciation.trim() || newText.trim(),
-        rule_formula: newRuleFormula.trim() || undefined,
-        meaning_ko: newMeaningKo.trim() || undefined,
+        rule_formula: newRuleFormula.trim() || "",
+        meaning_ko: newMeaningKo.trim() || "",
         chapter: Number(newChapter) || 1,
         has_audio: false,
         created_at: serverTimestamp(),
