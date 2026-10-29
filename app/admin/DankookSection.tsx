@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 // app/admin/DankookSection.tsx
 // 단국대학교 한국어 코스 학생 승인 & 문장/일레븐랩스 음성 관리
 
@@ -269,9 +269,9 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
             <span className="text-xs font-black bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
               학생 배포 전용
             </span>
-            <h3 className="font-black text-slate-800 text-sm">단국대 학생 전용 페이지 QR 코드</h3>
+            <h3 className="font-black text-slate-900 text-sm">단국대 학생 전용 페이지 QR 코드</h3>
           </div>
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs text-slate-900 leading-relaxed">
             학생들에게 이 QR 코드 또는 링크를 주시면, <strong>단국대학교 전용 화면</strong>으로 즉시 연결됩니다.<br />
             (학생이 인증 요청을 보내면 아래 '학생 승인 관리'에서 승인해 주시면 됩니다.)
           </p>
@@ -279,7 +279,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
             <input
               readOnly
               value="https://sori-tutor.vercel.app/dankook"
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-600 font-mono w-56 select-all"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono w-56 select-all"
             />
             <button
               onClick={() => {
@@ -294,7 +294,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
               href="/dankook"
               target="_blank"
               rel="noreferrer"
-              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg transition"
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold px-3 py-1.5 rounded-lg transition"
             >
               페이지 열기 ↗
             </a>
@@ -309,7 +309,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
           className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
             subTab === "students"
               ? "border-blue-600 text-blue-600 bg-blue-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              : "border-transparent text-slate-900 hover:text-slate-900"
           }`}
         >
           <Users size={18} /> 학생 승인 관리
@@ -324,7 +324,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
           className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
             subTab === "sentences"
               ? "border-blue-600 text-blue-600 bg-blue-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              : "border-transparent text-slate-900 hover:text-slate-900"
           }`}
         >
           <BookOpen size={18} /> 문장 및 음성 관리 ({sentences.length})
@@ -337,39 +337,39 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
           {/* 대기 중인 학생 */}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
+              <h3 className="font-black text-slate-900 flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
                 승인 대기 학생 ({pendingStudents.length}명)
               </h3>
               <button
                 onClick={loadStudents}
-                className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                className="text-xs text-slate-900 hover:text-slate-900 flex items-center gap-1"
               >
                 <RefreshCw size={12} className={loadingStudents ? "animate-spin" : ""} /> 새로고침
               </button>
             </div>
 
             {loadingStudents ? (
-              <div className="py-8 text-center text-slate-400">
+              <div className="py-8 text-center text-slate-900">
                 <Loader2 size={24} className="animate-spin mx-auto mb-2" />
                 불러오는 중...
               </div>
             ) : pendingStudents.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4 text-center">승인 대기 중인 학생이 없습니다.</p>
+              <p className="text-xs text-slate-900 py-4 text-center">승인 대기 중인 학생이 없습니다.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {pendingStudents.map(student => (
                   <div key={student.email} className="py-3 flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-800">
+                        <span className="font-bold text-sm text-slate-900">
                           {student.name || student.alias || "학습자"}
                         </span>
                         <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-mono">
                           {student.dankook_student_id || "학번 미입력"}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">{student.email}</p>
+                      <p className="text-xs text-slate-900">{student.email}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -380,7 +380,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
                       </button>
                       <button
                         onClick={() => handleUpdateStudentStatus(student.email, "none")}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl flex items-center gap-1 transition"
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold text-xs rounded-xl flex items-center gap-1 transition"
                       >
                         <XCircle size={14} /> 거절
                       </button>
@@ -393,19 +393,19 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
 
           {/* 승인 완료 학생 목록 */}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-black text-slate-800 flex items-center gap-2">
+            <h3 className="font-black text-slate-900 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>
               승인 완료 학생 ({approvedStudents.length}명)
             </h3>
             {approvedStudents.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4 text-center">승인된 학생이 없습니다.</p>
+              <p className="text-xs text-slate-900 py-4 text-center">승인된 학생이 없습니다.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {approvedStudents.map(student => (
                   <div key={student.email} className="py-3 flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-800">
+                        <span className="font-bold text-sm text-slate-900">
                           {student.name || student.alias || "학습자"}
                         </span>
                         <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-mono">
@@ -415,7 +415,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
                           승인됨
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">{student.email}</p>
+                      <p className="text-xs text-slate-900">{student.email}</p>
                     </div>
                     <button
                       onClick={() => handleUpdateStudentStatus(student.email, "none")}
@@ -436,18 +436,18 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
         <div className="space-y-6">
           {/* 새 문장 등록 폼 */}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-black text-slate-800 flex items-center gap-2">
+            <h3 className="font-black text-slate-900 flex items-center gap-2">
               <Plus size={18} className="text-blue-600" />
               새 단국대 문장 등록
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-900">
               쉬운 규칙 표기(예: <code>국 + 대 = 꾹때 (된소리)</code>)와 소리나는 표기를 입력하면 초급 학생이 직관적으로 이해할 수 있습니다.
             </p>
 
             <form onSubmit={handleAddSentence} className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-600">
+                  <label className="text-xs font-bold text-slate-900">
                     연습할 문장 (원문) <span className="text-red-500">*</span>
                   </label>
                   <button
@@ -470,7 +470,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">소리나는 대로 발음 표기 *</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">소리나는 대로 발음 표기 *</label>
                 <input
                   value={newPronunciation}
                   onChange={e => setNewPronunciation(e.target.value)}
@@ -480,7 +480,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">
+                <label className="text-xs font-bold text-slate-900 block mb-1">
                   쉬운 규칙 설명 (받침 + ? = ??)
                 </label>
                 <input
@@ -492,7 +492,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">문장 의미 (선택)</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">문장 의미 (선택)</label>
                 <input
                   value={newMeaningKo}
                   onChange={e => setNewMeaningKo(e.target.value)}
@@ -502,7 +502,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">단원 (과/Chapter)</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">단원 (과/Chapter)</label>
                 <input
                   type="number"
                   min={1}
@@ -527,25 +527,25 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
           {/* 문장 목록 & 일레븐랩스 음성 생성 목록 */}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
+              <h3 className="font-black text-slate-900 flex items-center gap-2">
                 <Music size={18} className="text-blue-600" />
                 단국대 코스 문장 목록 ({sentences.length}개)
               </h3>
               <button
                 onClick={loadSentences}
-                className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                className="text-xs text-slate-900 hover:text-slate-900 flex items-center gap-1"
               >
                 <RefreshCw size={12} className={loadingSentences ? "animate-spin" : ""} /> 새로고침
               </button>
             </div>
 
             {loadingSentences ? (
-              <div className="py-8 text-center text-slate-400">
+              <div className="py-8 text-center text-slate-900">
                 <Loader2 size={24} className="animate-spin mx-auto mb-2" />
                 불러오는 중...
               </div>
             ) : sentences.length === 0 ? (
-              <p className="text-xs text-slate-400 py-8 text-center">등록된 단국대 문장이 없습니다. 위에서 등록해 주세요.</p>
+              <p className="text-xs text-slate-900 py-8 text-center">등록된 단국대 문장이 없습니다. 위에서 등록해 주세요.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {sentences.map(item => (
@@ -555,7 +555,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
                         <span className="bg-blue-100 text-blue-800 text-[11px] font-black px-2 py-0.5 rounded-md">
                           {item.chapter}과
                         </span>
-                        <h4 className="font-black text-slate-800 text-base">{item.text}</h4>
+                        <h4 className="font-black text-slate-900 text-base">{item.text}</h4>
                       </div>
                       <p className="text-xs text-green-700 font-bold">
                         소리: {item.pronunciation}
@@ -579,7 +579,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg">음성 없음</span>
+                        <span className="text-xs text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">음성 없음</span>
                       )}
 
                       {/* 일레븐랩스 보이스 선택 & 생성 버튼 */}
@@ -610,7 +610,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
 
                       <button
                         onClick={() => handleDeleteSentence(item.id)}
-                        className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition"
+                        className="p-2 text-slate-900 hover:text-red-500 rounded-lg hover:bg-red-50 transition"
                         title="문장 삭제"
                       >
                         <Trash2 size={14} />

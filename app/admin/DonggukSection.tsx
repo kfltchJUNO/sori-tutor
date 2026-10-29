@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 // app/admin/DonggukSection.tsx
 // 동국대학교 1급 학생 승인 & 문장/일레븐랩스 음성 관리
 
@@ -265,9 +265,9 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
             <span className="text-xs font-black bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">
               학생 배포 전용
             </span>
-            <h3 className="font-black text-slate-800 text-sm">동국대 학생 전용 페이지 QR 코드</h3>
+            <h3 className="font-black text-slate-900 text-sm">동국대 학생 전용 페이지 QR 코드</h3>
           </div>
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs text-slate-900 leading-relaxed">
             학생들에게 이 QR 코드 또는 링크를 주시면, <strong>동국한국어 1급 전용 화면</strong>으로 즉시 연결됩니다.<br />
             (학생이 인증 요청을 보내면 아래 '학생 승인 관리'에서 승인해 주시면 됩니다.)
           </p>
@@ -275,7 +275,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
             <input
               readOnly
               value="https://sori-tutor.vercel.app/dongguk"
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-600 font-mono w-56 select-all"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono w-56 select-all"
             />
             <button
               onClick={() => {
@@ -290,7 +290,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
               href="/dongguk"
               target="_blank"
               rel="noreferrer"
-              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg transition"
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold px-3 py-1.5 rounded-lg transition"
             >
               페이지 열기 ↗
             </a>
@@ -305,7 +305,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
             subTab === "students"
               ? "border-amber-500 text-amber-600 bg-amber-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              : "border-transparent text-slate-900 hover:text-slate-900"
           }`}
         >
           <Users size={18} /> 학생 승인 관리
@@ -320,7 +320,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
             subTab === "sentences"
               ? "border-amber-500 text-amber-600 bg-amber-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              : "border-transparent text-slate-900 hover:text-slate-900"
           }`}
         >
           <BookOpen size={18} /> 문장 등록 & 음성 생성 ({sentences.length})
@@ -331,7 +331,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       {subTab === "students" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
+            <h3 className="font-black text-lg text-slate-900 flex items-center gap-2">
               <span>⏳</span> 승인 대기 학생 목록 ({pendingStudents.length}명)
             </h3>
             <button
@@ -347,7 +347,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
               <Loader2 className="animate-spin text-amber-500" />
             </div>
           ) : pendingStudents.length === 0 ? (
-            <div className="text-center py-8 bg-white rounded-2xl border border-slate-200 text-slate-400 text-sm">
+            <div className="text-center py-8 bg-white rounded-2xl border border-slate-200 text-slate-900 text-sm">
               승인 대기 중인 학생이 없습니다.
             </div>
           ) : (
@@ -359,7 +359,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                 >
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-black text-slate-800 text-base">
+                      <span className="font-black text-slate-900 text-base">
                         {student.name || student.alias || "학생"}
                       </span>
                       {student.dongguk_student_id && (
@@ -368,7 +368,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 font-mono">{student.email}</p>
+                    <p className="text-xs text-slate-900 font-mono">{student.email}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -379,7 +379,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                     </button>
                     <button
                       onClick={() => handleUpdateStudentStatus(student.email, "none")}
-                      className="flex items-center gap-1 bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-500 font-bold text-xs px-3 py-2 rounded-xl transition"
+                      className="flex items-center gap-1 bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-900 font-bold text-xs px-3 py-2 rounded-xl transition"
                     >
                       <XCircle size={14} /> 거절
                     </button>
@@ -391,11 +391,11 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
 
           {/* 승인 완료 학생 목록 */}
           <div className="pt-6 border-t border-slate-200">
-            <h3 className="font-black text-base text-slate-700 mb-3 flex items-center gap-2">
+            <h3 className="font-black text-base text-slate-900 mb-3 flex items-center gap-2">
               <span>✅</span> 승인 완료된 학생 ({approvedStudents.length}명)
             </h3>
             {approvedStudents.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">아직 승인된 학생이 없습니다.</p>
+              <p className="text-xs text-slate-900 italic">아직 승인된 학생이 없습니다.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {approvedStudents.map(student => (
@@ -404,8 +404,8 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                     className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between"
                   >
                     <div>
-                      <p className="font-bold text-sm text-slate-800">{student.name || student.alias || "학생"}</p>
-                      <p className="text-[11px] text-slate-400 font-mono truncate max-w-[200px]">{student.email}</p>
+                      <p className="font-bold text-sm text-slate-900">{student.name || student.alias || "학생"}</p>
+                      <p className="text-[11px] text-slate-900 font-mono truncate max-w-[200px]">{student.email}</p>
                       {student.dongguk_student_id && (
                         <span className="text-[10px] text-amber-700 font-semibold">{student.dongguk_student_id}</span>
                       )}
@@ -429,13 +429,13 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
         <div className="space-y-6">
           {/* 문장 등록 폼 */}
           <form onSubmit={handleAddSentence} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-black text-base text-slate-800 flex items-center gap-2 border-b pb-3">
+            <h3 className="font-black text-base text-slate-900 flex items-center gap-2 border-b pb-3">
               <Plus size={18} className="text-amber-500" /> 동국한국어 1급 새 문장 등록
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="md:col-span-3">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-600">
+                  <label className="text-xs font-bold text-slate-900">
                     목표 문장 <span className="text-red-500">*</span>
                   </label>
                   <button
@@ -457,7 +457,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                 />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">단원 (과)</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">단원 (과)</label>
                 <select
                   value={newChapter}
                   onChange={e => setNewChapter(Number(e.target.value))}
@@ -472,7 +472,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">
+                <label className="text-xs font-bold text-slate-900 block mb-1">
                   소리 나는 대로 발음표기
                 </label>
                 <input
@@ -483,7 +483,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                 />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">
+                <label className="text-xs font-bold text-slate-900 block mb-1">
                   초급 발음 변화 공식 (? 받침 + ? = [??])
                 </label>
                 <input
@@ -508,7 +508,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           {/* 등록된 문장 목록 */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <h3 className="font-black text-base text-slate-800 flex items-center gap-2">
+              <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
                 <BookOpen size={18} className="text-amber-500" /> 등록된 1급 문장 목록 ({sentences.length}개)
               </h3>
               <button
@@ -524,7 +524,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                 <Loader2 className="animate-spin text-amber-500" />
               </div>
             ) : sentences.length === 0 ? (
-              <div className="text-center py-10 bg-white rounded-2xl border border-slate-200 text-slate-400 text-sm">
+              <div className="text-center py-10 bg-white rounded-2xl border border-slate-200 text-slate-900 text-sm">
                 등록된 문장이 없습니다. 위에서 첫 번째 문장을 등록해보세요!
               </div>
             ) : (
@@ -539,7 +539,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                         <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-md">
                           {item.chapter}과
                         </span>
-                        <h4 className="font-black text-slate-800 text-base">{item.text}</h4>
+                        <h4 className="font-black text-slate-900 text-base">{item.text}</h4>
                       </div>
                       <p className="text-xs text-green-700 font-bold">
                         소리: {item.pronunciation}
@@ -563,7 +563,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg">음성 없음</span>
+                        <span className="text-xs text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">음성 없음</span>
                       )}
 
                       {/* 일레븐랩스 보이스 선택 & 생성 버튼 */}
@@ -594,7 +594,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
 
                       <button
                         onClick={() => handleDeleteSentence(item.id)}
-                        className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition"
+                        className="p-2 text-slate-900 hover:text-red-500 rounded-lg hover:bg-red-50 transition"
                         title="문장 삭제"
                       >
                         <Trash2 size={14} />

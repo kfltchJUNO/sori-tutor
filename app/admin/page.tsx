@@ -130,12 +130,12 @@ function LineAudioRow({
         {line.role}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate mb-1">{line.text}</p>
+        <p className="text-sm font-medium text-slate-900 truncate mb-1">{line.text}</p>
         <div className="flex items-center gap-2">
           {existingUrl ? (
             <audio src={existingUrl} controls className="h-7 w-44" />
           ) : (
-            <span className="text-xs text-slate-400">오디오 미생성</span>
+            <span className="text-xs text-slate-900">오디오 미생성</span>
           )}
           {result && <span className={`text-[11px] font-bold ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</span>}
         </div>
@@ -144,7 +144,7 @@ function LineAudioRow({
         <select
           value={selectedVoice}
           onChange={e => setSelectedVoice(e.target.value)}
-          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 font-medium focus:outline-none"
+          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-900 font-medium focus:outline-none"
         >
           {ELEVENLABS_VOICES.map(v => (
             <option key={v.id} value={v.id}>{v.name}</option>
@@ -216,8 +216,8 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left cursor-pointer" onClick={() => setExpanded(p => !p)}>
         <div>
-          <p className="font-bold text-slate-800">{doc_.title ?? doc_.id}</p>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="font-bold text-slate-900">{doc_.title ?? doc_.id}</p>
+          <p className="text-xs text-slate-900 mt-0.5">
             {doc_.category}{doc_.step ? ` · Step ${doc_.step}` : ""}
             {" · "}
             <span className={filledCount === lines.length && lines.length > 0 ? "text-green-600 font-bold" : "text-orange-500 font-bold"}>
@@ -234,7 +234,7 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
             {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
             전체 대화 일괄 생성
           </button>
-          <button onClick={() => setExpanded(p => !p)} className="p-1 text-slate-400 text-sm">
+          <button onClick={() => setExpanded(p => !p)} className="p-1 text-slate-900 text-sm">
             {expanded ? "▲" : "▼"}
           </button>
         </div>
@@ -242,7 +242,7 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
       {expanded && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-100 pt-3">
           {lines.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-4">대본 데이터 없음</p>
+            <p className="text-sm text-slate-900 text-center py-4">대본 데이터 없음</p>
           ) : lines.map((line, idx) => (
             <LineAudioRow key={idx} line={line} lineIndex={idx} docId={doc_.id}
               colName="sori_curriculum_dialogue" existingUrl={doc_.audio_paths?.[idx] ?? ""}
@@ -318,18 +318,18 @@ function FeedbackVoiceCard({
     <div className={`rounded-2xl border-2 p-4 ${tier.color}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
-          <p className="font-black text-slate-800 text-sm mb-1">{tier.label}</p>
-          <p className="text-xs text-slate-500 italic mb-3">"{tier.desc}"</p>
+          <p className="font-black text-slate-900 text-sm mb-1">{tier.label}</p>
+          <p className="text-xs text-slate-900 italic mb-3">"{tier.desc}"</p>
           {currentUrl ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">🎵 등록됨</span>
               <button onClick={handlePreview}
-                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-bold border transition ${playing ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}>
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-bold border transition ${playing ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-900 border-slate-300 hover:bg-slate-50"}`}>
                 <Volume2 size={12} /> {playing ? "정지" : "미리듣기"}
               </button>
             </div>
           ) : (
-            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">미등록</span>
+            <span className="text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-full">미등록</span>
           )}
           {result && (
             <p className={`text-xs font-bold mt-2 ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>
@@ -798,7 +798,7 @@ export default function AdminPage() {
   }, [isAdmin, activeTab]);
 
   // ── 렌더 ─────────────────────────────────────────────────
-  if (checking) return <div className="flex h-screen items-center justify-center text-slate-400">인증 확인 중...</div>;
+  if (checking) return <div className="flex h-screen items-center justify-center text-slate-900">인증 확인 중...</div>;
   if (!isAdmin) return <div className="flex h-screen items-center justify-center text-red-500 font-bold">관리자 권한이 없습니다.</div>;
 
   const TABS: { id: Tab; label: string }[] = [
@@ -815,7 +815,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="bg-slate-900 text-white px-6 py-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">S</div>
         <h1 className="text-xl font-black">Sori-Tutor Admin</h1>
@@ -824,7 +824,7 @@ export default function AdminPage() {
       <div className="flex overflow-x-auto bg-white border-b border-slate-200 px-4 gap-1 scrollbar-hide">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition ${activeTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            className={`px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition ${activeTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-slate-900 hover:text-slate-900"}`}>
             {tab.label}
           </button>
         ))}
@@ -858,39 +858,39 @@ export default function AdminPage() {
             </h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">유형</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">유형</label>
                 <select value={genType} onChange={e => setGenType(e.target.value as any)}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="word">단어</option>
                   <option value="sentence">문장</option>
                   <option value="dialogue">담화</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">생성 개수</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">생성 개수</label>
                 <input type="number" min={1} max={20} value={genCount} onChange={e => setGenCount(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">Step (1~8)</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">Step (1~8)</label>
                 <input type="number" min={1} max={8} value={genStep} onChange={e => setGenStep(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
+                <label className="text-xs font-bold text-slate-900 block mb-1">Unit</label>
                 <input type="number" min={1} value={genUnit} onChange={e => setGenUnit(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
             <div className="mb-4">
-              <label className="text-xs font-bold text-slate-500 block mb-1">카테고리 *</label>
+              <label className="text-xs font-bold text-slate-900 block mb-1">카테고리 *</label>
               <input value={genCategory} onChange={e => setGenCategory(e.target.value)} placeholder="예: 음식, 직장 생활, 여행"
-                className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="mb-6">
-              <label className="text-xs font-bold text-slate-500 block mb-1">문법 힌트 (선택)</label>
+              <label className="text-xs font-bold text-slate-900 block mb-1">문법 힌트 (선택)</label>
               <input value={genGrammar} onChange={e => setGenGrammar(e.target.value)} placeholder="예: -아/어서 (이유)"
-                className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button onClick={handleGenerate} disabled={generating}
               className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-black text-base shadow-lg hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2 disabled:opacity-60">
@@ -914,9 +914,9 @@ export default function AdminPage() {
               </button>
             </div>
             {loadingDrafts ? (
-              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div>
+              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-900" /></div>
             ) : drafts.length === 0 ? (
-              <div className="text-center text-slate-400 py-12 bg-white rounded-2xl border">대기 중인 초안이 없습니다.</div>
+              <div className="text-center text-slate-900 py-12 bg-white rounded-2xl border">대기 중인 초안이 없습니다.</div>
             ) : (
               <div className="space-y-4">
                 {drafts.map(draft => (
@@ -926,8 +926,8 @@ export default function AdminPage() {
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${draft.type === "word" ? "bg-blue-100 text-blue-700" : draft.type === "sentence" ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"}`}>
                           {draft.type === "word" ? "단어" : draft.type === "sentence" ? "문장" : "담화"}
                         </span>
-                        <span className="text-sm font-bold text-slate-700">{draft.category}</span>
-                        {draft.step && <span className="text-xs text-slate-400">Step {draft.step}-{draft.unit}</span>}
+                        <span className="text-sm font-bold text-slate-900">{draft.category}</span>
+                        {draft.step && <span className="text-xs text-slate-900">Step {draft.step}-{draft.unit}</span>}
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => { setEditingDraft(draft.id); setEditContent(JSON.stringify(draft.content, null, 2)); }}
@@ -944,15 +944,15 @@ export default function AdminPage() {
                       {editingDraft === draft.id ? (
                         <div>
                           <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-                            className="w-full h-48 p-3 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                            className="w-full h-48 p-3 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                           <div className="flex gap-2 mt-2">
                             <button onClick={() => { try { approveDraft(draft.id, JSON.parse(editContent)); } catch { alert("JSON 오류"); } }}
                               className="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold text-sm">수정된 내용으로 승인</button>
-                            <button onClick={() => setEditingDraft(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold text-sm">취소</button>
+                            <button onClick={() => setEditingDraft(null)} className="px-4 py-2 bg-slate-100 text-slate-900 rounded-lg font-bold text-sm">취소</button>
                           </div>
                         </div>
                       ) : (
-                        <pre className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl overflow-x-auto border border-slate-100">
+                        <pre className="text-xs text-slate-900 bg-slate-50 p-3 rounded-xl overflow-x-auto border border-slate-100">
                           {JSON.stringify(draft.content, null, 2)}
                         </pre>
                       )}
@@ -978,7 +978,7 @@ export default function AdminPage() {
             <div className="flex gap-2 mb-6">
               {(["sori_curriculum_word", "sori_curriculum_sentence", "sori_curriculum_dialogue"] as const).map(col => (
                 <button key={col} onClick={() => { setAudioColName(col); setSelectedDocId(""); setUploadResult(null); }}
-                  className={`px-4 py-2 rounded-full text-sm font-bold transition border ${audioColName === col ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition border ${audioColName === col ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-900 border-slate-200 hover:border-slate-400"}`}>
                   {col === "sori_curriculum_word" ? "단어" : col === "sori_curriculum_sentence" ? "문장" : "담화"}
                 </button>
               ))}
@@ -1008,16 +1008,16 @@ export default function AdminPage() {
             {audioColName === "sori_curriculum_dialogue" ? (
               <div className="space-y-4">
                 {audioDocs.length === 0
-                  ? <p className="text-center text-slate-400 py-12">담화 데이터가 없습니다.</p>
+                  ? <p className="text-center text-slate-900 py-12">담화 데이터가 없습니다.</p>
                   : audioDocs.map(d => <DialogueAudioCard key={d.id} doc_={d} idToken={idToken} onRefresh={loadAudioDocs} />)
                 }
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
                 <div className="mb-4">
-                  <label className="text-xs font-bold text-slate-500 block mb-1">항목 선택</label>
+                  <label className="text-xs font-bold text-slate-900 block mb-1">항목 선택</label>
                   <select value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">— 생성할 단어/문장을 선택하세요 —</option>
                     {audioDocs.filter(d => !d.audio_path).map(d => (
                       <option key={d.id} value={d.id}>📝 {d.text ?? d.id} {d.category ? `(${d.category})` : ""}</option>
@@ -1038,17 +1038,17 @@ export default function AdminPage() {
                   <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 mb-4 animate-in fade-in">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-bold text-indigo-700">생성할 텍스트</span>
-                      <span className="text-xs text-slate-400">ID: {selectedDocId}</span>
+                      <span className="text-xs text-slate-900">ID: {selectedDocId}</span>
                     </div>
                     <p className="text-base font-bold text-slate-900 mb-3">
                       {audioDocs.find(d => d.id === selectedDocId)?.text}
                     </p>
                     <div className="mb-3">
-                      <label className="text-xs font-bold text-slate-600 block mb-1">목소리(Voice) 선택</label>
+                      <label className="text-xs font-bold text-slate-900 block mb-1">목소리(Voice) 선택</label>
                       <select
                         value={selectedVoiceForSingle}
                         onChange={e => setSelectedVoiceForSingle(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 bg-white font-medium focus:ring-2 focus:ring-indigo-500"
+                        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-900 bg-white font-medium focus:ring-2 focus:ring-indigo-500"
                       >
                         {ELEVENLABS_VOICES.map(v => (
                           <option key={v.id} value={v.id}>
@@ -1072,11 +1072,11 @@ export default function AdminPage() {
                 )}
 
                 {/* 수동 파일 업로드 (보조) */}
-                <div className="pt-2 pb-1 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+                <div className="pt-2 pb-1 border-t border-slate-100 flex items-center justify-between text-xs text-slate-900">
                   <span>직접 녹음 파일 올리기:</span>
                   <input ref={fileInputRef} type="file" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg" onChange={handleSingleUpload} disabled={!selectedDocId || uploading} className="hidden" />
                   <button onClick={() => fileInputRef.current?.click()} disabled={!selectedDocId || uploading}
-                    className="text-xs text-slate-500 hover:text-slate-800 font-bold underline disabled:opacity-50">
+                    className="text-xs text-slate-900 hover:text-slate-900 font-bold underline disabled:opacity-50">
                     {uploading ? "업로드 중..." : "MP3 파일 수동 업로드"}
                   </button>
                 </div>
@@ -1086,13 +1086,13 @@ export default function AdminPage() {
                 )}
 
                 <div className="mt-8">
-                  <h3 className="font-bold text-slate-700 mb-3 text-sm">등록된 오디오 현황 ({audioDocs.filter(d => d.audio_path).length}개)</h3>
+                  <h3 className="font-bold text-slate-900 mb-3 text-sm">등록된 오디오 현황 ({audioDocs.filter(d => d.audio_path).length}개)</h3>
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {audioDocs.filter(d => d.audio_path).map(d => (
                       <div key={d.id} className="flex items-center justify-between p-3 bg-green-50/60 rounded-xl border border-green-200">
                         <div className="min-w-0 flex-1 mr-2">
-                          <p className="font-bold text-sm text-slate-800 truncate">{d.text ?? d.id}</p>
-                          <p className="text-xs text-slate-400 mb-1">{d.category}</p>
+                          <p className="font-bold text-sm text-slate-900 truncate">{d.text ?? d.id}</p>
+                          <p className="text-xs text-slate-900 mb-1">{d.category}</p>
                           <audio src={d.audio_path} controls className="h-7 w-48" />
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -1101,7 +1101,7 @@ export default function AdminPage() {
                               setSelectedDocId(d.id);
                               window.scrollTo({ top: 400, behavior: "smooth" });
                             }}
-                            className="text-xs bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-50 text-slate-600 transition"
+                            className="text-xs bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-50 text-slate-900 transition"
                           >
                             🔄 목소리 교체
                           </button>
@@ -1112,7 +1112,7 @@ export default function AdminPage() {
                       </div>
                     ))}
                     {audioDocs.filter(d => d.audio_path).length === 0 && (
-                      <p className="text-center text-slate-400 py-6 text-sm">등록된 오디오가 없습니다.</p>
+                      <p className="text-center text-slate-900 py-6 text-sm">등록된 오디오가 없습니다.</p>
                     )}
                   </div>
                 </div>
@@ -1127,7 +1127,7 @@ export default function AdminPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-xl font-black flex items-center gap-2">🔊 점수대별 피드백 멘트</h2>
-                <p className="text-sm text-slate-500 mt-1">ElevenLabs로 생성한 MP3를 점수대별로 업로드하세요.</p>
+                <p className="text-sm text-slate-900 mt-1">ElevenLabs로 생성한 MP3를 점수대별로 업로드하세요.</p>
               </div>
               <button onClick={loadFeedbackVoices} className="flex items-center gap-1 text-sm bg-white border border-slate-200 px-3 py-2 rounded-lg font-bold hover:bg-slate-50">
                 <RefreshCw size={14} /> 새로고침
@@ -1141,7 +1141,7 @@ export default function AdminPage() {
             </div>
 
             {loadingFeedback ? (
-              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div>
+              <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-900" /></div>
             ) : (
               <div className="space-y-3">
                 {SCORE_TIERS.map(tier => (
@@ -1156,8 +1156,8 @@ export default function AdminPage() {
               </div>
             )}
 
-            <div className="mt-6 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500">
-              <p className="font-bold text-slate-700 mb-2">💡 ElevenLabs 멘트 생성 팁</p>
+            <div className="mt-6 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-900">
+              <p className="font-bold text-slate-900 mb-2">💡 ElevenLabs 멘트 생성 팁</p>
               <ul className="space-y-1 list-disc list-inside">
                 <li>짧고 명확하게 (3~5초 분량 권장)</li>
                 <li>밝고 친근한 톤으로 설정</li>
@@ -1174,7 +1174,7 @@ export default function AdminPage() {
             <div className="flex gap-2">
               {(["word", "sentence", "dialogue"] as const).map(t => (
                 <button key={t} onClick={() => setCurriculumType(t)}
-                  className={`px-4 py-2 rounded-full text-sm font-bold transition ${curriculumType === t ? "bg-blue-600 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition ${curriculumType === t ? "bg-blue-600 text-white" : "bg-white border border-slate-200 text-slate-900"}`}>
                   {t === "word" ? "단어" : t === "sentence" ? "문장" : "담화"}
                 </button>
               ))}
@@ -1183,16 +1183,16 @@ export default function AdminPage() {
             {/* 새 에셋 등록 폼 (AI 자동 완성 포함) */}
             <form onSubmit={handleCreateAsset} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <h3 className="font-black text-slate-900 flex items-center gap-2">
                   <Sparkles size={18} className="text-blue-600" />
                   새 {curriculumType === "word" ? "단어" : curriculumType === "sentence" ? "문장" : "담화"} 에셋 등록
                 </h3>
-                <span className="text-xs text-slate-400">내용 입력 후 AI 자동 완성을 누르면 발음/규칙이 자동 생성됩니다.</span>
+                <span className="text-xs text-slate-900">내용 입력 후 AI 자동 완성을 누르면 발음/규칙이 자동 생성됩니다.</span>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-600">
+                  <label className="text-xs font-bold text-slate-900">
                     {curriculumType === "word" ? "단어 (원문) *" : curriculumType === "sentence" ? "문장 (원문) *" : "대화 주제/상황 *"}
                   </label>
                   <button
@@ -1222,7 +1222,7 @@ export default function AdminPage() {
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1">소리나는 대로 발음 표기 *</label>
+                      <label className="text-xs font-bold text-slate-900 block mb-1">소리나는 대로 발음 표기 *</label>
                       <input
                         value={assetPronunciation}
                         onChange={e => setAssetPronunciation(e.target.value)}
@@ -1231,7 +1231,7 @@ export default function AdminPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1">카테고리</label>
+                      <label className="text-xs font-bold text-slate-900 block mb-1">카테고리</label>
                       <input
                         value={assetCategory}
                         onChange={e => setAssetCategory(e.target.value)}
@@ -1244,7 +1244,7 @@ export default function AdminPage() {
                   {curriculumType === "sentence" ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-bold text-slate-600 block mb-1">쉬운 발음 규칙 공식 (받침 + ? = [??])</label>
+                        <label className="text-xs font-bold text-slate-900 block mb-1">쉬운 발음 규칙 공식 (받침 + ? = [??])</label>
                         <input
                           value={assetRuleFormula}
                           onChange={e => setAssetRuleFormula(e.target.value)}
@@ -1253,7 +1253,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-bold text-slate-600 block mb-1">문장 의미/해석</label>
+                        <label className="text-xs font-bold text-slate-900 block mb-1">문장 의미/해석</label>
                         <input
                           value={assetMeaningKo}
                           onChange={e => setAssetMeaningKo(e.target.value)}
@@ -1265,7 +1265,7 @@ export default function AdminPage() {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-bold text-slate-600 block mb-1">단어 뜻 풀이</label>
+                        <label className="text-xs font-bold text-slate-900 block mb-1">단어 뜻 풀이</label>
                         <input
                           value={assetMeaningKo}
                           onChange={e => setAssetMeaningKo(e.target.value)}
@@ -1274,7 +1274,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-bold text-slate-600 block mb-1">발음 팁/설명</label>
+                        <label className="text-xs font-bold text-slate-900 block mb-1">발음 팁/설명</label>
                         <input
                           value={assetTip}
                           onChange={e => setAssetTip(e.target.value)}
@@ -1312,7 +1312,7 @@ export default function AdminPage() {
               ) : (
                 <>
                   <div>
-                    <label className="text-xs font-bold text-slate-600 block mb-1">대화 스크립트 (A:...|B:... 형식) *</label>
+                    <label className="text-xs font-bold text-slate-900 block mb-1">대화 스크립트 (A:...|B:... 형식) *</label>
                     <textarea
                       value={assetScript}
                       onChange={e => setAssetScript(e.target.value)}
@@ -1324,7 +1324,7 @@ export default function AdminPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1">해석/번역</label>
+                      <label className="text-xs font-bold text-slate-900 block mb-1">해석/번역</label>
                       <input
                         value={assetTranslation}
                         onChange={e => setAssetTranslation(e.target.value)}
@@ -1333,7 +1333,7 @@ export default function AdminPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1">카테고리</label>
+                      <label className="text-xs font-bold text-slate-900 block mb-1">카테고리</label>
                       <input
                         value={assetCategory}
                         onChange={e => setAssetCategory(e.target.value)}
@@ -1357,28 +1357,28 @@ export default function AdminPage() {
 
             {/* 기존 에셋 목록 */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
-              <h3 className="font-black text-slate-800 text-sm">등록된 에셋 목록 ({curriculumList.length}개)</h3>
+              <h3 className="font-black text-slate-900 text-sm">등록된 에셋 목록 ({curriculumList.length}개)</h3>
               {loading ? (
-                <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-400" /></div>
+                <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-900" /></div>
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {curriculumList.map(item => (
                     <div key={item.id} className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-slate-800 text-sm">{item.text ?? item.title ?? "—"}</p>
+                          <p className="font-bold text-slate-900 text-sm">{item.text ?? item.title ?? "—"}</p>
                           {item.has_audio ? (
                             <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">음성 있음</span>
                           ) : (
-                            <span className="text-[10px] bg-slate-200 text-slate-500 font-bold px-1.5 py-0.5 rounded">음성 없음</span>
+                            <span className="text-[10px] bg-slate-200 text-slate-900 font-bold px-1.5 py-0.5 rounded">음성 없음</span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-400">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
+                        <p className="text-xs text-slate-900">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
                       </div>
                       <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                     </div>
                   ))}
-                  {curriculumList.length === 0 && <p className="text-center text-slate-400 py-10">데이터 없음</p>}
+                  {curriculumList.length === 0 && <p className="text-center text-slate-900 py-10">데이터 없음</p>}
                 </div>
               )}
             </div>
@@ -1391,8 +1391,8 @@ export default function AdminPage() {
             {users.map(u => (
               <div key={u.id} className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
                 <div>
-                  <p className="font-bold text-slate-800">{u.alias || u.name}</p>
-                  <p className="text-xs text-slate-400">{u.id} · {u.role} · 토큰: {u.tokens}</p>
+                  <p className="font-bold text-slate-900">{u.alias || u.name}</p>
+                  <p className="text-xs text-slate-900">{u.id} · {u.role} · 토큰: {u.tokens}</p>
                 </div>
                 <button onClick={() => { const amt = Number(prompt("지급할 토큰 수:")); if (amt > 0) grantTokens(u.id, amt); }}
                   className="text-xs bg-blue-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-blue-700">토큰 지급</button>
@@ -1408,9 +1408,9 @@ export default function AdminPage() {
               <div key={c.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-bold text-slate-800">{c.userAlias} ({c.userId})</p>
-                    <p className="text-sm text-slate-500">입금자: {c.depositor} · {c.price} → {c.amount}토큰</p>
-                    <p className="text-xs text-slate-400">{c.createdAt?.toDate?.().toLocaleString()}</p>
+                    <p className="font-bold text-slate-900">{c.userAlias} ({c.userId})</p>
+                    <p className="text-sm text-slate-900">입금자: {c.depositor} · {c.price} → {c.amount}토큰</p>
+                    <p className="text-xs text-slate-900">{c.createdAt?.toDate?.().toLocaleString()}</p>
                   </div>
                   <button onClick={() => approveCharge(c)} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-green-700 flex items-center gap-1">
                     <CheckCircle size={14} /> 충전 승인
@@ -1418,7 +1418,7 @@ export default function AdminPage() {
                 </div>
               </div>
             ))}
-            {charges.length === 0 && <p className="text-center text-slate-400 py-12">대기 중인 충전 요청이 없습니다.</p>}
+            {charges.length === 0 && <p className="text-center text-slate-900 py-12">대기 중인 충전 요청이 없습니다.</p>}
           </div>
         )}
 
@@ -1429,10 +1429,10 @@ export default function AdminPage() {
               <div key={i.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
                   <span className="text-xs font-bold bg-slate-100 px-2 py-1 rounded">{i.category}</span>
-                  <span className="text-xs text-slate-400">{i.createdAt?.toDate?.().toLocaleString()}</span>
+                  <span className="text-xs text-slate-900">{i.createdAt?.toDate?.().toLocaleString()}</span>
                 </div>
-                <p className="font-bold text-sm text-slate-700 mb-1">{i.userName} ({i.userId})</p>
-                <p className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">{i.content}</p>
+                <p className="font-bold text-sm text-slate-900 mb-1">{i.userName} ({i.userId})</p>
+                <p className="text-sm text-slate-900 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">{i.content}</p>
                 <button onClick={async () => {
                   const reply = prompt("답변 내용:");
                   if (!reply) return;
@@ -1444,7 +1444,7 @@ export default function AdminPage() {
                 </button>
               </div>
             ))}
-            {inquiries.length === 0 && <p className="text-center text-slate-400 py-12">문의가 없습니다.</p>}
+            {inquiries.length === 0 && <p className="text-center text-slate-900 py-12">문의가 없습니다.</p>}
           </div>
         )}
 
