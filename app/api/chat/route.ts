@@ -34,12 +34,28 @@ async function generateWithFallback(
   throw lastError ?? new Error("All models failed");
 }
 
-// ── 특수문자 제거 (TTS용) ────────────────────────────────────
+// ── 특수문자 제거 및 자연스러운 호흡(쉼표·휴지) 보정 (TTS용) ────
 function cleanTextForTTS(text: string): string {
-  return text
+  let s = text
     .replace(/\*\*/g, "").replace(/\*/g, "")
     .replace(/__/g, "").replace(/`/g, "")
     .replace(/-/g, " ").trim();
+  if (!s) return "";
+
+  // 1. 문두 감탄사/인사말 뒤에 쉼표가 없으면 쉼표 추가
+  s = s.replace(
+    /^(네|아니요|아|음|어|저기요|잠시만요|안녕하세요|반갑습니다|감사합니다|고마워요|고마워|죄송합니다|미안해요|미안해|맞아요|맞아|진짜요|진짜|그래요|그래|안녕)\s+(?=[가-힣])/u,
+    "$1, "
+  );
+
+  // 2. 문장과 문장 사이에 짧은 호흡 휴지(...) 추가
+  s = s.replace(/([.?!])\s+(?=[가-힣A-Za-z0-9])/g, "$1 ... ");
+
+  // 3. 문장 끝 마침표 보정
+  if (!/[.?!~]$/.test(s)) {
+    s += ".";
+  }
+  return s;
 }
 
 // ── 16-bit 24kHz PCM → WAV 변환 헬퍼 (Gemini TTS 출력용) ─────
@@ -96,7 +112,7 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
         body: JSON.stringify({
           text: cleaned,
           model_id: "eleven_multilingual_v2",
-          voice_settings: { stability: 0.5, similarity_boost: 0.8 },
+          voice_settings: { stability: 0.65, similarity_boost: 0.8, speed: 0.92 },
         }),
       });
 
@@ -276,22 +292,24 @@ Output JSON only (no markdown):
 
       const systemPrompt = isHonorific
         ? `[Role]: You are '${personaName}', a polite, warm, and professional Korean mentor/interviewer/senior helping a foreign learner practice formal & polite Korean (높임말 연습: 면접, 비즈니스, 윗사람과의 대화).
-[Tone]: Polite and formal Korean (정중한 높임말: 하십시오체 '-습니다/-습니까' 및 예의 바른 해요체). NEVER use casual banmal (반말).
+[Tone]: Polite and formal modern Korean (정중한 현대 높임말: 하십시오체 '-습니다/-습니까' 및 예의 바른 해요체 '-해요/-어요'). NEVER use casual banmal (반말) and NEVER use old-fashioned/awkward endings like '~하네'(알겠네), '~하게'(다녀오게), '~하오'.
 [Guidelines]:
 1. Respond with warmth, respect, and encouragement suitable for an interview, workplace, or conversation with a senior/professor.
 2. Keep responses natural and concise (1-3 sentences).
-3. If the learner accidentally uses casual speech (반말) or awkward honorifics, gently model the natural honorific expression while keeping the conversation flowing.
-4. Always ask a polite, engaging follow-up question so the learner can continue practicing honorific Korean.
-5. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+3. Always use natural commas (,) after greetings or interjections and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
+4. If the learner accidentally uses casual speech (반말) or awkward honorifics, gently model the natural honorific expression while keeping the conversation flowing.
+5. Always ask a polite, engaging follow-up question so the learner can continue practicing honorific Korean.
+6. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`
-        : `[Role]: You are '${personaName}', a close, warm, and cheerful same-age Korean friend (동갑내기 절친) helping a foreign learner practice casual Korean (반말 연습: 친구와의 일상 대화).
-[Tone]: Friendly, natural casual Korean (친근한 반말/해체: '-어/-아', '-야', '-지', '-네', '-잖아'). NEVER use formal/polite endings ('-요', '-습니다').
+        : `[Role]: You are '${personaName}', a close, warm, and cheerful same-age Korean friend (20대 동갑내기 절친) helping a foreign learner practice casual Korean (반말 연습: 친구와의 일상 대화).
+[Tone]: Friendly, natural modern casual Korean (친근한 현대 20대 반말: '-어/-아', '-야', '-지', '-거든', '-잖아'). NEVER use formal/polite endings ('-요', '-습니다') and NEVER use old-fashioned/middle-aged endings like '~하네'(알겠네, 고맙네), '~하게'(다녀오게, 잘 지내게), '~구먼'.
 [Guidelines]:
-1. React actively with empathy and excitement like a real best friend (e.g., "진짜? 대박이다!", "그랬구나! 많이 힘들었겠다").
+1. React actively with empathy and excitement like a real 20s best friend (e.g., "아, 진짜? 대박이다!", "그랬구나, 많이 힘들었겠다.").
 2. Keep responses natural and concise (1-3 sentences).
-3. If the learner speaks too formally ('-요', '-습니다'), playfully remind them that you are close friends and encourage them to speak comfortably in banmal (반말).
-4. Always ask a fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
-5. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+3. Always use natural commas (,) after interjections ("아, ", "응, ", "맞아, ") and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
+4. If the learner speaks too formally ('-요', '-습니다'), playfully remind them that you are close friends and encourage them to speak comfortably in banmal (반말).
+5. Always ask a fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
+6. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`;
 
       let aiText = "";
