@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import {
   Sparkles, CheckCircle, XCircle, Upload, Trash2,
-  RefreshCw, Loader2, Music, Volume2, Wand2, Plus,
+  RefreshCw, Loader2, Music, Volume2, Wand2, Plus, Edit3,
 } from "lucide-react";
 import { ELEVENLABS_VOICES, DEFAULT_MALE_VOICE_ID } from "@/lib/elevenlabsVoices";
 
@@ -35,6 +35,9 @@ interface CurriculumDoc {
   text?: string;
   title?: string;
   script?: string;
+  translation?: string;
+  pronunciation?: string;
+  voice_id?: string;
   category: string;
   has_audio?: boolean;
   audio_path?: string;
@@ -67,24 +70,59 @@ function parseScript(script: string): ParsedLine[] {
   });
 }
 
-// ── 담화 라인별 업로드/생성 컴포넌트 ──────────────────────────
+// ── 담화 라인별 업로드/생성/대사수정 컴포넌트 ──────────────────────────
 function LineAudioRow({
-  line, lineIndex, docId, colName, existingUrl, idToken, onRefresh
+  line, lineIndex, allLines, docId, colName, existingUrl, idToken, onRefresh
 }: {
-  line: ParsedLine; lineIndex: number; docId: string; colName: string;
+  line: ParsedLine; lineIndex: number; allLines: ParsedLine[]; docId: string; colName: string;
   existingUrl: string; idToken: string; onRefresh: () => void;
 }) {
   const defaultVoice = line.role === "B"
     ? (ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID)
     : DEFAULT_MALE_VOICE_ID;
   const [selectedVoice, setSelectedVoice] = useState(defaultVoice);
+  const [editedText, setEditedText] = useState(line.text);
+  const [savingText, setSavingText] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  // ElevenLabs 자동 생성
+  useEffect(() => {
+    setEditedText(line.text);
+  }, [line.text]);
+
+  const isTextChanged = editedText.trim() !== line.text.trim();
+
+  // 수정된 대사를 Firestore script에 반영하는 헬퍼
+  const saveUpdatedLineToFirestore = async (newLineText: string) => {
+    const newScript = allLines
+      .map((l, idx) => `${l.role}: ${idx === lineIndex ? newLineText.trim() : l.text}`)
+      .join("|");
+    await updateDoc(doc(db, colName, docId), { script: newScript });
+  };
+
+  // 대사만 저장
+  const handleSaveTextOnly = async () => {
+    if (!editedText.trim()) return alert("대사를 입력해주세요.");
+    setSavingText(true); setResult(null);
+    try {
+      await saveUpdatedLineToFirestore(editedText);
+      setResult("✅ 대사 수정됨");
+      onRefresh();
+    } catch (e: any) {
+      setResult("❌ 저장 실패: " + e.message);
+    } finally {
+      setSavingText(false);
+    }
+  };
+
+  // ElevenLabs 자동 생성 (대사가 수정되었다면 먼저 Firestore에 대사 저장 후 음성 생성)
   const handleGenerate = async () => {
+    if (!editedText.trim()) return alert("대사를 입력해주세요.");
     setGenerating(true); setResult(null);
     try {
+      if (isTextChanged) {
+        await saveUpdatedLineToFirestore(editedText);
+      }
       const res = await fetch("/api/admin/generate-audio", {
         method: "POST",
         headers: {
@@ -95,13 +133,13 @@ function LineAudioRow({
           docId,
           colName,
           lineIndex,
-          text: line.text,
+          text: editedText.trim(),
           voiceId: selectedVoice,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResult("✅ 생성 완료");
+      setResult(isTextChanged ? "✅ 대사 수정 & 음성 재생성 완료" : "✅ 생성 완료");
       onRefresh();
     } catch (e: any) {
       setResult("❌ " + e.message);
@@ -111,7 +149,7 @@ function LineAudioRow({
   };
 
   const handleDelete = async () => {
-    if (!confirm("오디오를 삭제할까요?")) return;
+    if (!confirm("이 라인의 오디오를 삭제할까요?")) return;
     try {
       await fetch("/api/admin/generate-audio", {
         method: "DELETE",
@@ -125,22 +163,42 @@ function LineAudioRow({
   };
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-xl border ${existingUrl ? "bg-green-50/50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
-      <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
-        {line.role}
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-900 truncate mb-1">{line.text}</p>
-        <div className="flex items-center gap-2">
-          {existingUrl ? (
-            <audio src={existingUrl} controls className="h-7 w-44" />
-          ) : (
-            <span className="text-xs text-slate-900">오디오 미생성</span>
-          )}
-          {result && <span className={`text-[11px] font-bold ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</span>}
+    <div className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border ${existingUrl ? "bg-green-50/50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
+      <div className="flex items-start sm:items-center gap-2.5 flex-1 min-w-0">
+        <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mt-1 sm:mt-0 ${line.role === "A" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+          {line.role}
+        </span>
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <input
+              value={editedText}
+              onChange={e => setEditedText(e.target.value)}
+              placeholder="대사를 입력하거나 수정하세요"
+              className={`w-full text-sm font-medium text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                isTextChanged ? "border-amber-400 bg-amber-50/40" : "border-slate-200"
+              }`}
+            />
+            {isTextChanged && (
+              <button
+                onClick={handleSaveTextOnly}
+                disabled={savingText}
+                className="shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1.5 rounded-lg transition disabled:opacity-50"
+              >
+                {savingText ? "저장중..." : "대사만 저장"}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {existingUrl ? (
+              <audio src={existingUrl} controls className="h-7 w-48" />
+            ) : (
+              <span className="text-xs text-slate-900">오디오 미생성</span>
+            )}
+            {result && <span className={`text-[11px] font-bold ${result.startsWith("✅") ? "text-green-600" : "text-red-500"}`}>{result}</span>}
+          </div>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
         <select
           value={selectedVoice}
           onChange={e => setSelectedVoice(e.target.value)}
@@ -156,10 +214,10 @@ function LineAudioRow({
           className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 transition"
         >
           {generating ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-          {existingUrl ? "재생성" : "생성"}
+          {isTextChanged ? "수정 & 재생성" : existingUrl ? "재생성" : "생성"}
         </button>
         {existingUrl && (
-          <button onClick={handleDelete} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="삭제">
+          <button onClick={handleDelete} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="오디오 삭제">
             <Trash2 size={14} />
           </button>
         )}
@@ -171,6 +229,11 @@ function LineAudioRow({
 // ── 담화 항목 카드 ────────────────────────────────────────
 function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; idToken: string; onRefresh: () => void; }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingScript, setEditingScript] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(doc_.title ?? "");
+  const [scriptDraft, setScriptDraft] = useState(doc_.script ?? "");
+  const [translationDraft, setTranslationDraft] = useState(doc_.translation ?? "");
+  const [savingScript, setSavingScript] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
   const [roleAVoice, setRoleAVoice] = useState(DEFAULT_MALE_VOICE_ID);
   const [roleBVoice, setRoleBVoice] = useState(
@@ -178,6 +241,41 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
   );
   const lines = parseScript(doc_.script ?? "");
   const filledCount = lines.filter((_, i) => !!doc_.audio_paths?.[i]).length;
+
+  useEffect(() => {
+    setTitleDraft(doc_.title ?? "");
+    setScriptDraft(doc_.script ?? "");
+    setTranslationDraft(doc_.translation ?? "");
+  }, [doc_.title, doc_.script, doc_.translation]);
+
+  const handleSaveFullScript = async () => {
+    if (!scriptDraft.trim()) return alert("대본을 입력해주세요.");
+    setSavingScript(true);
+    try {
+      await updateDoc(doc(db, "sori_curriculum_dialogue", doc_.id), {
+        title: titleDraft.trim() || doc_.title || "담화",
+        script: scriptDraft.trim(),
+        translation: translationDraft.trim(),
+      });
+      setEditingScript(false);
+      onRefresh();
+      alert("✅ 대본이 수정되었습니다! 이제 일괄 생성 또는 개별 재생성을 눌러 음성을 업데이트할 수 있습니다.");
+    } catch (e: any) {
+      alert("대본 수정 실패: " + e.message);
+    } finally {
+      setSavingScript(false);
+    }
+  };
+
+  const handleDeleteEntireDialogue = async () => {
+    if (!confirm(`'${doc_.title ?? doc_.id}' 담화 전체를 영구 삭제하시겠습니까?`)) return;
+    try {
+      await deleteDoc(doc(db, "sori_curriculum_dialogue", doc_.id));
+      onRefresh();
+    } catch (e: any) {
+      alert("담화 삭제 실패: " + e.message);
+    }
+  };
 
   const handleBatchGenerate = async () => {
     if (!confirm(`전체 ${lines.length}개 라인의 음성을 선택한 성우(A/B)로 일괄 생성하시겠습니까?`)) return;
@@ -260,6 +358,20 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
             {batchLoading ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
             전체 대화 일괄 생성
           </button>
+          <button
+            onClick={() => { setExpanded(true); setEditingScript(p => !p); }}
+            className="flex items-center gap-1 text-xs bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 px-2.5 py-1.5 rounded-lg font-bold transition"
+            title="전체 대본 수정"
+          >
+            <Edit3 size={12} /> 대본 수정
+          </button>
+          <button
+            onClick={handleDeleteEntireDialogue}
+            className="flex items-center gap-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-2.5 py-1.5 rounded-lg font-bold transition"
+            title="이 담화 전체 삭제"
+          >
+            <Trash2 size={12} /> 담화 삭제
+          </button>
           <button onClick={() => setExpanded(p => !p)} className="p-1 text-slate-900 text-sm">
             {expanded ? "▲" : "▼"}
           </button>
@@ -267,10 +379,50 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
       </div>
       {expanded && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-100 pt-3">
+          {editingScript && (
+            <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3 mb-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black text-amber-900">✏️ 전체 대본 / 제목 / 번역 수정</span>
+                <button onClick={() => setEditingScript(false)} className="text-xs text-slate-900 hover:underline">닫기</button>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-900 block mb-1">대화 제목</label>
+                <input
+                  value={titleDraft}
+                  onChange={e => setTitleDraft(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-900 block mb-1">대본 (파이프 | 로 줄 구분)</label>
+                <textarea
+                  value={scriptDraft}
+                  onChange={e => setScriptDraft(e.target.value)}
+                  rows={4}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white text-slate-900 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-900 block mb-1">번역 (파이프 | 로 줄 구분)</label>
+                <input
+                  value={translationDraft}
+                  onChange={e => setTranslationDraft(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white text-slate-900"
+                />
+              </div>
+              <button
+                onClick={handleSaveFullScript}
+                disabled={savingScript}
+                className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg transition disabled:opacity-50"
+              >
+                {savingScript ? "저장 중..." : "💾 대본 수정사항 저장"}
+              </button>
+            </div>
+          )}
           {lines.length === 0 ? (
             <p className="text-sm text-slate-900 text-center py-4">대본 데이터 없음</p>
           ) : lines.map((line, idx) => (
-            <LineAudioRow key={idx} line={line} lineIndex={idx} docId={doc_.id}
+            <LineAudioRow key={idx} line={line} lineIndex={idx} allLines={lines} docId={doc_.id}
               colName="sori_curriculum_dialogue" existingUrl={doc_.audio_paths?.[idx] ?? ""}
               idToken={idToken} onRefresh={onRefresh} />
           ))}
@@ -522,18 +674,68 @@ export default function AdminPage() {
 
   const [selectedVoiceForSingle, setSelectedVoiceForSingle] = useState(DEFAULT_MALE_VOICE_ID);
   const [singleGenerating, setSingleGenerating] = useState(false);
+  const [singleEditText, setSingleEditText] = useState("");
+  const [singleSavingText, setSingleSavingText] = useState(false);
 
-  // ElevenLabs 단일 생성 (단어/문장)
+  // 항목 선택 시 수정용 텍스트 동기화
+  useEffect(() => {
+    if (!selectedDocId) {
+      setSingleEditText("");
+      return;
+    }
+    const found = audioDocs.find(d => d.id === selectedDocId);
+    setSingleEditText(found?.text ?? "");
+  }, [selectedDocId, audioDocs]);
+
+  // 단어/문장 텍스트만 수정 저장
+  const handleSaveSingleText = async () => {
+    if (!selectedDocId || !singleEditText.trim()) return alert("내용을 입력하세요.");
+    setSingleSavingText(true); setUploadResult(null);
+    try {
+      await updateDoc(doc(db, audioColName, selectedDocId), {
+        text: singleEditText.trim(),
+      });
+      setUploadResult("✅ 텍스트 수정 저장 완료");
+      await loadAudioDocs();
+    } catch (e: any) {
+      setUploadResult(`❌ 저장 실패: ${e.message}`);
+    } finally {
+      setSingleSavingText(false);
+    }
+  };
+
+  // 단어/문장 항목 자체를 영구 삭제
+  const deleteEntireAudioDoc = async (docId: string) => {
+    const target = audioDocs.find(d => d.id === docId);
+    if (!confirm(`'${target?.text ?? docId}' 항목 자체를 아예 삭제하시겠습니까?\n(단어/문장 목록에서도 영구 삭제됩니다)`)) return;
+    try {
+      await deleteDoc(doc(db, audioColName, docId));
+      if (selectedDocId === docId) setSelectedDocId("");
+      await loadAudioDocs();
+    } catch (e: any) {
+      alert("항목 삭제 실패: " + e.message);
+    }
+  };
+
+  // ElevenLabs 단일 생성 (단어/문장 — 텍스트가 수정되었으면 먼저 저장 후 생성)
   const handleSingleGenerate = async (docIdToUse?: string, voiceIdToUse?: string) => {
     const targetDocId = docIdToUse || selectedDocId;
     if (!targetDocId) return alert("항목을 선택하세요.");
     const docObj = audioDocs.find(d => d.id === targetDocId);
-    const targetText = docObj?.text || "";
+    const targetText = (targetDocId === selectedDocId && singleEditText.trim())
+      ? singleEditText.trim()
+      : (docObj?.text || "");
     if (!targetText) return alert("오디오를 생성할 텍스트가 없습니다.");
 
     const targetVoice = voiceIdToUse || selectedVoiceForSingle;
     setSingleGenerating(true); setUploadResult(null);
     try {
+      // 텍스트가 기존과 다르면 먼저 Firestore 업데이트
+      if (docObj && docObj.text !== targetText) {
+        await updateDoc(doc(db, audioColName, targetDocId), {
+          text: targetText,
+        });
+      }
       const res = await fetch("/api/admin/generate-audio", {
         method: "POST",
         headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
@@ -546,7 +748,7 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setUploadResult("✅ ElevenLabs 음성 생성 완료");
+      setUploadResult("✅ 텍스트 반영 및 ElevenLabs 음성 생성 완료");
       loadAudioDocs();
     } catch (e: any) {
       setUploadResult(`❌ 생성 실패: ${e.message}`);
@@ -609,6 +811,86 @@ export default function AdminPage() {
       .then(s => setCurriculumList(s.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc)))
       .finally(() => setLoading(false));
   }, [isAdmin, activeTab, curriculumType]);
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editItemText, setEditItemText] = useState("");
+  const [editItemPronunciation, setEditItemPronunciation] = useState("");
+  const [editItemScript, setEditItemScript] = useState("");
+  const [editItemTranslation, setEditItemTranslation] = useState("");
+  const [editItemVoiceId, setEditItemVoiceId] = useState(DEFAULT_MALE_VOICE_ID);
+  const [editItemSaving, setEditItemSaving] = useState(false);
+
+  const startEditItem = (item: CurriculumDoc) => {
+    setEditingItemId(item.id);
+    setEditItemText(item.text ?? item.title ?? "");
+    setEditItemPronunciation((item as any).pronunciation ?? "");
+    setEditItemScript(item.script ?? "");
+    setEditItemTranslation(item.translation ?? "");
+    setEditItemVoiceId((item as any).voice_id || DEFAULT_MALE_VOICE_ID);
+  };
+
+  const handleSaveEditedItem = async (item: CurriculumDoc, regenerateAudio: boolean) => {
+    setEditItemSaving(true);
+    const colName = `sori_curriculum_${curriculumType}`;
+    try {
+      const updates: any = {};
+      if (curriculumType === "dialogue") {
+        updates.title = editItemText.trim() || item.title || "담화";
+        updates.script = editItemScript.trim();
+        updates.translation = editItemTranslation.trim();
+      } else {
+        updates.text = editItemText.trim();
+        updates.pronunciation = editItemPronunciation.trim() || editItemText.trim();
+      }
+      await updateDoc(doc(db, colName, item.id), updates);
+
+      if (regenerateAudio) {
+        if (curriculumType === "dialogue") {
+          const parsed = parseScript(editItemScript.trim());
+          const femaleVoice = ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID;
+          const preparedLines = parsed.map((line, idx) => ({
+            text: line.text,
+            index: idx,
+            voiceId: line.role === "B" ? femaleVoice : editItemVoiceId,
+          }));
+          const res = await fetch("/api/admin/generate-audio", {
+            method: "POST",
+            headers: authHeader,
+            body: JSON.stringify({
+              docId: item.id,
+              colName,
+              isBatch: true,
+              lines: preparedLines,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+        } else {
+          const res = await fetch("/api/admin/generate-audio", {
+            method: "POST",
+            headers: authHeader,
+            body: JSON.stringify({
+              docId: item.id,
+              colName,
+              text: editItemText.trim(),
+              voiceId: editItemVoiceId,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+        }
+      }
+
+      const snap = await getDocs(collection(db, colName));
+      setCurriculumList(snap.docs.map(d => ({ id: d.id, ...d.data() }) as CurriculumDoc));
+      setEditingItemId(null);
+      alert(regenerateAudio ? "✅ 수정 및 음성 재생성이 완료되었습니다!" : "✅ 내용 수정이 저장되었습니다!");
+    } catch (e: any) {
+      alert("수정 실패: " + e.message);
+    } finally {
+      setEditItemSaving(false);
+    }
+  };
 
   const deleteItem = async (id: string) => {
     if (!confirm("삭제하시겠습니까?")) return;
@@ -1074,15 +1356,38 @@ export default function AdminPage() {
                 </div>
 
                 {selectedDocId && (
-                  <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 mb-4 animate-in fade-in">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-bold text-indigo-700">생성할 텍스트</span>
-                      <span className="text-xs text-slate-900">ID: {selectedDocId}</span>
+                  <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 mb-4 animate-in fade-in space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-indigo-700">✏️ 텍스트 수정 및 음성 생성</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-900">ID: {selectedDocId}</span>
+                        <button
+                          onClick={() => deleteEntireAudioDoc(selectedDocId)}
+                          className="flex items-center gap-1 text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2.5 py-1 rounded-lg font-bold transition"
+                          title="이 단어/문장 항목 자체를 영구 삭제"
+                        >
+                          <Trash2 size={12} /> 항목 자체 삭제
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-base font-bold text-slate-900 mb-3">
-                      {audioDocs.find(d => d.id === selectedDocId)?.text}
-                    </p>
-                    <div className="mb-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={singleEditText}
+                        onChange={e => setSingleEditText(e.target.value)}
+                        placeholder="단어 또는 문장을 수정할 수 있습니다"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                      {singleEditText.trim() !== (audioDocs.find(d => d.id === selectedDocId)?.text ?? "") && (
+                        <button
+                          onClick={handleSaveSingleText}
+                          disabled={singleSavingText}
+                          className="shrink-0 px-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition disabled:opacity-50"
+                        >
+                          {singleSavingText ? "저장중..." : "텍스트만 저장"}
+                        </button>
+                      )}
+                    </div>
+                    <div>
                       <label className="text-xs font-bold text-slate-900 block mb-1">목소리(Voice) 선택</label>
                       <select
                         value={selectedVoiceForSingle}
@@ -1104,7 +1409,7 @@ export default function AdminPage() {
                       {singleGenerating ? (
                         <><Loader2 size={18} className="animate-spin" /> ElevenLabs 음성 생성 중...</>
                       ) : (
-                        <><Wand2 size={18} /> ✨ ElevenLabs 음성 자동 생성 및 저장</>
+                        <><Wand2 size={18} /> ✨ (수정된 텍스트로) ElevenLabs 음성 자동 생성 및 저장</>
                       )}
                     </button>
                   </div>
@@ -1142,9 +1447,12 @@ export default function AdminPage() {
                             }}
                             className="text-xs bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-50 text-slate-900 transition"
                           >
-                            🔄 목소리 교체
+                            ✏️ 텍스트·목소리 수정
                           </button>
-                          <button onClick={() => deleteSingleAudio(d.id)} className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition" title="삭제">
+                          <button onClick={() => deleteSingleAudio(d.id)} className="text-amber-600 hover:text-amber-800 px-2 py-1.5 hover:bg-amber-50 rounded-lg transition text-xs font-bold border border-amber-200 bg-white" title="오디오만 삭제">
+                            오디오만 삭제
+                          </button>
+                          <button onClick={() => deleteEntireAudioDoc(d.id)} className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition" title="항목 완전 삭제">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -1400,21 +1708,115 @@ export default function AdminPage() {
               {loading ? (
                 <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-slate-900" /></div>
               ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="space-y-2 max-h-[540px] overflow-y-auto">
                   {curriculumList.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-slate-900 text-sm">{item.text ?? item.title ?? "—"}</p>
-                          {item.has_audio ? (
-                            <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">음성 있음</span>
-                          ) : (
-                            <span className="text-[10px] bg-slate-200 text-slate-900 font-bold px-1.5 py-0.5 rounded">음성 없음</span>
+                    <div key={item.id} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-slate-900 text-sm">{item.text ?? item.title ?? "—"}</p>
+                            {item.has_audio ? (
+                              <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">음성 있음</span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-200 text-slate-900 font-bold px-1.5 py-0.5 rounded">음성 없음</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-900">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
+                          {curriculumType === "dialogue" && item.script && editingItemId !== item.id && (
+                            <p className="text-xs text-slate-900 mt-1 line-clamp-2 font-mono bg-white p-2 rounded border border-slate-100">
+                              {item.script}
+                            </p>
                           )}
                         </div>
-                        <p className="text-xs text-slate-900">{item.category}{item.step ? ` · Step ${item.step}` : ""}{item.source === "ai_generated" ? " · AI생성" : ""}</p>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => editingItemId === item.id ? setEditingItemId(null) : startEditItem(item)}
+                            className="flex items-center gap-1 text-xs bg-white border border-slate-300 hover:bg-slate-100 text-slate-900 font-bold px-2.5 py-1.5 rounded-lg transition"
+                          >
+                            <Edit3 size={13} />
+                            {editingItemId === item.id ? "닫기" : "대사·내용 수정"}
+                          </button>
+                          <button onClick={() => deleteItem(item.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg" title="삭제">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+
+                      {editingItemId === item.id && (
+                        <div className="bg-white p-3.5 rounded-xl border border-indigo-200 space-y-2.5">
+                          <div>
+                            <label className="text-xs font-bold text-slate-900 block mb-1">
+                              {curriculumType === "dialogue" ? "대화 제목" : curriculumType === "word" ? "단어" : "문장"}
+                            </label>
+                            <input
+                              value={editItemText}
+                              onChange={e => setEditItemText(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900 font-bold"
+                            />
+                          </div>
+                          {curriculumType === "dialogue" ? (
+                            <>
+                              <div>
+                                <label className="text-xs font-bold text-slate-900 block mb-1">대본 (파이프 | 로 줄 구분)</label>
+                                <textarea
+                                  value={editItemScript}
+                                  onChange={e => setEditItemScript(e.target.value)}
+                                  rows={4}
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-900 block mb-1">번역 (파이프 | 로 줄 구분)</label>
+                                <input
+                                  value={editItemTranslation}
+                                  onChange={e => setEditItemTranslation(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div>
+                              <label className="text-xs font-bold text-slate-900 block mb-1">발음 표기</label>
+                              <input
+                                value={editItemPronunciation}
+                                onChange={e => setEditItemPronunciation(e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900"
+                              />
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900">목소리:</span>
+                              <select
+                                value={editItemVoiceId}
+                                onChange={e => setEditItemVoiceId(e.target.value)}
+                                className="border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-bold bg-white"
+                              >
+                                {ELEVENLABS_VOICES.map(v => (
+                                  <option key={v.id} value={v.id}>{v.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleSaveEditedItem(item, false)}
+                                disabled={editItemSaving}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition disabled:opacity-50"
+                              >
+                                💾 내용만 저장
+                              </button>
+                              <button
+                                onClick={() => handleSaveEditedItem(item, true)}
+                                disabled={editItemSaving}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {editItemSaving ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                수정 저장 & 음성 다시 생성
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {curriculumList.length === 0 && <p className="text-center text-slate-900 py-10">데이터 없음</p>}
