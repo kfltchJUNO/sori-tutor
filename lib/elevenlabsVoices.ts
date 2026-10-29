@@ -11,7 +11,7 @@ export interface VoiceOption {
 
 export const ELEVENLABS_VOICES: VoiceOption[] = [
   {
-    id: process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_JUNHO || "3lMatKOyHfWflJwj08H6",
+    id: "3lMatKOyHfWflJwj08H6",
     name: "준호 (남성 - 대표 음성)",
     gender: "male",
     description: "준호님 클론 보이스 (소리튜터 대표 남성 음성)",

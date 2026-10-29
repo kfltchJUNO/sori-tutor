@@ -75,16 +75,18 @@ export async function POST(req: NextRequest) {
     if (isBatch && Array.isArray(lines)) {
       const snap = await docRef.get();
       const existing: string[] = snap.data()?.audio_paths ?? [];
+      const ts = Date.now();
 
       for (let i = 0; i < lines.length; i++) {
         const item = lines[i];
         if (!item.text) continue;
-        const audioBuffer = await synthesizeWithElevenLabs(item.text, item.voiceId || voiceId);
-        const storagePath = `curriculum/${colName}/${docId}/line_${i}.mp3`;
+        const usedVoiceId = item.voiceId || voiceId || DEFAULT_MALE_VOICE_ID;
+        const audioBuffer = await synthesizeWithElevenLabs(item.text, usedVoiceId);
+        const storagePath = `curriculum/${colName}/${docId}/line_${i}_${usedVoiceId}_${ts}.mp3`;
         const fileRef = bucket.file(storagePath);
 
         await fileRef.save(audioBuffer, {
-          metadata: { contentType: "audio/mpeg" },
+          metadata: { contentType: "audio/mpeg", cacheControl: "no-cache, max-age=0" },
           resumable: false,
         });
         await fileRef.makePublic();
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
       await docRef.update({
         audio_paths: existing,
         has_audio: true,
-        voice_id: voiceId,
+        voice_id: voiceId || DEFAULT_MALE_VOICE_ID,
         audio_updated_at: FieldValue.serverTimestamp(),
       });
 
@@ -106,16 +108,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "생성할 텍스트(text)가 없습니다." }, { status: 400 });
     }
 
-    const audioBuffer = await synthesizeWithElevenLabs(text, voiceId);
+    const usedVoiceId = voiceId || DEFAULT_MALE_VOICE_ID;
+    const audioBuffer = await synthesizeWithElevenLabs(text, usedVoiceId);
+    const ts = Date.now();
 
     const isDialogueLine = lineIndex !== null && lineIndex !== undefined;
     const storagePath = isDialogueLine
-      ? `curriculum/${colName}/${docId}/line_${lineIndex}.mp3`
-      : `curriculum/${colName}/${docId}/audio.mp3`;
+      ? `curriculum/${colName}/${docId}/line_${lineIndex}_${usedVoiceId}_${ts}.mp3`
+      : `curriculum/${colName}/${docId}/audio_${usedVoiceId}_${ts}.mp3`;
 
     const fileRef = bucket.file(storagePath);
     await fileRef.save(audioBuffer, {
-      metadata: { contentType: "audio/mpeg" },
+      metadata: { contentType: "audio/mpeg", cacheControl: "no-cache, max-age=0" },
       resumable: false,
     });
     await fileRef.makePublic();
@@ -136,12 +140,12 @@ export async function POST(req: NextRequest) {
       await docRef.update({
         audio_path: publicUrl,
         has_audio: true,
-        voice_id: voiceId,
+        voice_id: usedVoiceId,
         audio_updated_at: FieldValue.serverTimestamp(),
       });
     }
 
-    return NextResponse.json({ success: true, url: publicUrl, voiceId });
+    return NextResponse.json({ success: true, url: publicUrl, audio_path: publicUrl, voiceId: usedVoiceId });
   } catch (e: any) {
     console.error("ElevenLabs Audio Generation Error:", e);
     return NextResponse.json({ error: e.message || "음성 생성 실패" }, { status: 500 });

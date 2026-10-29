@@ -43,6 +43,8 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
   const [newPronunciation, setNewPronunciation] = useState("");
   const [newRuleFormula, setNewRuleFormula] = useState("");
   const [newChapter, setNewChapter] = useState(1);
+  const [newVoiceId, setNewVoiceId] = useState(defaultVoiceId);
+  const [autoGenerateVoice, setAutoGenerateVoice] = useState(true);
   const [addingSentence, setAddingSentence] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
 
@@ -144,19 +146,45 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     if (!newText.trim()) return alert("문장을 입력하세요.");
     setAddingSentence(true);
     try {
-      await addDoc(collection(db, "sori_curriculum_dongguk"), {
+      const docRef = await addDoc(collection(db, "sori_curriculum_dongguk"), {
         text: newText.trim(),
         pronunciation: newPronunciation.trim() || newText.trim(),
         rule_formula: newRuleFormula.trim() || "",
         chapter: Number(newChapter) || 1,
+        voice_id: newVoiceId,
         has_audio: false,
         created_at: serverTimestamp(),
       });
+
+      if (autoGenerateVoice) {
+        const res = await fetch("/api/admin/generate-audio", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            docId: docRef.id,
+            colName: "sori_curriculum_dongguk",
+            text: newText.trim(),
+            voiceId: newVoiceId,
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Auto audio gen error:", errData);
+        }
+      }
+
       setNewText("");
       setNewPronunciation("");
       setNewRuleFormula("");
       await loadSentences();
-      alert("새 문장이 등록되었습니다! 📝\n이제 아래에서 일레븐랩스로 음성을 생성할 수 있습니다.");
+      alert(
+        autoGenerateVoice
+          ? "새 문장과 선택한 성우의 음성이 함께 등록되었습니다! 🎉"
+          : "새 문장이 등록되었습니다! 📝\n이제 아래에서 일레븐랩스로 음성을 생성할 수 있습니다."
+      );
     } catch (e) {
       console.error(e);
       alert("문장 등록 실패");
@@ -179,7 +207,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
 
   // ── 일레븐랩스 음성 생성 ───────────────
   const handleGenerateAudio = async (item: DonggukSentenceItem) => {
-    const voiceId = selectedVoices[item.id] || defaultVoiceId;
+    const voiceId = selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId;
     setGeneratingVoiceId(item.id);
     try {
       const res = await fetch("/api/admin/generate-audio", {
@@ -191,16 +219,17 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
         body: JSON.stringify({
           docId: item.id,
           colName: "sori_curriculum_dongguk",
-          text: item.pronunciation || item.text,
+          text: item.text,
           voiceId,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // 로컬 상태 즉시 반영
+      // 로컬 상태 즉시 반영 (캐시 방지 URL 포함)
+      const newAudioUrl = data.audio_path || data.url;
       setSentences(prev =>
-        prev.map(s => s.id === item.id ? { ...s, audio_path: data.audio_path, has_audio: true } : s)
+        prev.map(s => s.id === item.id ? { ...s, audio_path: newAudioUrl, voice_id: voiceId, has_audio: true } as any : s)
       );
       alert("🎉 일레븐랩스 음성 생성 및 저장이 완료되었습니다!");
     } catch (e: any) {
@@ -495,6 +524,32 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
               </div>
             </div>
 
+            <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoGenerateVoice}
+                  onChange={e => setAutoGenerateVoice(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                />
+                등록과 동시에 일레븐랩스 음성 자동 생성
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-900">목소리 선택:</span>
+                <select
+                  value={newVoiceId}
+                  onChange={e => setNewVoiceId(e.target.value)}
+                  className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white font-bold text-slate-900"
+                >
+                  {voices.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={addingSentence}
@@ -568,9 +623,9 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
 
                       {/* 일레븐랩스 보이스 선택 & 생성 버튼 */}
                       <select
-                        value={selectedVoices[item.id] || defaultVoiceId}
+                        value={selectedVoices[item.id] || (item as any).voice_id || defaultVoiceId}
                         onChange={e => setSelectedVoices(prev => ({ ...prev, [item.id]: e.target.value }))}
-                        className="text-xs border border-slate-200 rounded-lg p-1.5 bg-white font-medium"
+                        className="text-xs border border-slate-200 rounded-lg p-1.5 bg-white font-medium text-slate-900"
                       >
                         {voices.map(v => (
                           <option key={v.id} value={v.id}>

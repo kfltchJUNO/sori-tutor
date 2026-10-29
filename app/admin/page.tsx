@@ -172,19 +172,21 @@ function LineAudioRow({
 function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; idToken: string; onRefresh: () => void; }) {
   const [expanded, setExpanded] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [roleAVoice, setRoleAVoice] = useState(DEFAULT_MALE_VOICE_ID);
+  const [roleBVoice, setRoleBVoice] = useState(
+    ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID
+  );
   const lines = parseScript(doc_.script ?? "");
   const filledCount = lines.filter((_, i) => !!doc_.audio_paths?.[i]).length;
 
   const handleBatchGenerate = async () => {
-    if (!confirm(`전체 ${lines.length}개 라인의 음성을 ElevenLabs로 일괄 생성하시겠습니까?`)) return;
+    if (!confirm(`전체 ${lines.length}개 라인의 음성을 선택한 성우(A/B)로 일괄 생성하시겠습니까?`)) return;
     setBatchLoading(true);
     try {
       const preparedLines = lines.map((line, idx) => ({
         text: line.text,
         index: idx,
-        voiceId: line.role === "B"
-          ? (ELEVENLABS_VOICES.find(v => v.gender === "female")?.id ?? DEFAULT_MALE_VOICE_ID)
-          : DEFAULT_MALE_VOICE_ID,
+        voiceId: line.role === "B" ? roleBVoice : roleAVoice,
       }));
 
       const res = await fetch("/api/admin/generate-audio", {
@@ -214,7 +216,7 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left cursor-pointer" onClick={() => setExpanded(p => !p)}>
+      <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-slate-50 transition text-left cursor-pointer" onClick={() => setExpanded(p => !p)}>
         <div>
           <p className="font-bold text-slate-900">{doc_.title ?? doc_.id}</p>
           <p className="text-xs text-slate-900 mt-0.5">
@@ -225,7 +227,31 @@ function DialogueAudioCard({ doc_, idToken, onRefresh }: { doc_: CurriculumDoc; 
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-1 text-xs">
+            <span className="font-bold text-blue-700">A:</span>
+            <select
+              value={roleAVoice}
+              onChange={e => setRoleAVoice(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-900 font-medium text-xs"
+            >
+              {ELEVENLABS_VOICES.map(v => (
+                <option key={v.id} value={v.id}>{v.name.split(" (")[0]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1 text-xs">
+            <span className="font-bold text-purple-700">B:</span>
+            <select
+              value={roleBVoice}
+              onChange={e => setRoleBVoice(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-900 font-medium text-xs"
+            >
+              {ELEVENLABS_VOICES.map(v => (
+                <option key={v.id} value={v.id}>{v.name.split(" (")[0]}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={handleBatchGenerate}
             disabled={batchLoading}
@@ -663,7 +689,7 @@ export default function AdminPage() {
 
       // 음성 즉시 생성 옵션이 켜져 있고 단어/문장인 경우 ElevenLabs 자동 호출
       if (assetAutoVoice && curriculumType !== "dialogue") {
-        const textToSpeak = assetPronunciation.trim() || assetInputText.trim();
+        const textToSpeak = assetInputText.trim();
         await fetch("/api/admin/generate-audio", {
           method: "POST",
           headers: authHeader,
@@ -985,23 +1011,36 @@ export default function AdminPage() {
             </div>
 
             {audioColName !== "sori_curriculum_dialogue" && audioDocs.filter(d => !d.audio_path).length > 0 && (
-              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <p className="font-bold text-amber-900 text-sm">
                     ⚡ 음성이 없는 항목: {audioDocs.filter(d => !d.audio_path).length}개
                   </p>
                   <p className="text-xs text-amber-700">
-                    아래 버튼을 누르면 모든 미등록 항목의 오디오가 ElevenLabs를 통해 자동으로 생성됩니다.
+                    성우를 선택하고 아래 버튼을 누르면 모든 미등록 항목의 오디오가 자동으로 생성됩니다.
                   </p>
                 </div>
-                <button
-                  onClick={handleBatchGenerateAudio}
-                  disabled={batchAudioGenerating}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-50"
-                >
-                  {batchAudioGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {batchAudioGenerating ? batchProgress || "생성 중..." : "전체 일괄 자동 생성"}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={selectedVoiceForSingle}
+                    onChange={e => setSelectedVoiceForSingle(e.target.value)}
+                    className="border border-amber-300 rounded-xl px-3 py-2 text-xs text-slate-900 bg-white font-bold focus:outline-none"
+                  >
+                    {ELEVENLABS_VOICES.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleBatchGenerateAudio}
+                    disabled={batchAudioGenerating}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {batchAudioGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    {batchAudioGenerating ? batchProgress || "생성 중..." : "전체 일괄 자동 생성"}
+                  </button>
+                </div>
               </div>
             )}
 
