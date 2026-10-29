@@ -6,12 +6,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { requireAdmin } from "@/lib/adminAuth";
 
 const CANDIDATE_MODELS = [
-  "gemini-3.5-flash-lite",  // 1순위: 15 RPM / 500 RPD (가장 넉넉한 한도)
+  "gemini-3.5-flash-lite",  // 1순위: 15 RPM / 500 RPD
   "gemini-3.1-flash-lite",  // 2순위: 15 RPM / 500 RPD
-  "gemini-3.8-flash",       // 3순위: 5 RPM / 20 RPD (최신 고성능)
-  "gemini-3.6-flash",       // 4순위: 5 RPM / 20 RPD
-  "gemini-2.5-flash-lite",  // 5순위: 10 RPM / 20 RPD
-  "gemini-2.5-flash",       // 6순위: 5 RPM / 20 RPD
+  "gemini-3.8-flash",       // 3순위: 5 RPM / 20 RPD
 ];
 
 export async function POST(req: NextRequest) {

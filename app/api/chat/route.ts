@@ -6,9 +6,6 @@ const MODEL_CANDIDATES: string[] = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
   "gemini-3.8-flash",
-  "gemini-3.6-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
 ];
 
 const SAFETY = [
@@ -56,8 +53,8 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
     try {
       const isMale = personaId !== "seoyeon";
       const targetVoice = isMale
-        ? (process.env.ELEVENLABS_VOICE_JUNHO || "srhGhMYcxqeTNVuSRvWg")
-        : "EXAVITQu4vr4xnSDxMaL";
+        ? "3lMatKOyHfWflJwj08H6"
+        : "mTVOetWowFUodP946PJM";
 
       const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
         method: "POST",
