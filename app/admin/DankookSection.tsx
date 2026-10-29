@@ -255,6 +255,53 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
         </div>
       </div>
 
+      {/* 학생 배포용 QR 코드 카드 */}
+      <div className="bg-white rounded-2xl p-5 border border-blue-200 shadow-sm flex flex-col sm:flex-row items-center gap-5">
+        <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs shrink-0">
+          <img
+            src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://sori-tutor.vercel.app/dankook"
+            alt="단국대 전용 QR코드"
+            className="w-28 h-28"
+          />
+        </div>
+        <div className="space-y-2 flex-1 text-center sm:text-left">
+          <div className="flex items-center gap-2 justify-center sm:justify-start">
+            <span className="text-xs font-black bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
+              학생 배포 전용
+            </span>
+            <h3 className="font-black text-slate-800 text-sm">단국대 학생 전용 페이지 QR 코드</h3>
+          </div>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            학생들에게 이 QR 코드 또는 링크를 주시면, <strong>단국대학교 전용 화면</strong>으로 즉시 연결됩니다.<br />
+            (학생이 인증 요청을 보내면 아래 '학생 승인 관리'에서 승인해 주시면 됩니다.)
+          </p>
+          <div className="flex items-center gap-2 pt-1 justify-center sm:justify-start">
+            <input
+              readOnly
+              value="https://sori-tutor.vercel.app/dankook"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-600 font-mono w-56 select-all"
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText("https://sori-tutor.vercel.app/dankook");
+                alert("단국대 전용 페이지 링크가 복사되었습니다! 📋");
+              }}
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg transition"
+            >
+              링크 복사
+            </button>
+            <a
+              href="/dankook"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg transition"
+            >
+              페이지 열기 ↗
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* 서브 탭 전환 */}
       <div className="flex border-b border-slate-200">
         <button
