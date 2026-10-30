@@ -10,9 +10,10 @@ import {
 } from "firebase/firestore";
 import {
   GraduationCap, Users, BookOpen, Plus, Trash2, Volume2,
-  Loader2, CheckCircle, XCircle, RefreshCw, Music, Sparkles,
+  Loader2, CheckCircle, XCircle, RefreshCw, Music, Sparkles, BarChart3,
 } from "lucide-react";
 import type { DankookSentenceItem } from "@/types";
+import StudentHistoryPanel from "./StudentHistoryPanel";
 
 interface Props {
   idToken: string;
@@ -30,7 +31,8 @@ interface DankookStudent {
 }
 
 export default function DankookSection({ idToken, voices, defaultVoiceId }: Props) {
-  const [subTab, setSubTab] = useState<"students" | "sentences">("students");
+  const [subTab, setSubTab] = useState<"students" | "sentences" | "records">("students");
+  const [historyTargetEmail, setHistoryTargetEmail] = useState<string | null>(null);
 
   // ── 학생 상태 ─────────────────────────
   const [students, setStudents] = useState<DankookStudent[]>([]);
@@ -402,7 +404,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
       </div>
 
       {/* 서브 탭 전환 */}
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-slate-200 flex-wrap">
         <button
           onClick={() => setSubTab("students")}
           className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
@@ -417,6 +419,19 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
               {pendingStudents.length}명 대기
             </span>
           )}
+        </button>
+        <button
+          onClick={() => {
+            setHistoryTargetEmail(null);
+            setSubTab("records");
+          }}
+          className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
+            subTab === "records"
+              ? "border-blue-600 text-blue-600 bg-blue-50/50"
+              : "border-transparent text-slate-900 hover:text-slate-900"
+          }`}
+        >
+          <BarChart3 size={18} /> 학생 학습 기록 ({approvedStudents.length}명)
         </button>
         <button
           onClick={() => setSubTab("sentences")}
@@ -501,9 +516,9 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
             ) : (
               <div className="divide-y divide-slate-100">
                 {approvedStudents.map(student => (
-                  <div key={student.email} className="py-3 flex items-center justify-between">
+                  <div key={student.email} className="py-3 flex items-center justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-slate-900">
                           {student.name || student.alias || "학습자"}
                         </span>
@@ -516,18 +531,38 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
                       </div>
                       <p className="text-xs text-slate-900">{student.email}</p>
                     </div>
-                    <button
-                      onClick={() => handleUpdateStudentStatus(student.email, "none")}
-                      className="text-xs text-red-500 hover:text-red-700 px-2.5 py-1 rounded-lg border border-red-200 hover:bg-red-50 transition"
-                    >
-                      승인 해제
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => {
+                          setHistoryTargetEmail(student.email);
+                          setSubTab("records");
+                        }}
+                        className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1"
+                      >
+                        <BarChart3 size={12} /> 학습 기록
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStudentStatus(student.email, "none")}
+                        className="text-xs text-red-500 hover:text-red-700 px-2.5 py-1 rounded-lg border border-red-200 hover:bg-red-50 transition"
+                      >
+                        승인 해제
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* ── 탭 1-2: 학생 학습 기록 조회 ── */}
+      {subTab === "records" && (
+        <StudentHistoryPanel
+          univ="dankook"
+          idToken={idToken}
+          initialStudentEmail={historyTargetEmail}
+        />
       )}
 
       {/* ── 탭 2: 문장 & 일레븐랩스 음성 관리 ── */}

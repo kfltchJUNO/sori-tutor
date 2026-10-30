@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import {
-  doc, getDoc, updateDoc, collection, getDocs,
+  doc, getDoc, updateDoc, collection, getDocs, addDoc,
   query, orderBy, serverTimestamp, setDoc
 } from "firebase/firestore";
 import {
@@ -69,6 +69,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
   const dataArrayRef = useRef<Uint8Array | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speechFramesRef = useRef<number>(0);
 
   const feedbackVoices = useFeedbackVoices();
 
@@ -200,6 +201,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       mediaRecorderRef.current.start();
       setRecording(true);
       setResult(null);
+      speechFramesRef.current = 0;
 
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const audioContext = new AudioCtx();
@@ -221,6 +223,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
     const avg = dataArrayRef.current.reduce((a, b) => a + b) / dataArrayRef.current.length;
     if (avg > 15) {
+      speechFramesRef.current += 1;
       if (silenceTimer.current) {
         clearTimeout(silenceTimer.current);
         silenceTimer.current = null;
@@ -241,7 +244,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     }
   };
 
-  // 발음 분석 (전액 무료)
+  // 발음 분석 (전액 무료 + 학생 학습 기록 자동 저장)
   const handleAnalyze = async () => {
     if (!audioBlob || !currentProblem) return;
     setAnalyzing(true);
@@ -251,6 +254,10 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     const formData = new FormData();
     formData.append("audio", audioBlob);
     formData.append("targetText", currentProblem.text);
+    if (currentProblem.pronunciation) {
+      formData.append("targetPronunciation", currentProblem.pronunciation);
+    }
+    formData.append("speechFrames", String(speechFramesRef.current));
     formData.append("userNick", userData?.alias || userData?.name || "학생");
 
     try {
@@ -264,6 +271,26 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         const tier = getTier(data.score, isSilence);
         const voiceUrl = feedbackVoices[tier] ?? null;
         playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
+
+        // 학생 학습 기록(history) Firestore 저장 (관리자 페이지에서 확인 가능)
+        if (currentUser?.email) {
+          try {
+            await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
+              text: currentProblem.text,
+              pronunciation: currentProblem.pronunciation ?? "",
+              chapter: currentProblem.chapter ?? 1,
+              score: data.score,
+              recognized: data.recognized,
+              correct: data.correct,
+              feedback: data.explanation,
+              advice: data.advice,
+              type: config.univKey,
+              date: serverTimestamp(),
+            });
+          } catch (saveErr) {
+            console.warn("History save error:", saveErr);
+          }
+        }
       }
     } catch (e) {
       alert("분석 중 오류가 발생했습니다.");

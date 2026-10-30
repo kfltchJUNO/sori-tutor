@@ -33,7 +33,7 @@ service cloud.firestore {
 
       // 유저 하위 컬렉션: 학습 기록
       match /history/{historyId} {
-        allow read, create: if isOwner(userEmail);
+        allow read, create: if isOwner(userEmail) || isAdmin();
         allow update, delete: if isOwner(userEmail) || isAdmin();
       }
 

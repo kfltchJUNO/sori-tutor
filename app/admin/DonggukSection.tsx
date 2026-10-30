@@ -10,9 +10,10 @@ import {
 } from "firebase/firestore";
 import {
   GraduationCap, Users, BookOpen, Plus, Trash2, Volume2,
-  Loader2, CheckCircle, XCircle, RefreshCw, Music, Sparkles,
+  Loader2, CheckCircle, XCircle, RefreshCw, Music, Sparkles, BarChart3,
 } from "lucide-react";
 import type { DonggukSentenceItem } from "@/types";
+import StudentHistoryPanel from "./StudentHistoryPanel";
 
 interface Props {
   idToken: string;
@@ -30,7 +31,8 @@ interface DonggukStudent {
 }
 
 export default function DonggukSection({ idToken, voices, defaultVoiceId }: Props) {
-  const [subTab, setSubTab] = useState<"students" | "sentences">("students");
+  const [subTab, setSubTab] = useState<"students" | "sentences" | "records">("students");
+  const [historyTargetEmail, setHistoryTargetEmail] = useState<string | null>(null);
 
   // ── 학생 상태 ─────────────────────────
   const [students, setStudents] = useState<DonggukStudent[]>([]);
@@ -390,7 +392,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       </div>
 
       {/* 서브 탭 전환 */}
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-slate-200 flex-wrap">
         <button
           onClick={() => setSubTab("students")}
           className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
@@ -405,6 +407,19 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
               {pendingStudents.length}명 대기
             </span>
           )}
+        </button>
+        <button
+          onClick={() => {
+            setHistoryTargetEmail(null);
+            setSubTab("records");
+          }}
+          className={`flex items-center gap-2 px-5 py-3 font-black text-sm border-b-2 transition ${
+            subTab === "records"
+              ? "border-amber-500 text-amber-600 bg-amber-50/50"
+              : "border-transparent text-slate-900 hover:text-slate-900"
+          }`}
+        >
+          <BarChart3 size={18} /> 학생 학습 기록 ({approvedStudents.length}명)
         </button>
         <button
           onClick={() => setSubTab("sentences")}
@@ -492,7 +507,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                 {approvedStudents.map(student => (
                   <div
                     key={student.email}
-                    className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between"
+                    className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-2"
                   >
                     <div>
                       <p className="font-bold text-sm text-slate-900">{student.name || student.alias || "학생"}</p>
@@ -501,18 +516,38 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                         <span className="text-[10px] text-amber-700 font-semibold">{student.dongguk_student_id}</span>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleUpdateStudentStatus(student.email, "none")}
-                      className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded transition"
-                    >
-                      권한 회수
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => {
+                          setHistoryTargetEmail(student.email);
+                          setSubTab("records");
+                        }}
+                        className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1"
+                      >
+                        <BarChart3 size={12} /> 학습 기록
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStudentStatus(student.email, "none")}
+                        className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded transition"
+                      >
+                        권한 회수
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* ──────────────── 1-2. 학생 학습 기록 조회 ──────────────── */}
+      {subTab === "records" && (
+        <StudentHistoryPanel
+          univ="dongguk"
+          idToken={idToken}
+          initialStudentEmail={historyTargetEmail}
+        />
       )}
 
       {/* ──────────────── 2. 문장 등록 & 일레븐랩스 음성 생성 ──────────────── */}

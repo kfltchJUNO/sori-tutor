@@ -988,7 +988,7 @@ export default function Home() {
         const voiceUrl = feedbackVoices[tier] ?? null;
         playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
 
-        // Standalone 단독 실행(비-Embed)이며 일반 유료 코스인 경우에만 토큰 차감 및 DB 저장
+        // Standalone 단독 실행(비-Embed)이며 일반 유료 코스인 경우에만 토큰 차감
         if (!isFreeCourse && currentUser) {
           const reason = courseType === "word" ? "발음 분석 (word)" : courseType === "sentence" ? "발음 분석 (sentence)" : "발음 분석 (dialogue)";
           const spendRes = await spendToken(reason as any, currency);
@@ -996,16 +996,26 @@ export default function Home() {
             if (currency === "heart") setHearts(p => p - 1);
             else setTokens(spendRes.remaining ?? Math.max(0, tokens - cost));
           }
+        }
 
+        // 로그인한 모든 사용자(동국대·단국대 무료 코스 포함)의 학습 기록(history) 및 포인트 저장
+        if (!isEmbedMode && currentUser) {
           await updateDoc(doc(db, "sori_users", currentUser.email), { points: increment(courseType === "word" ? 2 : 3) });
           await updateDailyProgress();
           if (courseType === "dialogue" && targetLineIndex !== null) {
             if (!completedLines.includes(targetLineIndex)) setCompletedLines(prev => [...prev, targetLineIndex]);
           }
           await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
-            text: targetText, score: data.score, recognized: data.recognized,
-            correct: data.correct, feedback: data.explanation, advice: data.advice,
-            type: courseType, date: serverTimestamp(),
+            text: targetText,
+            pronunciation: currentProblem?.pronunciation ?? "",
+            chapter: currentProblem?.chapter ?? null,
+            score: data.score,
+            recognized: data.recognized,
+            correct: data.correct,
+            feedback: data.explanation,
+            advice: data.advice,
+            type: courseType,
+            date: serverTimestamp(),
           });
         }
       }
