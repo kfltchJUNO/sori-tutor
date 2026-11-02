@@ -17,12 +17,13 @@ export interface SoriUser {
   dongguk_status?: "none" | "pending" | "approved";
   dongguk_student_id?: string;
   dongguk_applied_at?: string;
+  dongguk_level?: 1 | 3;
   dankook_status?: "none" | "pending" | "approved";
   dankook_student_id?: string;
   dankook_applied_at?: string;
 }
 
-export type SeriesId = "step-korean" | "basecamp-korean" | "dongguk-1" | "dankook-1";
+export type SeriesId = "step-korean" | "basecamp-korean" | "dongguk-1" | "dongguk-3" | "dankook-1";
 
 export interface CurriculumItem {
   id: string;
@@ -62,6 +63,7 @@ export interface DonggukSentenceItem {
   pronunciation: string;
   rule_formula?: string; // 예: "ㄱ 받침 + ㄴ = [ㅇ]"
   chapter: number;
+  level?: 1 | 3;
   audio_path?: string;
   created_at?: any;
 }
@@ -76,7 +78,7 @@ export interface DankookSentenceItem {
   created_at?: any;
 }
 
-export type CourseType = "word" | "sentence" | "dialogue" | "dongguk" | "dankook";
+export type CourseType = "word" | "sentence" | "dialogue" | "dongguk" | "dongguk3" | "dankook";
 
 export interface SyllableMatch {
   char: string;

@@ -41,9 +41,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const univ = searchParams.get("univ") === "dankook" ? "dankook" : "dongguk";
-    const statusField = univ === "dankook" ? "dankook_status" : "dongguk_status";
-    const studentIdField = univ === "dankook" ? "dankook_student_id" : "dongguk_student_id";
+    const univParam = searchParams.get("univ");
+    const univ = univParam === "dankook" ? "dankook" : univParam === "dongguk3" ? "dongguk3" : "dongguk";
+    const statusField = univ === "dankook" ? "dankook_status" : univ === "dongguk3" ? "dongguk3_status" : "dongguk_status";
+    const studentIdField = univ === "dankook" ? "dankook_student_id" : univ === "dongguk3" ? "dongguk3_student_id" : "dongguk_student_id";
 
     // 1. 해당 대학에 신청/승인된 학생 목록 조회
     const usersSnap = await adminDb.collection("sori_users").get();
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
           .limit(100)
           .get();
 
-        const records: StudentHistoryRecord[] = histSnap.docs.map(h => {
+        const allRecords: StudentHistoryRecord[] = histSnap.docs.map(h => {
           const hd = h.data();
           let dateMs: number | null = null;
           if (hd.date?.toMillis) {
@@ -106,6 +107,11 @@ export async function GET(req: NextRequest) {
             dateMs,
           };
         });
+
+        // 💡 등록(인증 완료)된 학생의 경우 해당 대학 등록 문장(univKey) 학습 결과만 표출
+        const records = stu.status === "approved"
+          ? allRecords.filter(r => r.type === univ)
+          : allRecords;
 
         const totalCount = records.length;
         const univCount = records.filter(r => r.type === univ).length;

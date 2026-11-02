@@ -25,14 +25,26 @@ interface DonggukStudent {
   email: string;
   name?: string;
   alias?: string;
-  dongguk_status: "pending" | "approved";
-  dongguk_student_id?: string;
-  dongguk_applied_at?: any;
+  status: "pending" | "approved";
+  student_id?: string;
+  applied_at?: any;
 }
 
 export default function DonggukSection({ idToken, voices, defaultVoiceId }: Props) {
+  const [level, setLevel] = useState<1 | 3>(1);
   const [subTab, setSubTab] = useState<"students" | "sentences" | "records">("students");
   const [historyTargetEmail, setHistoryTargetEmail] = useState<string | null>(null);
+
+  const currentColName = level === 1 ? "sori_curriculum_dongguk" : "sori_curriculum_dongguk3";
+  const statusField = level === 1 ? "dongguk_status" : "dongguk3_status";
+  const studentIdField = level === 1 ? "dongguk_student_id" : "dongguk3_student_id";
+  const appliedAtField = level === 1 ? "dongguk_applied_at" : "dongguk3_applied_at";
+  const portalUrl =
+    level === 1
+      ? "https://sori-tutor.vercel.app/dongguk"
+      : "https://sori-tutor.vercel.app/dongguk3";
+  const portalPath = level === 1 ? "/dongguk" : "/dongguk3";
+  const levelLabel = level === 1 ? "1급" : "3급";
 
   // ── 학생 상태 ─────────────────────────
   const [students, setStudents] = useState<DonggukStudent[]>([]);
@@ -68,14 +80,15 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       const list: DonggukStudent[] = [];
       snap.forEach(d => {
         const data = d.data();
-        if (data.dongguk_status === "pending" || data.dongguk_status === "approved") {
+        const st = data[statusField];
+        if (st === "pending" || st === "approved") {
           list.push({
             email: d.id,
             name: data.name,
             alias: data.alias,
-            dongguk_status: data.dongguk_status,
-            dongguk_student_id: data.dongguk_student_id,
-            dongguk_applied_at: data.dongguk_applied_at,
+            status: st,
+            student_id: data[studentIdField],
+            applied_at: data[appliedAtField],
           });
         }
       });
@@ -88,15 +101,15 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
   };
 
   // ── 학생 승인 / 해제 ───────────────────
-  const handleUpdateStudentStatus = async (email: string, status: "approved" | "none") => {
+  const handleUpdateStudentStatus = async (email: string, nextStatus: "approved" | "none") => {
     try {
-      await updateDoc(doc(db, "sori_users", email), { dongguk_status: status });
+      await updateDoc(doc(db, "sori_users", email), { [statusField]: nextStatus });
       setStudents(prev =>
-        status === "none"
+        nextStatus === "none"
           ? prev.filter(s => s.email !== email)
-          : prev.map(s => s.email === email ? { ...s, dongguk_status: status } : s)
+          : prev.map(s => (s.email === email ? { ...s, status: nextStatus } : s))
       );
-      alert(status === "approved" ? "학생이 승인되었습니다! 🎉" : "승인이 해제되었습니다.");
+      alert(nextStatus === "approved" ? "학생이 승인되었습니다! 🎉" : "승인이 해제되었습니다.");
     } catch (e) {
       console.error(e);
       alert("상태 변경 실패");
@@ -108,7 +121,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     setLoadingSentences(true);
     try {
       const snap = await getDocs(
-        query(collection(db, "sori_curriculum_dongguk"), orderBy("chapter", "asc"))
+        query(collection(db, currentColName), orderBy("chapter", "asc"))
       );
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as DonggukSentenceItem));
       setSentences(list);
@@ -176,11 +189,12 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
     if (!newText.trim()) return alert("문장을 입력하세요.");
     setAddingSentence(true);
     try {
-      const docRef = await addDoc(collection(db, "sori_curriculum_dongguk"), {
+      const docRef = await addDoc(collection(db, currentColName), {
         text: newText.trim(),
         pronunciation: newPronunciation.trim() || newText.trim(),
         rule_formula: newRuleFormula.trim() || "",
         chapter: Number(newChapter) || 1,
+        level: level,
         voice_id: newVoiceId,
         has_audio: false,
         created_at: serverTimestamp(),
@@ -195,7 +209,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           body: JSON.stringify({
             action: "save",
             docId: docRef.id,
-            colName: "sori_curriculum_dongguk",
+            colName: currentColName,
             text: newText.trim(),
             voiceId: newVoiceId,
             audioBase64: newPreviewBase64 || undefined,
@@ -229,7 +243,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
   const handleDeleteSentence = async (id: string) => {
     if (!confirm("이 문장을 삭제하시겠습니까?")) return;
     try {
-      await deleteDoc(doc(db, "sori_curriculum_dongguk", id));
+      await deleteDoc(doc(db, currentColName, id));
       setSentences(prev => prev.filter(s => s.id !== id));
     } catch (e) {
       console.error(e);
@@ -277,7 +291,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
         body: JSON.stringify({
           action: "save",
           docId: item.id,
-          colName: "sori_curriculum_dongguk",
+          colName: currentColName,
           text: item.text,
           voiceId,
           audioBase64: base64,
@@ -324,22 +338,54 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
   useEffect(() => {
     loadStudents();
     loadSentences();
-  }, []);
+  }, [level]);
 
-  const pendingStudents = students.filter(s => s.dongguk_status === "pending");
-  const approvedStudents = students.filter(s => s.dongguk_status === "approved");
+  const pendingStudents = students.filter(s => s.status === "pending");
+  const approvedStudents = students.filter(s => s.status === "approved");
 
   return (
     <div className="space-y-6">
+      {/* ── 0. 급수 선택 (1급 / 3급 슬롯) ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="inline-flex p-1.5 bg-amber-100/70 rounded-2xl border border-amber-200 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setLevel(1)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition ${
+              level === 1
+                ? "bg-white text-amber-900 shadow-sm"
+                : "text-amber-800 hover:text-amber-950"
+            }`}
+          >
+            <span>🌱</span> 동국한국어 1급
+          </button>
+          <button
+            type="button"
+            onClick={() => setLevel(3)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition ${
+              level === 3
+                ? "bg-orange-600 text-white shadow-sm"
+                : "text-amber-800 hover:text-amber-950"
+            }`}
+          >
+            <span>🌿</span> 동국한국어 3급
+          </button>
+        </div>
+
+        <div className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
+          현재 선택: <strong className="text-amber-700 font-black">동국한국어 {levelLabel}</strong> ({currentColName})
+        </div>
+      </div>
+
       {/* 헤더 안내 */}
       <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl p-6 shadow-md flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <GraduationCap size={28} />
-            <h2 className="text-xl font-black">동국대학교 한국어 1급 전용 관리</h2>
+            <h2 className="text-xl font-black">동국대학교 한국어 {levelLabel} 전용 관리</h2>
           </div>
           <p className="text-xs text-amber-100">
-            학생들의 연결 요청을 승인하고, 1급 맞춤 문장과 일레븐랩스 정답 발음 음성을 관리합니다.
+            학생들의 {levelLabel} 연결 요청을 승인하고, {levelLabel} 맞춤 문장과 일레븐랩스 정답 발음 음성을 관리합니다.
           </p>
         </div>
       </div>
@@ -348,39 +394,41 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       <div className="bg-white rounded-2xl p-5 border border-amber-200 shadow-sm flex flex-col sm:flex-row items-center gap-5">
         <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs shrink-0">
           <img
-            src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://sori-tutor.vercel.app/dongguk"
-            alt="동국대 전용 QR코드"
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${portalUrl}`}
+            alt={`동국대 ${levelLabel} 전용 QR코드`}
             className="w-28 h-28"
           />
         </div>
         <div className="space-y-2 flex-1 text-center sm:text-left">
           <div className="flex items-center gap-2 justify-center sm:justify-start">
             <span className="text-xs font-black bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">
-              학생 배포 전용
+              학생 배포 전용 ({levelLabel})
             </span>
-            <h3 className="font-black text-slate-900 text-sm">동국대 학생 전용 페이지 QR 코드</h3>
+            <h3 className="font-black text-slate-900 text-sm">
+              동국대 {levelLabel} 학생 전용 페이지 QR 코드
+            </h3>
           </div>
           <p className="text-xs text-slate-900 leading-relaxed">
-            학생들에게 이 QR 코드 또는 링크를 주시면, <strong>동국한국어 1급 전용 화면</strong>으로 즉시 연결됩니다.<br />
-            (학생이 인증 요청을 보내면 아래 '학생 승인 관리'에서 승인해 주시면 됩니다.)
+            학생들에게 이 QR 코드 또는 링크를 주시면, <strong>동국한국어 {levelLabel} 전용 화면</strong>으로 즉시 연결됩니다.<br />
+            (학생이 인증 요청을 보내면 아래 &apos;학생 승인 관리&apos;에서 승인해 주시면 됩니다.)
           </p>
           <div className="flex items-center gap-2 pt-1 justify-center sm:justify-start">
             <input
               readOnly
-              value="https://sori-tutor.vercel.app/dongguk"
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono w-56 select-all"
+              value={portalUrl}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono w-64 select-all"
             />
             <button
               onClick={() => {
-                navigator.clipboard.writeText("https://sori-tutor.vercel.app/dongguk");
-                alert("동국대 전용 페이지 링크가 복사되었습니다! 📋");
+                navigator.clipboard.writeText(portalUrl);
+                alert(`동국대 ${levelLabel} 전용 페이지 링크가 복사되었습니다! 📋`);
               }}
               className="text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg transition"
             >
               링크 복사
             </button>
             <a
-              href="/dongguk"
+              href={portalPath}
               target="_blank"
               rel="noreferrer"
               className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold px-3 py-1.5 rounded-lg transition"
@@ -468,9 +516,9 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                       <span className="font-black text-slate-900 text-base">
                         {student.name || student.alias || "학생"}
                       </span>
-                      {student.dongguk_student_id && (
+                      {student.student_id && (
                         <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-md">
-                          학번/정보: {student.dongguk_student_id}
+                          학번/정보: {student.student_id}
                         </span>
                       )}
                     </div>
@@ -512,8 +560,8 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                     <div>
                       <p className="font-bold text-sm text-slate-900">{student.name || student.alias || "학생"}</p>
                       <p className="text-[11px] text-slate-900 font-mono truncate max-w-[200px]">{student.email}</p>
-                      {student.dongguk_student_id && (
-                        <span className="text-[10px] text-amber-700 font-semibold">{student.dongguk_student_id}</span>
+                      {student.student_id && (
+                        <span className="text-[10px] text-amber-700 font-semibold">{student.student_id}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -544,7 +592,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       {/* ──────────────── 1-2. 학생 학습 기록 조회 ──────────────── */}
       {subTab === "records" && (
         <StudentHistoryPanel
-          univ="dongguk"
+          univ={level === 1 ? "dongguk" : "dongguk3"}
           idToken={idToken}
           initialStudentEmail={historyTargetEmail}
         />
@@ -556,7 +604,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           {/* 문장 등록 폼 */}
           <form onSubmit={handleAddSentence} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h3 className="font-black text-base text-slate-900 flex items-center gap-2 border-b pb-3">
-              <Plus size={18} className="text-amber-500" /> 동국한국어 1급 새 문장 등록
+              <Plus size={18} className="text-amber-500" /> 동국한국어 {levelLabel} 새 문장 등록
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="md:col-span-3">
@@ -697,7 +745,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
-                <BookOpen size={18} className="text-amber-500" /> 등록된 1급 문장 목록 ({sentences.length}개)
+                <BookOpen size={18} className="text-amber-500" /> 등록된 {levelLabel} 문장 목록 ({sentences.length}개)
               </h3>
               <button
                 onClick={loadSentences}

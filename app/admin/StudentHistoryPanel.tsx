@@ -14,7 +14,7 @@ import type {
 } from "@/app/api/admin/student-history/route";
 
 interface Props {
-  univ: "dongguk" | "dankook";
+  univ: "dongguk" | "dongguk3" | "dankook";
   idToken: string;
   initialStudentEmail?: string | null;
 }
@@ -41,6 +41,8 @@ function getCourseLabel(type: string) {
   switch (type) {
     case "dongguk":
       return { text: "동국대 1급", cls: "bg-amber-100 text-amber-800" };
+    case "dongguk3":
+      return { text: "동국대 3급", cls: "bg-orange-100 text-orange-800" };
     case "dankook":
       return { text: "단국대 코스", cls: "bg-blue-100 text-blue-800" };
     case "word":
@@ -67,9 +69,11 @@ export default function StudentHistoryPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
-  const isDongguk = univ === "dongguk";
-  const univLabel = isDongguk ? "동국대" : "단국대";
-  const accentColor = isDongguk ? "amber" : "blue";
+  const isDongguk = univ.startsWith("dongguk");
+  const univLabel =
+    univ === "dongguk" ? "동국대 1급" : univ === "dongguk3" ? "동국대 3급" : "단국대";
+  const accentColor =
+    univ === "dongguk" ? "amber" : univ === "dongguk3" ? "orange" : "blue";
 
   useEffect(() => {
     if (initialStudentEmail !== undefined) {

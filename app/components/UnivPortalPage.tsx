@@ -19,7 +19,7 @@ import { playScoreFeedback, getTier } from "@/lib/scoreSound";
 import { useFeedbackVoices } from "@/hooks/useFeedbackVoices";
 
 export interface UnivPortalConfig {
-  univKey: "dongguk" | "dankook";
+  univKey: "dongguk" | "dongguk3" | "dankook";
   univName: "동국대학교" | "단국대학교";
   title: string;
   subTitle: string;

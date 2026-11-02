@@ -70,6 +70,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── 대학 전용 커리큘럼 컬렉션 ──
+    match /sori_curriculum_dongguk/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /sori_curriculum_dongguk3/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /sori_curriculum_dankook/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     // ── 관리자 CMS 및 초안 컬렉션 ──
     match /sori_drafts/{draftId} {
       allow read, write: if isAdmin();
