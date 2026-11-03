@@ -1500,7 +1500,7 @@ export default function AdminPage() {
           onClick={() => setShowGlobalNotiModal(true)}
           className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow transition"
         >
-          <Bell size={14} /> 학습 독려 알림 / 예약 발송
+          <Bell size={14} /> 학생 &apos;공부할 시간이에요 ⏰&apos; 알림 발송 / 예약
         </button>
       </header>
 

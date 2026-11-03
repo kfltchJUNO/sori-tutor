@@ -271,7 +271,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
         Notification.requestPermission().catch(() => {});
       }
-      alert("선생님께 인증 요청을 보냈습니다! ⏳\n선생님 확인(인증)이 완료되면 공부해보실 수 있도록 알람(알림)을 보내드릴게요 🔔");
+      alert("선생님께 인증 요청을 보냈습니다! ⏳\n선생님 확인이 완료되면 바로 공부할 수 있도록 '공부할 시간이에요 ⏰' 알림을 보내드릴게요 🔔");
     } catch (e) {
       console.error(e);
       alert("인증 요청 실패");
@@ -651,7 +651,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                 <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
                   <Bell size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   <p className="leading-relaxed">
-                    선생님께서 인증을 완료하시면 바로 공부해보실 수 있도록 <strong>학습 알람(알림)</strong>을 보내드려요! 🔔
+                    선생님께서 인증을 완료하시면 바로 공부를 시작할 수 있도록 <strong>&apos;공부할 시간이에요 ⏰&apos; 알림</strong>을 보내드려요! 🔔
                   </p>
                 </div>
 
@@ -693,7 +693,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
               <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-center gap-2.5 text-left">
                 <Bell size={18} className="text-amber-600 shrink-0" />
                 <p className="leading-relaxed">
-                  선생님 인증이 완료되면 바로 공부를 시작할 수 있도록 <strong>알람(알림)</strong>을 보내드립니다 🔔
+                  선생님 확인이 완료되면 바로 공부를 시작할 수 있도록 <strong>&apos;공부할 시간이에요 ⏰&apos; 알림</strong>을 보내드립니다 🔔
                 </p>
               </div>
 
@@ -722,10 +722,10 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                     </span>
                     <div className="min-w-0">
                       <p className="text-xs font-black truncate">
-                        선생님의 새로운 학습 독려 알림이 {unreadNotiCount}개 있습니다!
+                        선생님이 보낸 &apos;공부할 시간이에요 ⏰&apos; 알림이 {unreadNotiCount}개 도착했어요!
                       </p>
                       <p className="text-[10px] text-amber-100 truncate">
-                        눌러서 확인하고 오늘의 발음 훈련을 시작해보세요.
+                        눌러서 확인하고 오늘의 한국어 공부를 시작해보세요.
                       </p>
                     </div>
                   </div>
@@ -1007,7 +1007,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                 </div>
                 <div>
                   <h3 className="font-black text-base text-slate-900 leading-tight">선생님 알림함</h3>
-                  <p className="text-[11px] text-slate-400">도착한 학습 독려 알림 및 공지</p>
+                  <p className="text-[11px] text-slate-400">도착한 &apos;공부할 시간이에요 ⏰&apos; 알림과 메시지</p>
                 </div>
               </div>
               <button
@@ -1130,7 +1130,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Bell size={16} className={allowNotifications ? "text-amber-500" : "text-slate-400"} />
-                  <span className="text-xs font-black text-slate-800">학습 알람(알림) 받기</span>
+                  <span className="text-xs font-black text-slate-800">선생님의 &apos;공부할 시간이에요 ⏰&apos; 알림 받기</span>
                 </div>
                 {/* 토글 스위치 */}
                 <button
@@ -1151,8 +1151,8 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
               </div>
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 {allowNotifications
-                  ? "🔔 선생님의 학습 독려 알림과 인증 완료 소식을 받습니다. (기본 설정)"
-                  : "🔕 알람이 꺼졌습니다. 상단 알림함 배너가 표시되지 않습니다."}
+                  ? "🔔 선생님의 '공부할 시간이에요 ⏰' 알림과 인증 완료 소식을 받습니다. (기본 설정)"
+                  : "🔕 알림이 꺼졌습니다. 상단 공부 알림 배너가 표시되지 않습니다."}
               </p>
             </div>
 
