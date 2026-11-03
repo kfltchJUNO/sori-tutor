@@ -13,7 +13,7 @@ import {
 import {
   Volume2, Mic, Square, RefreshCw, ChevronLeft, ChevronRight,
   Sparkles, CheckCircle2, Clock, AlertCircle, Languages, Loader2, LogOut,
-  Shuffle, Layers, Bell, X
+  Shuffle, Layers, Bell, X, Settings, VolumeX, Sliders
 } from "lucide-react";
 import AudioWaveform from "./AudioWaveform";
 import PwaInstallPrompt from "./PwaInstallPrompt";
@@ -84,6 +84,44 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
   const [inboxList, setInboxList] = useState<any[]>([]);
   const [unreadNotiCount, setUnreadNotiCount] = useState(0);
   const [showInboxModal, setShowInboxModal] = useState(false);
+
+  // ── 환경 설정 상태 (음량 조절 & 알람 허용 ON/OFF) ──
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [volume, setVolume] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sori_voice_volume");
+      if (saved !== null) return Number(saved);
+    }
+    return 1.0; // 기본 100%
+  });
+  const [allowNotifications, setAllowNotifications] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sori_allow_notifications");
+      if (saved !== null) return saved === "true";
+    }
+    return true; // 기본 설정은 알람 허용 (ON)
+  });
+
+  const handleVolumeChange = (newVol: number) => {
+    setVolume(newVol);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sori_voice_volume", newVol.toString());
+    }
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.volume = newVol;
+    }
+  };
+
+  const handleToggleNotifications = (targetVal?: boolean) => {
+    const nextVal = targetVal !== undefined ? targetVal : !allowNotifications;
+    setAllowNotifications(nextVal);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sori_allow_notifications", nextVal.toString());
+      if (nextVal && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  };
 
   const isAmber = config.themeColor === "amber";
   const primaryBg = isAmber ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700";
@@ -229,7 +267,11 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         [config.appliedAtField]: serverTimestamp(),
       });
       await loadUserData(currentUser.email);
-      alert("선생님께 인증 요청을 보냈습니다! ⏳\n선생님 확인이 완료되면 바로 학습이 가능합니다.");
+      // 알림 권한 요청
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+      alert("선생님께 인증 요청을 보냈습니다! ⏳\n선생님 확인(인증)이 완료되면 공부해보실 수 있도록 알람(알림)을 보내드릴게요 🔔");
     } catch (e) {
       console.error(e);
       alert("인증 요청 실패");
@@ -328,7 +370,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         const isSilence = !data.recognized || data.recognized === "(침묵)" || data.recognized === "(잡음)";
         const tier = getTier(data.score, isSilence);
         const voiceUrl = feedbackVoices[tier] ?? null;
-        playScoreFeedback(data.score, isSilence, voiceUrl).catch(() => {});
+        playScoreFeedback(data.score, isSilence, voiceUrl, volume).catch(() => {});
 
         // 학생 학습 기록(history) Firestore 저장 (관리자 페이지에서 확인 가능)
         if (currentUser?.email) {
@@ -386,6 +428,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     }
     if (url) {
       const audio = new Audio(url);
+      audio.volume = Math.max(0, Math.min(1, volume));
       audioPlayerRef.current = audio;
       setPlayingAudio(true);
       audio.onended = () => setPlayingAudio(false);
@@ -394,6 +437,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "ko-KR";
       u.rate = 0.85;
+      u.volume = Math.max(0, Math.min(1, volume));
       setPlayingAudio(true);
       u.onend = () => setPlayingAudio(false);
       window.speechSynthesis.speak(u);
@@ -508,32 +552,41 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
               <p className="text-[10px] text-slate-400 font-bold">{config.subTitle}</p>
             </div>
           </div>
-          {currentUser && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleOpenInbox}
-                className="relative p-1.5 text-slate-600 hover:text-amber-600 rounded-full hover:bg-slate-100 transition"
-                title="선생님 알림함"
-              >
-                <Bell size={18} />
-                {unreadNotiCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
-                    {unreadNotiCount > 9 ? "9+" : unreadNotiCount}
-                  </span>
-                )}
-              </button>
-              <span className="text-xs text-slate-600 font-bold truncate max-w-[90px]">
-                {userData?.name || currentUser.displayName || "학생"}
-              </span>
-              <button
-                onClick={() => signOut(auth)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-                title="로그아웃"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-100 transition"
+              title="음량 및 알람 설정"
+            >
+              <Settings size={18} />
+            </button>
+            {currentUser && (
+              <>
+                <button
+                  onClick={handleOpenInbox}
+                  className="relative p-1.5 text-slate-600 hover:text-amber-600 rounded-full hover:bg-slate-100 transition"
+                  title="선생님 알림함"
+                >
+                  <Bell size={18} />
+                  {unreadNotiCount > 0 && allowNotifications && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+                      {unreadNotiCount > 9 ? "9+" : unreadNotiCount}
+                    </span>
+                  )}
+                </button>
+                <span className="text-xs text-slate-600 font-bold truncate max-w-[80px] hidden sm:inline">
+                  {userData?.name || currentUser.displayName || "학생"}
+                </span>
+                <button
+                  onClick={() => signOut(auth)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                  title="로그아웃"
+                >
+                  <LogOut size={16} />
+                </button>
+              </>
+            )}
+          </div>
         </header>
 
         {/* ── 본문 콘텐츠 ── */}
@@ -594,6 +647,14 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                     className="w-full border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white transition"
                   />
                 </div>
+
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                  <Bell size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    선생님께서 인증을 완료하시면 바로 공부해보실 수 있도록 <strong>학습 알람(알림)</strong>을 보내드려요! 🔔
+                  </p>
+                </div>
+
                 <button
                   type="submit"
                   disabled={applying}
@@ -629,6 +690,13 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                 <p className="font-bold text-slate-700">입력 학번/이름: {userData?.[config.studentIdField] || "미입력"}</p>
               </div>
 
+              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-center gap-2.5 text-left">
+                <Bell size={18} className="text-amber-600 shrink-0" />
+                <p className="leading-relaxed">
+                  선생님 인증이 완료되면 바로 공부를 시작할 수 있도록 <strong>알람(알림)</strong>을 보내드립니다 🔔
+                </p>
+              </div>
+
               <button
                 onClick={() => loadUserData(currentUser.email)}
                 className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2"
@@ -643,7 +711,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
             <div className="flex-1 flex flex-col justify-between space-y-4 animate-in fade-in">
 
               {/* 선생님의 새로운 알림 배너 */}
-              {unreadNotiCount > 0 && (
+              {unreadNotiCount > 0 && allowNotifications && (
                 <div
                   onClick={handleOpenInbox}
                   className="p-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl shadow-sm cursor-pointer flex items-center justify-between gap-2 hover:opacity-95 transition"
@@ -826,10 +894,10 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                         <button
                           onClick={handleTranslate}
                           disabled={translating}
-                          className="flex items-center gap-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg transition"
+                          className="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg transition"
                         >
                           <Languages size={12} />
-                          {translating ? "번역 중..." : "무료 번역"}
+                          {translating ? "번역 중..." : "🌐 뜻 번역 보기"}
                         </button>
                       </div>
 
@@ -880,15 +948,15 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                           disabled={analyzing}
                           className={`flex-1 py-4 text-white font-black text-base rounded-2xl shadow-lg transition flex items-center justify-center gap-2 ${primaryBg} disabled:opacity-50`}
                         >
-                          <Mic size={20} />
-                          {audioBlob ? "다시 말하기" : "발음 연습하기"}
+                          <span className="text-xl">🗣️</span>
+                          {audioBlob ? "다시 말하기" : "소리 내어 말하기"}
                         </button>
                       ) : (
                         <button
                           onClick={stopRecording}
                           className="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white font-black text-base rounded-2xl shadow-lg transition flex items-center justify-center gap-2 animate-pulse"
                         >
-                          <Square size={20} /> 녹음 멈추기
+                          <span className="text-xl">⏹️</span> 말하기 멈추기
                         </button>
                       )}
 
@@ -907,10 +975,10 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                       <button
                         onClick={handleAnalyze}
                         disabled={analyzing}
-                        className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black text-sm rounded-2xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-base rounded-2xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50"
                       >
-                        {analyzing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                        {analyzing ? "AI 발음 채점 중..." : "AI 발음 채점 받기 (무료)"}
+                        {analyzing ? <Loader2 size={18} className="animate-spin" /> : <span className="text-xl">🎯</span>}
+                        {analyzing ? "발음 분석·평가 중..." : "발음 확인하기 (평가받기)"}
                       </button>
                     )}
                   </div>
@@ -987,6 +1055,112 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
               className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition shrink-0"
             >
               닫기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 환경 설정 모달 (음량 조절 & 알람 허용 ON/OFF) ── */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                  <Settings size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 leading-tight">학습 환경 설정</h3>
+                  <p className="text-[11px] text-slate-400">목소리 음량 및 알림 설정</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 1. 음량 조절 */}
+            <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  {volume === 0 ? (
+                    <VolumeX size={16} className="text-slate-400" />
+                  ) : (
+                    <Volume2 size={16} className={primaryText} />
+                  )}
+                  <span className="text-xs font-black text-slate-800">선생님 / 피드백 음량</span>
+                </div>
+                <span className="text-xs font-mono font-bold text-slate-600">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={e => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-full accent-indigo-600 cursor-pointer"
+              />
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-[10px] text-slate-400">0% (음소거)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sample = new SpeechSynthesisUtterance("안녕하세요! 소리튜터입니다.");
+                    sample.lang = "ko-KR";
+                    sample.volume = volume;
+                    window.speechSynthesis?.cancel();
+                    window.speechSynthesis?.speak(sample);
+                  }}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-2xs transition"
+                >
+                  <Volume2 size={12} /> 소리 테스트
+                </button>
+                <span className="text-[10px] text-slate-400">100% (최대)</span>
+              </div>
+            </div>
+
+            {/* 2. 알람 허용 ON/OFF (기본 허용) */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Bell size={16} className={allowNotifications ? "text-amber-500" : "text-slate-400"} />
+                  <span className="text-xs font-black text-slate-800">학습 알람(알림) 받기</span>
+                </div>
+                {/* 토글 스위치 */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={allowNotifications}
+                  onClick={() => handleToggleNotifications(!allowNotifications)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    allowNotifications ? "bg-indigo-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      allowNotifications ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                {allowNotifications
+                  ? "🔔 선생님의 학습 독려 알림과 인증 완료 소식을 받습니다. (기본 설정)"
+                  : "🔕 알람이 꺼졌습니다. 상단 알림함 배너가 표시되지 않습니다."}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowSettingsModal(false)}
+              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-xl shadow-md transition"
+            >
+              설정 완료
             </button>
           </div>
         </div>

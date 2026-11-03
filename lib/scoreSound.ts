@@ -133,9 +133,10 @@ export const EFFECT_DURATION_MS: Record<ScoreTier, number> = {
 };
 
 // ── 멘트 MP3 재생 ────────────────────────────────────────
-export async function playFeedbackVoice(url: string): Promise<void> {
+export async function playFeedbackVoice(url: string, volume = 1.0): Promise<void> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
+    audio.volume = Math.max(0, Math.min(1, volume));
     audio.onended = () => resolve();
     audio.onerror = () => resolve(); // 실패해도 조용히 넘어감
     audio.play().catch(() => resolve());
@@ -146,7 +147,8 @@ export async function playFeedbackVoice(url: string): Promise<void> {
 export async function playScoreFeedback(
   score: number,
   isSilence: boolean,
-  voiceUrl: string | null
+  voiceUrl: string | null,
+  volume = 1.0
 ): Promise<void> {
   const tier = getTier(score, isSilence);
   playEffectByTier(tier);
@@ -154,6 +156,6 @@ export async function playScoreFeedback(
   if (voiceUrl) {
     const delay = EFFECT_DURATION_MS[tier];
     await new Promise(r => setTimeout(r, delay));
-    await playFeedbackVoice(voiceUrl);
+    await playFeedbackVoice(voiceUrl, volume);
   }
 }

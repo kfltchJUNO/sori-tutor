@@ -414,7 +414,7 @@ export default function PracticeView({
                 onClick={onTranslate}
                 className="text-xs bg-white text-blue-600 border border-blue-200 px-2 py-1 rounded-lg shadow-sm flex items-center gap-1 hover:bg-blue-50 transition"
               >
-                <Languages size={12} /> {courseType === "dongguk" || courseType === "dankook" ? "무료 번역" : <>번역 (1<SoriIcon size={12} className="inline ml-0.5" />)</>}
+                <Languages size={12} /> {courseType === "dongguk" || courseType === "dankook" ? "뜻 번역 보기" : <>번역 (1<SoriIcon size={12} className="inline ml-0.5" />)</>}
               </button>
             </div>
             <div className="flex items-start gap-2">
