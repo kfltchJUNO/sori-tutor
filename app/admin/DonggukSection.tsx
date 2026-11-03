@@ -10,10 +10,11 @@ import {
 } from "firebase/firestore";
 import {
   GraduationCap, Users, BookOpen, Plus, Trash2, Volume2,
-  Loader2, CheckCircle, XCircle, RefreshCw, Music, Sparkles, BarChart3,
+  Loader2, CheckCircle, XCircle, RefreshCw, Music, Sparkles, BarChart3, Bell
 } from "lucide-react";
 import type { DonggukSentenceItem } from "@/types";
 import StudentHistoryPanel from "./StudentHistoryPanel";
+import NotificationSenderModal from "./NotificationSenderModal";
 
 interface Props {
   idToken: string;
@@ -34,6 +35,8 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
   const [level, setLevel] = useState<1 | 3>(1);
   const [subTab, setSubTab] = useState<"students" | "sentences" | "records">("students");
   const [historyTargetEmail, setHistoryTargetEmail] = useState<string | null>(null);
+  const [showNotiModal, setShowNotiModal] = useState(false);
+  const [notiTargetEmail, setNotiTargetEmail] = useState<string | null>(null);
 
   const currentColName = level === 1 ? "sori_curriculum_dongguk" : "sori_curriculum_dongguk3";
   const statusField = level === 1 ? "dongguk_status" : "dongguk3_status";
@@ -378,7 +381,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
       </div>
 
       {/* 헤더 안내 */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl p-6 shadow-md flex items-center justify-between">
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <GraduationCap size={28} />
@@ -388,6 +391,15 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
             학생들의 {levelLabel} 연결 요청을 승인하고, {levelLabel} 맞춤 문장과 일레븐랩스 정답 발음 음성을 관리합니다.
           </p>
         </div>
+        <button
+          onClick={() => {
+            setNotiTargetEmail(null);
+            setShowNotiModal(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white text-amber-900 hover:bg-amber-50 font-black text-xs rounded-xl shadow-sm transition shrink-0"
+        >
+          <Bell size={15} className="text-amber-600" /> {levelLabel} 학생 알림 발송 / 예약
+        </button>
       </div>
 
       {/* 학생 배포용 QR 코드 카드 */}
@@ -573,6 +585,16 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                         className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1"
                       >
                         <BarChart3 size={12} /> 학습 기록
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNotiTargetEmail(student.email);
+                          setShowNotiModal(true);
+                        }}
+                        className="text-xs bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 p-1.5 rounded-lg transition"
+                        title="이 학생에게 알림 보내기"
+                      >
+                        <Bell size={13} />
                       </button>
                       <button
                         onClick={() => handleUpdateStudentStatus(student.email, "none")}
@@ -881,6 +903,15 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
           </div>
         </div>
       )}
+
+      {/* 학습 독려 알림 / 예약 모달 */}
+      <NotificationSenderModal
+        isOpen={showNotiModal}
+        onClose={() => setShowNotiModal(false)}
+        idToken={idToken}
+        defaultTargetType={level === 1 ? "dongguk" : "dongguk3"}
+        initialStudentEmail={notiTargetEmail}
+      />
     </div>
   );
 }

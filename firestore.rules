@@ -92,6 +92,9 @@ service cloud.firestore {
       allow read: if true; // 공개 오디오 URL
       allow write: if isAdmin();
     }
+    match /sori_scheduled_notifications/{notiId} {
+      allow read, write: if isAdmin();
+    }
 
     // ── 결제/라이선스 대기 (서버 Admin SDK 전용) ──
     match /sori_pending_charges/{chargeId} {

@@ -15,6 +15,18 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "any",
         type: "image/x-icon",
       },
+      {
+        src: "/sori.jpg",
+        sizes: "192x192",
+        type: "image/jpeg",
+        purpose: "maskable",
+      },
+      {
+        src: "/sori.jpg",
+        sizes: "512x512",
+        type: "image/jpeg",
+        purpose: "any",
+      },
     ],
   };
 }

@@ -13,6 +13,7 @@ import Link from "next/link";
 import Login from "./components/Login";
 import CheckinModal from "./components/CheckinModal";
 import LicenseModal, { useDeepLink, DeepLinkParams } from "./components/LicenseModal";
+import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import HomeView from "./components/views/HomeView";
 import PracticeView from "./components/views/PracticeView";
 import AudioWaveform from "./components/AudioWaveform";
@@ -1903,6 +1904,9 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* 최초 입장 시 바탕화면 아이콘 저장 안내 PWA 모달 */}
+      <PwaInstallPrompt />
     </main>
   );
 }

@@ -8,14 +8,15 @@ import { auth, db, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc,
-  query, orderBy, serverTimestamp, setDoc
+  query, orderBy, serverTimestamp, setDoc, onSnapshot, where, writeBatch
 } from "firebase/firestore";
 import {
   Volume2, Mic, Square, RefreshCw, ChevronLeft, ChevronRight,
   Sparkles, CheckCircle2, Clock, AlertCircle, Languages, Loader2, LogOut,
-  Shuffle, Layers
+  Shuffle, Layers, Bell, X
 } from "lucide-react";
 import AudioWaveform from "./AudioWaveform";
+import PwaInstallPrompt from "./PwaInstallPrompt";
 import { playScoreFeedback, getTier } from "@/lib/scoreSound";
 import { useFeedbackVoices } from "@/hooks/useFeedbackVoices";
 
@@ -79,6 +80,11 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
 
   const feedbackVoices = useFeedbackVoices();
 
+  // ── 알림(inbox) 상태 ──
+  const [inboxList, setInboxList] = useState<any[]>([]);
+  const [unreadNotiCount, setUnreadNotiCount] = useState(0);
+  const [showInboxModal, setShowInboxModal] = useState(false);
+
   const isAmber = config.themeColor === "amber";
   const primaryBg = isAmber ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700";
   const primaryText = isAmber ? "text-amber-600" : "text-blue-600";
@@ -97,6 +103,52 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     });
     return () => unsub();
   }, []);
+
+  // 알림(inbox) 실시간 리스너
+  useEffect(() => {
+    if (!currentUser?.email) {
+      setInboxList([]);
+      setUnreadNotiCount(0);
+      return;
+    }
+
+    try {
+      const inboxCol = collection(db, "sori_users", currentUser.email, "inbox");
+      const q = query(inboxCol, orderBy("date", "desc"));
+
+      const unsub = onSnapshot(q, (snap) => {
+        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setInboxList(msgs);
+        const unread = msgs.filter((m: any) => !m.read).length;
+        setUnreadNotiCount(unread);
+      }, (err) => {
+        console.error("Inbox listener error:", err);
+      });
+
+      return () => unsub();
+    } catch (e) {
+      console.error(e);
+    }
+  }, [currentUser?.email]);
+
+  // 알림 열기 & 읽음 처리
+  const handleOpenInbox = async () => {
+    setShowInboxModal(true);
+    if (!currentUser?.email || unreadNotiCount === 0) return;
+
+    try {
+      const batch = writeBatch(db);
+      inboxList.forEach(m => {
+        if (!m.read) {
+          batch.update(doc(db, "sori_users", currentUser.email, "inbox", m.id), { read: true });
+        }
+      });
+      await batch.commit();
+      setUnreadNotiCount(0);
+    } catch (e) {
+      console.error("Failed to mark notifications as read:", e);
+    }
+  };
 
   const loadUserData = async (email: string) => {
     try {
@@ -458,7 +510,19 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
           </div>
           {currentUser && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600 font-bold">
+              <button
+                onClick={handleOpenInbox}
+                className="relative p-1.5 text-slate-600 hover:text-amber-600 rounded-full hover:bg-slate-100 transition"
+                title="선생님 알림함"
+              >
+                <Bell size={18} />
+                {unreadNotiCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+                    {unreadNotiCount > 9 ? "9+" : unreadNotiCount}
+                  </span>
+                )}
+              </button>
+              <span className="text-xs text-slate-600 font-bold truncate max-w-[90px]">
                 {userData?.name || currentUser.displayName || "학생"}
               </span>
               <button
@@ -577,6 +641,31 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
           {/* 4. 승인 완료 (Approved) -> 전용 발음 연습 화면 */}
           {currentUser && studentStatus === "approved" && (
             <div className="flex-1 flex flex-col justify-between space-y-4 animate-in fade-in">
+
+              {/* 선생님의 새로운 알림 배너 */}
+              {unreadNotiCount > 0 && (
+                <div
+                  onClick={handleOpenInbox}
+                  className="p-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl shadow-sm cursor-pointer flex items-center justify-between gap-2 hover:opacity-95 transition"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="p-1.5 bg-white/20 rounded-xl">
+                      <Bell size={16} className="animate-bounce" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black truncate">
+                        선생님의 새로운 학습 독려 알림이 {unreadNotiCount}개 있습니다!
+                      </p>
+                      <p className="text-[10px] text-amber-100 truncate">
+                        눌러서 확인하고 오늘의 발음 훈련을 시작해보세요.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold bg-white text-amber-800 px-2 py-0.5 rounded-lg shrink-0">
+                    확인하기
+                  </span>
+                </div>
+              )}
 
               {loadingProblems ? (
                 <div className="my-auto text-center py-20 text-slate-400">
@@ -835,6 +924,73 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
           )}
         </main>
       </div>
+
+      {/* ── 최초 입장 시 바탕화면 아이콘 저장 안내 PWA 모달 ── */}
+      <PwaInstallPrompt portalName={config.title} />
+
+      {/* ── 선생님 알림함 모달 ── */}
+      {showInboxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <Bell size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 leading-tight">선생님 알림함</h3>
+                  <p className="text-[11px] text-slate-400">도착한 학습 독려 알림 및 공지</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInboxModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
+              {inboxList.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  도착한 알림이 없습니다.
+                </div>
+              ) : (
+                inboxList.map((msg: any) => (
+                  <div
+                    key={msg.id}
+                    className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        {msg.from || "선생님"}
+                      </span>
+                      {msg.date && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {msg.date?.toDate
+                            ? new Date(msg.date.toDate()).toLocaleDateString("ko-KR")
+                            : "방금 전"}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="font-black text-sm text-slate-900">{msg.title}</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowInboxModal(false)}
+              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition shrink-0"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 
 import DonggukSection from "./DonggukSection";
 import DankookSection from "./DankookSection";
-// app/admin/page.tsx
+import NotificationSenderModal from "./NotificationSenderModal";
 
 import { useEffect, useState, useRef } from "react";
 import { auth, db, adminFetch } from "@/lib/firebase";
@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import {
   Sparkles, CheckCircle, XCircle, Upload, Trash2,
-  RefreshCw, Loader2, Music, Volume2, Wand2, Plus, Edit3,
+  RefreshCw, Loader2, Music, Volume2, Wand2, Plus, Edit3, Bell,
 } from "lucide-react";
 import { ELEVENLABS_VOICES, DEFAULT_MALE_VOICE_ID, ELEVENLABS_EMOTIONS } from "@/lib/elevenlabsVoices";
 
@@ -794,6 +794,7 @@ export default function AdminPage() {
   const [checking, setChecking] = useState(true);
   const [idToken, setIdToken] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("generate");
+  const [showGlobalNotiModal, setShowGlobalNotiModal] = useState(false);
 
   // AI 생성
   const [genType, setGenType] = useState<"word" | "sentence" | "dialogue">("word");
@@ -1490,9 +1491,17 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="bg-slate-900 text-white px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">S</div>
-        <h1 className="text-xl font-black">Sori-Tutor Admin</h1>
+      <header className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">S</div>
+          <h1 className="text-xl font-black">Sori-Tutor Admin</h1>
+        </div>
+        <button
+          onClick={() => setShowGlobalNotiModal(true)}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow transition"
+        >
+          <Bell size={14} /> 학습 독려 알림 / 예약 발송
+        </button>
       </header>
 
       <div className="flex overflow-x-auto bg-white border-b border-slate-200 px-4 gap-1 scrollbar-hide">
@@ -2404,6 +2413,14 @@ export default function AdminPage() {
         )}
 
       </div>
+
+      {/* 전체 통합 학습 독려 알림 / 예약 모달 */}
+      <NotificationSenderModal
+        isOpen={showGlobalNotiModal}
+        onClose={() => setShowGlobalNotiModal(false)}
+        idToken={idToken}
+        defaultTargetType="all_approved"
+      />
     </div>
   );
 }
