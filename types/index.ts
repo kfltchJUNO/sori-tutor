@@ -18,6 +18,9 @@ export interface SoriUser {
   dongguk_student_id?: string;
   dongguk_applied_at?: string;
   dongguk_level?: 1 | 3;
+  dongguk3_status?: "none" | "pending" | "approved";
+  dongguk3_student_id?: string;
+  dongguk3_applied_at?: string;
   dankook_status?: "none" | "pending" | "approved";
   dankook_student_id?: string;
   dankook_applied_at?: string;

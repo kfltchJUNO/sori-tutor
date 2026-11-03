@@ -184,7 +184,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
         pronunciation: newPronunciation.trim() || newText.trim(),
         rule_formula: newRuleFormula.trim() || "",
         meaning_ko: newMeaningKo.trim() || "",
-        chapter: Number(newChapter) || 1,
+        chapter: Number(newChapter) >= 0 ? Number(newChapter) : 0,
         voice_id: newVoiceId,
         has_audio: false,
         created_at: serverTimestamp(),
@@ -637,13 +637,16 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
 
               <div>
                 <label className="text-xs font-bold text-slate-900 block mb-1">단원 (과/Chapter)</label>
-                <input
-                  type="number"
-                  min={1}
+                <select
                   value={newChapter}
                   onChange={e => setNewChapter(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 font-bold outline-none"
+                >
+                  <option value={0}>과 미배정 (공통/기타)</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(n => (
+                    <option key={n} value={n}>{n}과</option>
+                  ))}
+                </select>
               </div>
 
               <div className="md:col-span-2 bg-blue-50/70 p-3.5 rounded-xl border border-blue-200 space-y-3">
@@ -733,7 +736,7 @@ export default function DankookSection({ idToken, voices, defaultVoiceId }: Prop
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="bg-blue-100 text-blue-800 text-[11px] font-black px-2 py-0.5 rounded-md">
-                              {item.chapter}과
+                              {item.chapter ? `${item.chapter}과` : "과 미배정"}
                             </span>
                             <h4 className="font-black text-slate-900 text-base">{item.text}</h4>
                           </div>

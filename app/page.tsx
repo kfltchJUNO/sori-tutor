@@ -105,6 +105,8 @@ export default function Home() {
   const [showDonggukModal, setShowDonggukModal] = useState(false);
   const [donggukStudentIdInput, setDonggukStudentIdInput] = useState("");
   const [donggukApplying, setDonggukApplying] = useState(false);
+  // ── 동국대학교 3급 학생 연동 ─────────────
+  const [dongguk3Status, setDongguk3Status] = useState<"none" | "pending" | "approved">("none");
   // ── 단국대학교 학생 연동 ─────────────
   const [dankookStatus, setDankookStatus] = useState<"none" | "pending" | "approved">("none");
   const [showDankookModal, setShowDankookModal] = useState(false);
@@ -233,6 +235,7 @@ export default function Home() {
       setUserRole(role);
       setUserAlias(data.alias ?? "");
       setDonggukStatus(data.dongguk_status ?? "none");
+      setDongguk3Status(data.dongguk3_status ?? "none");
       setDankookStatus(data.dankook_status ?? "none");
       setSharedMemory(data.shared_memory ?? "");
       setChatCount(data.chat_count ?? 0);
@@ -461,8 +464,18 @@ export default function Home() {
     setShowPaymentModal(false);
   };
 
+  // ── 학교 인증 여부 ─────────────────────
+  const isUnivApproved =
+    donggukStatus === "approved" ||
+    dongguk3Status === "approved" ||
+    dankookStatus === "approved";
+
   // ── 프리토킹 진입 ─────────────────────
   const enterFreeTalking = () => {
+    if (isUnivApproved) {
+      alert("학교 인증 학생 계정은 학교 전용 학습 코스만 이용하실 수 있습니다.");
+      return;
+    }
     if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
     if (userRole !== "guest" && tokens < 2) return setShowPaymentModal(true);
     setViewMode("freetalking");
@@ -633,7 +646,7 @@ export default function Home() {
 
   // ── 번역 — A: 서버 토큰 차감 (동국대/단국대 코스는 무료 제공) ─────────
   const handleTranslateFeedback = async () => {
-    const isUnivCourse = courseType === "dongguk" || courseType === "dankook";
+    const isUnivCourse = courseType === "dongguk" || courseType === "dongguk3" || courseType === "dankook";
     const currency = userRole === "guest" ? "heart" : "token";
     if (!isUnivCourse) {
       if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
@@ -832,8 +845,48 @@ export default function Home() {
     }
   };
 
+  // ── 동국한국어 3급 코스 진입 ─────────
+  const enterDongguk3Course = async () => {
+    setLoading(true);
+    setCourseType("dongguk3");
+    setResult(null);
+    setCompletedLines([]);
+    try {
+      const snap = await getDocs(
+        query(collection(db, "sori_curriculum_dongguk3"), orderBy("chapter", "asc"))
+      );
+      let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (list.length === 0) {
+        list = [
+          {
+            id: "dongguk3-sample-1",
+            text: "취미가 무엇인지 이야기해 봅시다",
+            pronunciation: "[취미가 무어신지 이야기해 봅씨다]",
+            rule_formula: "ㅅ 받침 + ㅂ = [ㅂㅆ]",
+            chapter: 1,
+            tip: "동국한국어 3급 지정 문장입니다.",
+          },
+        ];
+      }
+
+      setProblemList(list);
+      initPractice(list);
+      setViewMode("practice");
+    } catch (e) {
+      console.error("Dongguk3 course load error:", e);
+      alert("문장 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── 커리큘럼 선택 ─────────────────────
   const selectCourse = async (type: "word" | "sentence" | "dialogue") => {
+    if (isUnivApproved) {
+      alert("학교 인증 학생 계정은 학교 전용 학습 코스만 이용하실 수 있습니다.");
+      return;
+    }
     setCourseType(type); setResult(null); setCompletedLines([]);
     if (type === "word" || type === "dialogue") {
       const s = await getDocs(collection(db, type === "word" ? "sori_curriculum_word" : "sori_curriculum_dialogue"));
@@ -942,7 +995,7 @@ export default function Home() {
     const cost = 1;
 
     // Embed 모드이거나 대학 코스(동국대, 단국대)일 때는 토큰/하트 무료 통과
-    const isFreeCourse = isEmbedMode || courseType === "dongguk" || courseType === "dankook";
+    const isFreeCourse = isEmbedMode || courseType === "dongguk" || courseType === "dongguk3" || courseType === "dankook";
     if (!isFreeCourse) {
       if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
       if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
@@ -1155,6 +1208,7 @@ export default function Home() {
                 streak, today_count: todayCount,
                 last_access_date: "", shared_memory: sharedMemory, chat_count: chatCount,
                 dongguk_status: donggukStatus,
+                dongguk3_status: dongguk3Status,
                 dankook_status: dankookStatus,
               }}
               onSelectCourse={selectCourse}
@@ -1164,6 +1218,7 @@ export default function Home() {
               onOpenNickname={() => setShowNicknameModal(true)}
               onOpenDonggukModal={() => setShowDonggukModal(true)}
               onEnterDonggukCourse={enterDonggukCourse}
+              onEnterDongguk3Course={enterDongguk3Course}
               onOpenDankookModal={() => setShowDankookModal(true)}
               onEnterDankookCourse={enterDankookCourse}
             />

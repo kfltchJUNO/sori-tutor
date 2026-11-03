@@ -3,7 +3,7 @@
 // 대학교 전용 발음 훈련 포털 (동국대 / 단국대)
 // 학생은 QR 코드로 접속하여 인증 신청 -> 관리자 승인 후 전용 코스 무료 이용
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import {
@@ -12,7 +12,8 @@ import {
 } from "firebase/firestore";
 import {
   Volume2, Mic, Square, RefreshCw, ChevronLeft, ChevronRight,
-  Sparkles, CheckCircle2, Clock, AlertCircle, Languages, Loader2, LogOut
+  Sparkles, CheckCircle2, Clock, AlertCircle, Languages, Loader2, LogOut,
+  Shuffle, Layers
 } from "lucide-react";
 import AudioWaveform from "./AudioWaveform";
 import { playScoreFeedback, getTier } from "@/lib/scoreSound";
@@ -45,6 +46,11 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
   const [problemList, setProblemList] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadingProblems, setLoadingProblems] = useState(false);
+
+  // 과(단원) 선택 및 랜덤 배치
+  const [selectedChapter, setSelectedChapter] = useState<number | "all" | "unassigned">("all");
+  const [isRandom, setIsRandom] = useState(false);
+  const [randomKey, setRandomKey] = useState(0);
 
   // 녹음 & 분석
   const [recording, setRecording] = useState(false);
@@ -342,10 +348,61 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     }
   };
 
-  const currentProblem = problemList[currentIndex];
+  // ── 등록된 과(단원) 목록 및 미배정 그룹 계산 ──
+  const { chaptersWithCount, unassignedCount } = useMemo(() => {
+    const countMap = new Map<number, number>();
+    let unassigned = 0;
+    problemList.forEach((item) => {
+      const rawCh = item.chapter;
+      const ch = rawCh !== undefined && rawCh !== null && rawCh !== "" ? Number(rawCh) : 0;
+      if (ch && !isNaN(ch) && ch > 0) {
+        countMap.set(ch, (countMap.get(ch) || 0) + 1);
+      } else {
+        unassigned++;
+      }
+    });
+    const sorted = Array.from(countMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([ch, cnt]) => ({ chapter: ch, count: cnt }));
+    return { chaptersWithCount: sorted, unassignedCount: unassigned };
+  }, [problemList]);
+
+  // ── 과 필터링 및 랜덤 셔플된 문제 목록 ──
+  const displayList = useMemo(() => {
+    let filtered = problemList.filter((item) => {
+      const rawCh = item.chapter;
+      const ch = rawCh !== undefined && rawCh !== null && rawCh !== "" ? Number(rawCh) : 0;
+      if (selectedChapter === "all") return true;
+      if (selectedChapter === "unassigned") {
+        return !ch || isNaN(ch) || ch <= 0;
+      }
+      return ch === selectedChapter;
+    });
+
+    if (isRandom) {
+      const copy = [...filtered];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+    return filtered;
+  }, [problemList, selectedChapter, isRandom, randomKey]);
+
+  // 과 또는 랜덤 상태 변경 시 인덱스 및 결과 리셋
+  useEffect(() => {
+    setCurrentIndex(0);
+    setResult(null);
+    setTranslation(null);
+    setAudioUrl(null);
+    setAudioBlob(null);
+  }, [selectedChapter, isRandom, randomKey]);
+
+  const currentProblem = displayList[currentIndex];
 
   const handleNext = () => {
-    if (currentIndex < problemList.length - 1) {
+    if (currentIndex < displayList.length - 1) {
       setCurrentIndex(p => p + 1);
       setResult(null);
       setTranslation(null);
@@ -362,6 +419,20 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       setAudioUrl(null);
       setAudioBlob(null);
     }
+  };
+
+  const handleToggleRandom = () => {
+    if (!isRandom) {
+      setIsRandom(true);
+      setRandomKey(k => k + 1);
+    } else {
+      // 이미 랜덤 모드라면 다시 셔플
+      setRandomKey(k => k + 1);
+    }
+  };
+
+  const handleResetOrder = () => {
+    setIsRandom(false);
   };
 
   if (authChecking) {
@@ -514,13 +585,99 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                 </div>
               ) : currentProblem ? (
                 <>
-                  {/* 상단 진행률 & 챕터 */}
+                  {/* ── 과(단원) 선택 바 & 랜덤 버튼 ── */}
+                  <div className="space-y-2 pb-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
+                        <Layers size={14} className={primaryText} />
+                        <span>단원(과) 선택</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {isRandom && (
+                          <button
+                            type="button"
+                            onClick={handleResetOrder}
+                            className="text-[11px] font-bold text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded transition"
+                            title="기본 단원 순서로 돌아가기"
+                          >
+                            순서 복원
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleToggleRandom}
+                          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-xl font-black transition shadow-2xs ${
+                            isRandom
+                              ? "bg-purple-600 text-white hover:bg-purple-700"
+                              : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                          }`}
+                          title="문장 순서를 무작위로 섞어서 학습합니다"
+                        >
+                          <Shuffle size={12} className={isRandom ? "animate-spin" : ""} />
+                          {isRandom ? "🔀 다시 섞기" : "🔀 랜덤 학습"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 등록된 과 및 미배정 그룹 탭 목록 (가로 스크롤) */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedChapter("all")}
+                        className={`text-xs px-3 py-1.5 rounded-xl font-black shrink-0 transition ${
+                          selectedChapter === "all"
+                            ? isAmber ? "bg-amber-500 text-white shadow-xs" : "bg-blue-600 text-white shadow-xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        전체 ({problemList.length})
+                      </button>
+
+                      {chaptersWithCount.map(({ chapter, count }) => (
+                        <button
+                          key={chapter}
+                          type="button"
+                          onClick={() => setSelectedChapter(chapter)}
+                          className={`text-xs px-3 py-1.5 rounded-xl font-black shrink-0 transition ${
+                            selectedChapter === chapter
+                              ? isAmber ? "bg-amber-500 text-white shadow-xs" : "bg-blue-600 text-white shadow-xs"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {chapter}과 ({count})
+                        </button>
+                      ))}
+
+                      {unassignedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedChapter("unassigned")}
+                          className={`text-xs px-3 py-1.5 rounded-xl font-black shrink-0 transition ${
+                            selectedChapter === "unassigned"
+                              ? "bg-slate-800 text-white shadow-xs"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-dashed border-slate-300"
+                          }`}
+                        >
+                          과 미배정 ({unassignedCount})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 상단 진행률 & 챕터 표시 */}
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-black px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">
-                      {currentProblem.chapter ? `${currentProblem.chapter}과` : "전용 코스"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">
+                        {currentProblem.chapter ? `${currentProblem.chapter}과` : "과 미배정"}
+                      </span>
+                      {isRandom && (
+                        <span className="text-[10px] font-black bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md">
+                          랜덤 순서
+                        </span>
+                      )}
+                    </div>
                     <span className="text-slate-400 font-bold">
-                      {currentIndex + 1} / {problemList.length} 문장
+                      {currentIndex + 1} / {displayList.length} 문장
                     </span>
                   </div>
 
@@ -648,7 +805,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
 
                       <button
                         onClick={handleNext}
-                        disabled={currentIndex === problemList.length - 1}
+                        disabled={currentIndex === displayList.length - 1}
                         className="p-3.5 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-600 disabled:opacity-30 transition"
                         title="다음 문장"
                       >

@@ -193,7 +193,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
         text: newText.trim(),
         pronunciation: newPronunciation.trim() || newText.trim(),
         rule_formula: newRuleFormula.trim() || "",
-        chapter: Number(newChapter) || 1,
+        chapter: Number(newChapter) >= 0 ? Number(newChapter) : 0,
         level: level,
         voice_id: newVoiceId,
         has_audio: false,
@@ -637,7 +637,8 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                   onChange={e => setNewChapter(Number(e.target.value))}
                   className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
                 >
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(n => (
+                  <option value={0}>과 미배정 (공통/기타)</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(n => (
                     <option key={n} value={n}>{n}과</option>
                   ))}
                 </select>
@@ -776,7 +777,7 @@ export default function DonggukSection({ idToken, voices, defaultVoiceId }: Prop
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-md">
-                            {item.chapter}과
+                            {item.chapter ? `${item.chapter}과` : "과 미배정"}
                           </span>
                           <h4 className="font-black text-slate-900 text-base">{item.text}</h4>
                         </div>
