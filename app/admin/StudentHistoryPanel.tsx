@@ -414,6 +414,20 @@ export default function StudentHistoryPanel({
                           &ldquo;{rec.recognized || "(인식된 음성 없음)"}&rdquo;
                         </span>
                       </p>
+
+                      {/* 오류 태그 뱃지 리스트 */}
+                      {rec.errors && rec.errors.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {rec.errors.map((err: any, idx: number) => (
+                            <span
+                              key={idx}
+                              className="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded-md"
+                            >
+                              {err.tag || err.subCategory}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* 우측 점수 배지 & 피드백 토글 */}
@@ -425,7 +439,7 @@ export default function StudentHistoryPanel({
                       >
                         {rec.score}점
                       </span>
-                      {(rec.feedback || rec.advice) && (
+                      {(rec.feedback || rec.advice || (rec.errors && rec.errors.length > 0)) && (
                         <button
                           type="button"
                           onClick={() =>
@@ -433,7 +447,7 @@ export default function StudentHistoryPanel({
                           }
                           className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition"
                         >
-                          AI 피드백
+                          상세 분석
                           {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                         </button>
                       )}
@@ -441,8 +455,28 @@ export default function StudentHistoryPanel({
                   </div>
 
                   {/* 펼쳐진 AI 상세 피드백 */}
-                  {isExpanded && (rec.feedback || rec.advice) && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 text-slate-800">
+                  {isExpanded && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2 text-slate-800">
+                      {rec.categoryScores && (
+                        <div className="grid grid-cols-4 gap-1 text-[11px] font-bold text-center">
+                          <div className="bg-white p-1 rounded-lg border">
+                            <span className="text-[9px] text-slate-400 block">자음</span>
+                            <span className="text-indigo-600">{rec.categoryScores.consonant ?? 100}</span>
+                          </div>
+                          <div className="bg-white p-1 rounded-lg border">
+                            <span className="text-[9px] text-slate-400 block">모음</span>
+                            <span className="text-purple-600">{rec.categoryScores.vowel ?? 100}</span>
+                          </div>
+                          <div className="bg-white p-1 rounded-lg border">
+                            <span className="text-[9px] text-slate-400 block">음운변동</span>
+                            <span className="text-amber-600">{rec.categoryScores.rule ?? 100}</span>
+                          </div>
+                          <div className="bg-white p-1 rounded-lg border">
+                            <span className="text-[9px] text-slate-400 block">억양</span>
+                            <span className="text-emerald-600">{rec.categoryScores.intonation ?? 100}</span>
+                          </div>
+                        </div>
+                      )}
                       {rec.feedback && (
                         <p>
                           <span className="font-black text-indigo-700">📌 발음 분석: </span>
@@ -454,6 +488,17 @@ export default function StudentHistoryPanel({
                           <span className="font-black text-emerald-700">💡 교정 팁: </span>
                           {rec.advice}
                         </p>
+                      )}
+                      {rec.errors && rec.errors.length > 0 && (
+                        <div className="space-y-1 pt-1 border-t border-slate-200">
+                          <span className="font-black text-rose-700 block text-[11px]">발생 오류 상세:</span>
+                          {rec.errors.map((err: any, idx: number) => (
+                            <div key={idx} className="p-2 bg-rose-50/70 border border-rose-100 rounded-lg text-[11px]">
+                              <span className="font-bold text-rose-800">{err.tag}</span> - 단어: &quot;{err.targetWord}&quot; (정답: [{err.expectedPhoneme}] ↔ 발음: [{err.userPhoneme}])
+                              <p className="text-slate-600 mt-0.5">👉 {err.tip}</p>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}

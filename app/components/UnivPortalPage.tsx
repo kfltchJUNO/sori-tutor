@@ -13,10 +13,11 @@ import {
 import {
   Volume2, Mic, Square, RefreshCw, ChevronLeft, ChevronRight,
   Sparkles, CheckCircle2, Clock, AlertCircle, Languages, Loader2, LogOut,
-  Shuffle, Layers, Bell, X, Settings, VolumeX, Sliders
+  Shuffle, Layers, Bell, X, Settings, VolumeX, Sliders, BarChart3, Award
 } from "lucide-react";
 import AudioWaveform from "./AudioWaveform";
 import PwaInstallPrompt from "./PwaInstallPrompt";
+import StudentHistoryModal from "./StudentHistoryModal";
 import { playScoreFeedback, getTier } from "@/lib/scoreSound";
 import { useFeedbackVoices } from "@/hooks/useFeedbackVoices";
 
@@ -84,6 +85,9 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
   const [inboxList, setInboxList] = useState<any[]>([]);
   const [unreadNotiCount, setUnreadNotiCount] = useState(0);
   const [showInboxModal, setShowInboxModal] = useState(false);
+
+  // ── 학생 학습 기록 및 오류 분석 모달 상태 ──
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // ── 환경 설정 상태 (음량 조절 & 알람 허용 ON/OFF) ──
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -372,18 +376,23 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         const voiceUrl = feedbackVoices[tier] ?? null;
         playScoreFeedback(data.score, isSilence, voiceUrl, volume).catch(() => {});
 
-        // 학생 학습 기록(history) Firestore 저장 (관리자 페이지에서 확인 가능)
+        // 학생 학습 기록(history) Firestore 저장 (오류 유형 및 4대 영역 점수 포함)
         if (currentUser?.email) {
           try {
             await addDoc(collection(db, "sori_users", currentUser.email, "history"), {
               text: currentProblem.text,
               pronunciation: currentProblem.pronunciation ?? "",
               chapter: currentProblem.chapter ?? 1,
-              score: data.score,
+              score: data.overallScore ?? data.score,
+              overallScore: data.overallScore ?? data.score,
+              categoryScores: data.categoryScores ?? null,
+              summary: data.summary ?? data.explanation ?? "",
+              errors: Array.isArray(data.errors) ? data.errors : [],
+              masteredTags: Array.isArray(data.masteredTags) ? data.masteredTags : [],
               recognized: data.recognized,
               correct: data.correct,
-              feedback: data.explanation,
-              advice: data.advice,
+              feedback: data.explanation ?? data.summary ?? "",
+              advice: data.advice ?? "",
               type: config.univKey,
               date: serverTimestamp(),
             });
@@ -562,6 +571,15 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
             </button>
             {currentUser && (
               <>
+                {studentStatus === "approved" && (
+                  <button
+                    onClick={() => setShowHistoryModal(true)}
+                    className="p-1.5 text-slate-600 hover:text-indigo-600 rounded-full hover:bg-slate-100 transition"
+                    title="내 학습 기록 및 오류 분석"
+                  >
+                    <BarChart3 size={18} />
+                  </button>
+                )}
                 <button
                   onClick={handleOpenInbox}
                   className="relative p-1.5 text-slate-600 hover:text-amber-600 rounded-full hover:bg-slate-100 transition"
@@ -734,6 +752,23 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                   </span>
                 </div>
               )}
+
+              {/* 내 학습 기록 & 오류 분석 버튼 */}
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(true)}
+                className="w-full py-2.5 px-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-2xl transition flex items-center justify-between text-xs font-bold text-slate-700 shadow-2xs group"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-lg bg-indigo-100 text-indigo-700 group-hover:scale-105 transition">
+                    <BarChart3 size={14} />
+                  </span>
+                  <span>나의 발음 학습 기록 및 자주 틀리는 오류 분석</span>
+                </div>
+                <span className="text-[11px] text-indigo-600 font-black flex items-center gap-0.5">
+                  통계 보기 →
+                </span>
+              </button>
 
               {loadingProblems ? (
                 <div className="my-auto text-center py-20 text-slate-400">
@@ -908,10 +943,69 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                         </div>
                       )}
 
+                      {/* 4대 영역별 점수 미니 그리드 */}
+                      {result.categoryScores && (
+                        <div className="grid grid-cols-4 gap-1.5 pt-1 text-center">
+                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <span className="text-[10px] text-slate-400 font-bold block">자음</span>
+                            <span className="text-xs font-black text-indigo-600">{result.categoryScores.consonant ?? 100}점</span>
+                          </div>
+                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <span className="text-[10px] text-slate-400 font-bold block">모음</span>
+                            <span className="text-xs font-black text-purple-600">{result.categoryScores.vowel ?? 100}점</span>
+                          </div>
+                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <span className="text-[10px] text-slate-400 font-bold block">음운변동</span>
+                            <span className="text-xs font-black text-amber-600">{result.categoryScores.rule ?? 100}점</span>
+                          </div>
+                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <span className="text-[10px] text-slate-400 font-bold block">억양</span>
+                            <span className="text-xs font-black text-emerald-600">{result.categoryScores.intonation ?? 100}점</span>
+                          </div>
+                        </div>
+                      )}
+
                       {result.explanation && (
                         <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
                           {result.explanation}
                         </p>
+                      )}
+
+                      {/* 감지된 오류 및 행동 교정 팁 */}
+                      {result.errors && result.errors.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+                            <AlertCircle size={13} className="text-rose-500" />
+                            발음 교정 포인트 (오류 분석):
+                          </span>
+                          {result.errors.map((err: any, idx: number) => (
+                            <div key={idx} className="p-3 bg-rose-50/70 border border-rose-100 rounded-2xl text-xs space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-black text-rose-800">{err.tag}</span>
+                                <span className="text-[11px] text-slate-500 font-mono">
+                                  단어: &quot;{err.targetWord}&quot; (정답: [{err.expectedPhoneme}] ↔ 내소리: [{err.userPhoneme}])
+                                </span>
+                              </div>
+                              <p className="text-slate-700 leading-relaxed text-[11px]">
+                                💡 {err.tip}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 마스터한 발음 칭찬 태그 */}
+                      {result.masteredTags && result.masteredTags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                            <Award size={12} /> 잘한 발음:
+                          </span>
+                          {result.masteredTags.map((tag: string, idx: number) => (
+                            <span key={idx} className="text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
                       )}
 
                       {translation && (
@@ -1164,6 +1258,19 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── 학생 전용 학습 기록 및 오류 분석 모달 ── */}
+      {currentUser && (
+        <StudentHistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          studentEmail={currentUser.email}
+          studentName={userData?.name || currentUser.displayName}
+          univKey={config.univKey}
+          univName={config.univName}
+          themeColor={config.themeColor}
+        />
       )}
     </div>
   );

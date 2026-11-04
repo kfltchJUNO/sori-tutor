@@ -581,21 +581,49 @@ async function runBlindSTT(
 }
 
 // ══════════════════════════════════════════════════════════════
-// 2단계: 오디오 + 음절 분석 기반 정밀 피드백 및 채점
+// 2단계: 오디오 + 음절 분석 기반 정밀 피드백 및 채점 (새 표준 오류 분류 체계 적용)
 // ══════════════════════════════════════════════════════════════
-interface ScoringResult {
+export interface PronunciationErrorItem {
+  id: string;
+  category: "자음" | "모음" | "음운 변동" | "억양 및 운율";
+  subCategory: string;
+  tag: string;
+  targetWord: string;
+  expectedPhoneme: string;
+  userPhoneme: string;
+  position: {
+    start: number;
+    end: number;
+  };
+  tip: string;
+}
+
+export interface CategoryScores {
+  consonant: number;
+  vowel: number;
+  rule: number;
+  intonation: number;
+}
+
+export interface ScoringResult {
   score: number;
-  correct: string;
+  overallScore: number;
+  categoryScores: CategoryScores;
+  summary: string;
   explanation: string;
   advice: string;
-  errorTypes: string[];
+  errors: PronunciationErrorItem[];
+  masteredTags: string[];
+  correct: string;
   ruleFormula?: string;
+  errorTypes: string[];
 }
 
 async function runScoring(
   genAI: GoogleGenerativeAI,
   recognized: string,
   targetText: string,
+  targetPronunciation: string,
   context: string,
   userNick: string,
   metrics: EvaluationMetrics,
@@ -607,34 +635,84 @@ async function runScoring(
     ? metrics.errorSummary.join(", ")
     : "음절 단위 특이 오류 없음 (억양 및 자연스러움 평가)";
 
-  const prompt = `당신은 엄격하고 정확한 한국어 발음 교정 전문가입니다.
-블라인드 STT 결과와 음절 정밀 분석 결과를 바탕으로 채점 및 피드백을 작성하세요.
+  const standardPron = targetPronunciation || `[${toStandardPronunciation(targetText)}]`;
 
-[목표 문장]: "${targetText}" (표준 발음: [${toStandardPronunciation(targetText)}])
-[실제 들린 발음 (블라인드 STT)]: "${recognized}"
-[감지된 음절 오류]: ${errorListText}
-[알고리즘 기준 점수]: ${metrics.algoScore}점 (허용 채점 범위: ${minAllowed}점 ~ ${maxAllowed}점, 상한선: ${metrics.hardCeiling}점)
-[상황 맥락]: ${context || "일반 발음 연습"}
+  const prompt = `당신은 엄격하고 정확한 한국어 발음 교정 및 음운 평가 전문가입니다.
+블라인드 STT 결과와 음절 정밀 분석 결과를 바탕으로 아래의 [분류 체계 및 태그 정의 규칙]을 엄격히 준수하여 정밀 채점 및 JSON 피드백을 작성하세요.
 
-[엄격한 채점 규칙]
-1. 감지된 음절 오류(받침 누락, 모음 오류, 자음 불일치)가 있다면 절대 높은 점수를 주지 마세요.
-   - 예: "학교에 가요"를 "하교에가여"로 발음한 경우 '학'의 [ㄱ] 받침 누락과 '요'→'여' 모음 오류가 모두 있으므로 반드시 두 오류를 모두 구체적으로 지적하고 ${maxAllowed}점 이하로 채점하세요.
-2. 점수는 반드시 ${minAllowed}~${maxAllowed} 사이의 정수로만 부여하세요.
+[입력 정보]
+- originalText: "${targetText}"
+- targetPronunciation: "${standardPron}"
+- userSpokenText: "${recognized}"
+- 감지된 음절 오류: ${errorListText}
+- 알고리즘 기준 점수: ${metrics.algoScore}점 (허용 채점 범위: ${minAllowed}점 ~ ${maxAllowed}점, 상한선: ${metrics.hardCeiling}점)
+- 상황 맥락: ${context || "대학 한국어 발음 훈련"}
 
-[초급 1급 눈높이 맞춤 발음 규칙 지침 - 필수]
-- 비음화, 유음화, 연음, 구개음화 같은 어려운 문법 학술 용어는 '절대' 사용 금지!
-- 'correct': 반드시 소리 나는 대로의 발음 표기(예: '[학꾜에 가요]', '[장년에 한구게 와써요]')로 적기.
-- 'ruleFormula': '? 받침 + ? = [??]' 형태의 직관적인 변화 공식만 적기 (예: 'ㄱ 받침 + ㄱ = [ㄲ]', 'ㄱ 받침 + ㄴ = [ㅇ]', 변화 없으면 '소리 나는 대로 또렷하게 발음').
-- 'explanation': ${userNick}님이 어떤 글자에서 받침을 빼먹었는지, 어떤 모음을 다르게 발음했는지 쉬운 구어체로 콕 집어 설명.
+════════════════════════════════════════════════════════════════
+### 1. 분류 체계 및 태그 정의 규칙 (엄격 준수)
+모든 오류(errors)는 반드시 아래의 대분류(category) 및 소분류(subCategory) 기준을 엄격히 준수해야 합니다.
 
-JSON만 출력하세요. 다른 텍스트 절대 금지.
+1. 자음 (Consonant) - category: "자음"
+- subCategory: "3항대립(평/경/격음)", "종성(받침)대표음화", "겹받침단순화", "유음비음변별"
+- tag 예시: "[ㅂ/ㅃ/ㅍ 대립]", "[ㄱ/ㄲ/ㅋ 대립]", "[받침 닫기]", "[겹받침 탈락]", "[초성/종성 ㄹ]"
+
+2. 모음 (Vowel) - category: "모음"
+- subCategory: "원순평순대립", "전설후설대립", "이중모음활음", "모음'의'"
+- tag 예시: "[ㅓ vs ㅗ]", "[ㅗ vs ㅜ]", "[ㅡ vs ㅣ]", "[ㅑ/ㅕ/ㅛ/ㅠ 이중모음]", "[조사 '의' 발음]"
+
+3. 음운 변동 (Phonological Rule) - category: "음운 변동"
+- subCategory: "연음", "비음화", "유음화", "된소리되기", "거센소리되기", "탈락/첨가", "구개음화"
+- tag 예시: "[이어 읽기(연음)]", "[닮은 소리(비음화)]", "[부드러운 소리(유음화)]", "[단단한 소리(경음화)]", "[합쳐진 소리(축약)]", "[사라진 소리(탈락)]", "[구개음화]"
+
+4. 억양 및 운율 (Suprasegmental) - category: "억양 및 운율"
+- subCategory: "문장종결억양", "끊어읽기(휴지)", "발화속도/리듬"
+- tag 예시: "[평서문 하강조]", "[의문문 상승조]", "[의미단위 끊어읽기]", "[음절박자 균일도]"
+
+════════════════════════════════════════════════════════════════
+### 2. 채점 및 평가 지침
+1. 점수 산출 (0~100점):
+   - overallScore: 전체 발화의 완성도 (${minAllowed}~${maxAllowed}점 사이의 정수)
+   - categoryScores: consonant(자음), vowel(모음), rule(음운변동), intonation(억양) 각 100점 만점 기준 점수 산출
+2. 학습자 친화적 피드백:
+   - tip 필드: 전문 언어학 용어(조음점, 비음화 등)를 바로 나열하지 말고, 학습자가 직관적으로 이해할 수 있는 행동 지침(예: "입술을 둥글게 모으지 말고 턱을 내리세요", "받침 소리를 뒤로 넘겨서 발음하세요")을 tip에 제공하세요.
+3. 무오류 처리:
+   - 특정 범주에 오류가 없다면 해당 categoryScore는 100점으로 산정하고, 오류가 없으면 errors 배열은 빈 배열([])로 반환합니다.
+4. masteredTags:
+   - 학습자가 정확하게 잘 발음한 태그/규칙 목록 (예: ["[이어 읽기(연음)]", "[ㅓ vs ㅗ]"]).
+
+════════════════════════════════════════════════════════════════
+### 3. 출력 형식 (반드시 유효한 JSON만 반환할 것)
 {
-  "score": ${metrics.algoScore},
-  "correct": "[소리 나는 대로 발음 표기]",
-  "ruleFormula": "? 받침 + ? = [??]",
-  "explanation": "${userNick}님, (구체적 오류 지적 또는 잘한 점)",
-  "advice": "(입 모양·혀 위치·받침 발음 등 실용적 조언)",
-  "errorTypes": ["받침 누락", "모음 오류"]
+  "overallScore": ${metrics.algoScore},
+  "categoryScores": {
+    "consonant": 95,
+    "vowel": 90,
+    "rule": 65,
+    "intonation": 80
+  },
+  "summary": "${userNick}님, (자음과 모음, 음운 변동에 대한 종합 평가 1~2문장)",
+  "errors": [
+    {
+      "id": "err-1",
+      "category": "음운 변동",
+      "subCategory": "비음화",
+      "tag": "[닮은 소리(비음화)]",
+      "targetWord": "국물",
+      "expectedPhoneme": "궁물",
+      "userPhoneme": "국물",
+      "position": {
+        "start": 0,
+        "end": 2
+      },
+      "tip": "받침 'ㄱ' 뒤에 'ㅁ'이 올 때는 목을 막지 말고 콧소리 [ㅇ]으로 부드럽게 바꿔서 [궁물]로 발음해 보세요."
+    }
+  ],
+  "masteredTags": [
+    "[이어 읽기(연음)]",
+    "[ㅓ vs ㅗ]"
+  ],
+  "correct": "${standardPron}",
+  "ruleFormula": "ㄱ 받침 + ㅁ = [ㅇ]"
 }`;
 
   const raw = await callGemini(genAI, prompt, undefined, 0.2);
@@ -642,37 +720,92 @@ JSON만 출력하세요. 다른 텍스트 절대 금지.
   if (!match) throw new Error("채점 JSON 파싱 실패");
 
   const data = JSON.parse(match[0]) as {
+    overallScore?: number;
     score?: number;
-    correct?: string;
+    categoryScores?: {
+      consonant?: number;
+      vowel?: number;
+      rule?: number;
+      intonation?: number;
+    };
+    summary?: string;
     explanation?: string;
     advice?: string;
-    errorTypes?: string[];
+    errors?: PronunciationErrorItem[];
+    masteredTags?: string[];
+    correct?: string;
     ruleFormula?: string;
+    errorTypes?: string[];
   };
 
-  if (typeof data.score === "number" && data.score === 0) {
+  const parsedScore = data.overallScore ?? data.score;
+  if (typeof parsedScore === "number" && parsedScore === 0) {
     return {
       score: 0,
-      correct: data.correct ?? `[${toStandardPronunciation(targetText)}]`,
-      explanation: data.explanation ?? `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
+      overallScore: 0,
+      categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
+      summary: data.summary ?? data.explanation ?? `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
+      explanation: data.explanation ?? data.summary ?? `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
       advice: data.advice ?? "마이크 가까이에서 다시 한번 녹음해 보세요.",
+      errors: [],
+      masteredTags: [],
       errorTypes: ["침묵"],
+      correct: data.correct ?? standardPron,
       ruleFormula: data.ruleFormula,
     };
   }
 
-  const clampedScore = Math.max(
+  const rawScore = typeof parsedScore === "number" ? parsedScore : metrics.algoScore;
+  const clampedOverall = Math.max(
     minAllowed,
-    Math.min(maxAllowed, data.score ?? metrics.algoScore, metrics.hardCeiling)
+    Math.min(maxAllowed, rawScore, metrics.hardCeiling)
   );
 
+  const clamp = (val: number | undefined, def: number) => {
+    if (typeof val !== "number" || isNaN(val)) return def;
+    return Math.max(0, Math.min(100, Math.round(val)));
+  };
+
+  const catScores: CategoryScores = {
+    consonant: clamp(data.categoryScores?.consonant, 100),
+    vowel: clamp(data.categoryScores?.vowel, 100),
+    rule: clamp(data.categoryScores?.rule, 100),
+    intonation: clamp(data.categoryScores?.intonation, 100),
+  };
+
+  const cleanErrors: PronunciationErrorItem[] = Array.isArray(data.errors)
+    ? data.errors.map((err, idx) => ({
+        id: err.id || `err-${idx + 1}`,
+        category: (["자음", "모음", "음운 변동", "억양 및 운율"].includes(err.category)
+          ? err.category
+          : "음운 변동") as any,
+        subCategory: err.subCategory || "발음교정",
+        tag: err.tag || `[${err.subCategory || "발음"}]`,
+        targetWord: err.targetWord || targetText,
+        expectedPhoneme: err.expectedPhoneme || standardPron,
+        userPhoneme: err.userPhoneme || recognized,
+        position: err.position || { start: 0, end: 1 },
+        tip: err.tip || "천천히 입모양을 의식하며 또렷하게 발음해 보세요.",
+      }))
+    : [];
+
+  const mastered = Array.isArray(data.masteredTags) ? data.masteredTags : [];
+  const summaryText = data.summary || data.explanation || "";
+  const adviceText = data.advice || (cleanErrors[0]?.tip ?? "틀린 글자의 소리에 집중해 보세요.");
+  const errorTypeList = cleanErrors.map(e => e.tag || e.subCategory);
+
   return {
-    score:       clampedScore,
-    correct:     data.correct     ?? `[${toStandardPronunciation(targetText)}]`,
-    explanation: data.explanation ?? "",
-    advice:      data.advice      ?? "",
-    errorTypes:  data.errorTypes  ?? [],
+    score: clampedOverall,
+    overallScore: clampedOverall,
+    categoryScores: catScores,
+    summary: summaryText,
+    explanation: summaryText,
+    advice: adviceText,
+    errors: cleanErrors,
+    masteredTags: mastered,
+    correct: data.correct ?? standardPron,
     ruleFormula: data.ruleFormula ?? undefined,
+    errorTypes: errorTypeList,
   };
 }
 
@@ -698,6 +831,11 @@ export async function POST(req: Request): Promise<Response> {
     if (audioFile.size < 2000 || (speechFrames !== null && !Number.isNaN(speechFrames) && speechFrames < 4)) {
       return NextResponse.json({
         score: 0,
+        overallScore: 0,
+        categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
+        summary: `${userNick}님, 아무 말소리도 감지되지 않았어요. 마이크에 가까이 대고 소리 내어 읽어보세요!`,
+        errors: [],
+        masteredTags: [],
         recognized: "(침묵)",
         correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
         explanation: `${userNick}님, 아무 말소리도 감지되지 않았어요. 마이크에 가까이 대고 소리 내어 읽어보세요!`,
@@ -720,7 +858,14 @@ export async function POST(req: Request): Promise<Response> {
     } catch (e) {
       console.error("STT 실패:", e);
       return NextResponse.json({
-        score: 0, recognized: "(인식 실패)", correct: targetText,
+        score: 0,
+        overallScore: 0,
+        categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
+        summary: "음성 인식에 실패했습니다. 다시 시도해주세요.",
+        errors: [],
+        masteredTags: [],
+        recognized: "(인식 실패)",
+        correct: targetText,
         explanation: "음성 인식에 실패했습니다. 다시 시도해주세요.",
         advice: "조용한 환경에서 마이크에 가까이 대고 말해보세요.",
       });
@@ -741,6 +886,11 @@ export async function POST(req: Request): Promise<Response> {
     ) {
       return NextResponse.json({
         score: 0,
+        overallScore: 0,
+        categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
+        summary: `${userNick}님, 발음이 인식되지 않았습니다. 마이크를 확인하고 또렷하게 말해보세요.`,
+        errors: [],
+        masteredTags: [],
         recognized: "(침묵)",
         correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
         explanation: `${userNick}님, 발음이 인식되지 않았습니다. 마이크를 확인하고 또렷하게 말해보세요.`,
@@ -752,6 +902,11 @@ export async function POST(req: Request): Promise<Response> {
     if (rHangulOnly.length > Math.max(tHangulOnly.length * 3, 15)) {
       return NextResponse.json({
         score: 0,
+        overallScore: 0,
+        categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
+        summary: `${userNick}님, 주변 소음이 섞여 음성이 정확히 인식되지 않았어요.`,
+        errors: [],
+        masteredTags: [],
         recognized: "(잡음)",
         correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
         explanation: `${userNick}님, 주변 소음이 섞여 음성이 정확히 인식되지 않았어요.`,
@@ -769,6 +924,11 @@ export async function POST(req: Request): Promise<Response> {
     if (rHangulOnly.length < tHangulOnly.length * 0.25) {
       return NextResponse.json({
         score: Math.min(10, metrics.algoScore),
+        overallScore: Math.min(10, metrics.algoScore),
+        categoryScores: { consonant: 10, vowel: 10, rule: 10, intonation: 10 },
+        summary: `${userNick}님, 말소리가 너무 짧게 인식되었습니다("${recognized}"). 문장 전체를 끝까지 말해보세요.`,
+        errors: [],
+        masteredTags: [],
         recognized,
         correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
         explanation: `${userNick}님, 말소리가 너무 짧게 인식되었습니다("${recognized}"). 문장 전체를 끝까지 말해보세요.`,
@@ -784,12 +944,24 @@ export async function POST(req: Request): Promise<Response> {
     // ── 2단계: AI 피드백 및 채점 ─────────
     let scored: ScoringResult;
     try {
-      scored = await runScoring(genAI, recognized, targetText, context, userNick, metrics);
+      scored = await runScoring(genAI, recognized, targetText, targetPronunciation, context, userNick, metrics);
     } catch (e) {
       console.error("채점 실패:", e);
       const fallback = Math.max(0, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
       return NextResponse.json({
         score: fallback,
+        overallScore: fallback,
+        categoryScores: {
+          consonant: Math.min(100, fallback + 5),
+          vowel: Math.min(100, fallback + 5),
+          rule: Math.max(0, fallback - 10),
+          intonation: fallback,
+        },
+        summary: metrics.errorSummary.length > 0
+          ? `${userNick}님, ${metrics.errorSummary.join(", ")} 부분이 아쉽습니다. 다시 한번 연습해 보세요!`
+          : `${userNick}님, 전반적으로 잘 읽으셨어요!`,
+        errors: [],
+        masteredTags: fallback >= 80 ? ["[또렷한 발음]"] : [],
         recognized,
         correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
         explanation: metrics.errorSummary.length > 0
@@ -804,6 +976,11 @@ export async function POST(req: Request): Promise<Response> {
     if (scored.score === 0) {
       return NextResponse.json({
         score: 0,
+        overallScore: 0,
+        categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
+        summary: scored.summary || scored.explanation,
+        errors: [],
+        masteredTags: [],
         recognized: "(침묵)",
         correct: scored.correct,
         explanation: scored.explanation,
@@ -825,10 +1002,15 @@ export async function POST(req: Request): Promise<Response> {
 
     return NextResponse.json({
       score:           finalScore,
-      recognized,
-      correct:         scored.correct,
+      overallScore:    finalScore,
+      categoryScores:  scored.categoryScores,
+      summary:         finalExplanation,
       explanation:     finalExplanation,
       advice:          scored.advice,
+      errors:          scored.errors,
+      masteredTags:    scored.masteredTags,
+      recognized,
+      correct:         scored.correct,
       syllableResults: metrics.syllableResults,
       ruleFormula:     scored.ruleFormula,
     });

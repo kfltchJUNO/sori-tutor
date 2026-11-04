@@ -14,6 +14,16 @@ export interface StudentHistoryRecord {
   pronunciation?: string;
   chapter?: number | null;
   score: number;
+  overallScore?: number;
+  categoryScores?: {
+    consonant?: number;
+    vowel?: number;
+    rule?: number;
+    intonation?: number;
+  };
+  summary?: string;
+  errors?: any[];
+  masteredTags?: string[];
   recognized: string;
   correct: boolean;
   feedback?: string;
@@ -99,6 +109,11 @@ export async function GET(req: NextRequest) {
             pronunciation: hd.pronunciation ?? "",
             chapter: hd.chapter ?? null,
             score: typeof hd.score === "number" ? hd.score : Number(hd.score) || 0,
+            overallScore: typeof hd.overallScore === "number" ? hd.overallScore : (typeof hd.score === "number" ? hd.score : Number(hd.score) || 0),
+            categoryScores: hd.categoryScores ?? null,
+            summary: hd.summary ?? hd.feedback ?? "",
+            errors: Array.isArray(hd.errors) ? hd.errors : [],
+            masteredTags: Array.isArray(hd.masteredTags) ? hd.masteredTags : [],
             recognized: hd.recognized ?? "",
             correct: Boolean(hd.correct),
             feedback: hd.feedback ?? "",
