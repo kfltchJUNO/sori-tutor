@@ -326,7 +326,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     if (!analyserRef.current || !dataArrayRef.current) return;
     analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
     const avg = dataArrayRef.current.reduce((a, b) => a + b) / dataArrayRef.current.length;
-    if (avg > 15) {
+    if (avg > 8) {
       speechFramesRef.current += 1;
       if (silenceTimer.current) {
         clearTimeout(silenceTimer.current);
@@ -334,7 +334,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       }
     } else {
       if (!silenceTimer.current) {
-        silenceTimer.current = setTimeout(stopRecording, 1500);
+        silenceTimer.current = setTimeout(stopRecording, 2800);
       }
     }
     animationFrameRef.current = requestAnimationFrame(detectSilence);

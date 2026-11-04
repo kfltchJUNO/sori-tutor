@@ -566,13 +566,14 @@ async function runBlindSTT(
   const prompt = `당신은 한국어 발음 평가용 '음성 소리 그대로 받아쓰기(Phonetic STT)' 엔진입니다.
 
 [가장 중요한 절대 규칙]
-1. 오직 오디오에서 실제로 들리는 소리(음절)만 100% 있는 그대로 한글로 적으세요.
-2. 문맥 보정·맞춤법 교정·단어 추측을 절대 하지 마세요! 사전에 없는 어색한 소리라도 들리는 대로 적어야 합니다.
-   - 예: "하교에가여"라고 들리면 절대 "학교에 가요"로 고치지 말고 무조건 "하교에가여"로 적으세요.
-   - 예: "자년에"라고 들리면 절대 "작년에"로 고치지 말고 "자년에"로 적으세요.
-   - 예: "머거여", "가여", "해여"처럼 모음이 어색하게 들리면 들린 모음 그대로 적으세요.
-   - 예: 받침이 약하거나 안 들리면 받침을 빼고 들린 그대로 적으세요.
-3. 오디오에 명확한 사람의 한국어 말소리가 없거나, 침묵·숨소리·한숨·기침·마이크 터치음·배경 잡음만 있으면 추측하지 말고 무조건 정확히 "(침묵)"이라고만 출력하세요.
+1. 오직 오디오에서 실제로 들리는 사람의 한국어 말소리(음절)만 100% 들린 그대로 한글로 적으세요.
+2. 문맥 보정·맞춤법 교정·단어 추측을 절대 하지 마세요!
+   - 사전에 없는 어색한 소리, 외래어, 또는 목표 문장과 전혀 다른 단어라도 오디오에서 들린 소리 그대로 적어야 합니다.
+   - 예: "하교에가여"라고 들리면 무조건 "하교에가여"로 적으세요.
+   - 예: 목표 문장과 전혀 다른 말(예: "안녕하세요", "사과", "국물이")을 했더라도, 들린 말 그대로 적으세요.
+   - 예: 받침이 약하거나 빠지면 빠진 대로, 모음이 다르면 들린 모음 그대로 적으세요.
+   - 예: 단어 중간에 어색한 멈춤(휴지)이 있었더라도 발음된 모든 음절을 띄어쓰기를 포함해 빠짐없이 적으세요.
+3. 오직 오디오 전체에 사람의 말소리가 전혀 없고, 100% 완전한 무음·숨소리·기침·마이크 터치음만 있는 경우에만 정확히 "(침묵)"이라고 출력하세요. 조금이라도 사람의 발화가 들리면 반드시 들린 그대로 한글로 적으세요.
 
 출력 형식: 오직 받아쓴 한글 텍스트(또는 "(침묵)") 한 줄만 출력하세요. 따옴표나 부가 설명 절대 금지.`;
 
@@ -621,6 +622,7 @@ export interface ScoringResult {
 
 async function runScoring(
   genAI: GoogleGenerativeAI,
+  base64Audio: string,
   recognized: string,
   targetText: string,
   targetPronunciation: string,
@@ -628,25 +630,48 @@ async function runScoring(
   userNick: string,
   metrics: EvaluationMetrics,
 ): Promise<ScoringResult> {
-  const minAllowed = Math.max(0, metrics.algoScore - 6);
-  const maxAllowed = Math.min(metrics.algoScore + 4, metrics.hardCeiling, 92);
+  const minAllowed = Math.max(15, metrics.algoScore - 6);
+  const maxAllowed = Math.min(Math.max(35, metrics.algoScore + 6), metrics.hardCeiling, 92);
 
   const errorListText = metrics.errorSummary.length > 0
     ? metrics.errorSummary.join(", ")
-    : "음절 단위 특이 오류 없음 (억양 및 자연스러움 평가)";
+    : "음절 단위 특이 오류 없음 (억양, 운율 및 자연스러움 평가)";
 
   const standardPron = targetPronunciation || `[${toStandardPronunciation(targetText)}]`;
 
-  const prompt = `당신은 엄격하고 정확한 한국어 발음 교정 및 음운 평가 전문가입니다.
-블라인드 STT 결과와 음절 정밀 분석 결과를 바탕으로 아래의 [분류 체계 및 태그 정의 규칙]을 엄격히 준수하여 정밀 채점 및 JSON 피드백을 작성하세요.
+  const prompt = `당신은 엄격하고 정확한 한국어 발음 교정 및 음운/억양/운율 평가 전문가입니다.
+동봉된 오디오 음성과 블라인드 STT 결과, 음절 정밀 분석 결과를 종합 분석하여 채점 및 JSON 피드백을 작성하세요.
 
 [입력 정보]
-- originalText: "${targetText}"
-- targetPronunciation: "${standardPron}"
-- userSpokenText: "${recognized}"
-- 감지된 음절 오류: ${errorListText}
-- 알고리즘 기준 점수: ${metrics.algoScore}점 (허용 채점 범위: ${minAllowed}점 ~ ${maxAllowed}점, 상한선: ${metrics.hardCeiling}점)
+- originalText(목표 문장): "${targetText}"
+- targetPronunciation(정답 표준 발음): "${standardPron}"
+- userSpokenText(실제 들린 발화 - 들은 그대로): "${recognized}"
+- 감지된 음절 오류 요약: ${errorListText}
+- 알고리즘 기준 점수: ${metrics.algoScore}점
 - 상황 맥락: ${context || "대학 한국어 발음 훈련"}
+
+════════════════════════════════════════════════════════════════
+### [가장 중요한 채점 대원칙 - 들은 그대로 정밀 평가]
+1. 들은 그대로의 발화 인정 (절대 침묵으로 오판 금지):
+   - 학습자가 목표 문장과 다른 말을 하거나 엉뚱한 단어를 말했더라도, 실제로 말을 했다면 절대로 '아무 말도 안 했다(침묵)'고 판단해서는 안 됩니다!
+   - 실제 들린 발화("${recognized}")를 그대로 인정하고, "목표 문장['${targetText}']과 다른 단어/문장('${recognized}')을 말씀하셨어요. 목표 문장을 천천히 다시 읽어보세요."라고 친절히 안내하세요.
+   - 목표 문장과 완전히 다를 경우 overallScore는 20~35점 사이로 부여하고, 들린 발화 내에서의 억양이나 발음 특성을 피드백하세요.
+
+2. 어색한 휴지(끊어읽기) 및 억양/운율 정밀 청취 (오디오 분석 필수):
+   - 첨부된 오디오를 직접 청취하여 아래 2가지를 반드시 면밀히 확인하세요:
+   (1) 어색한 휴지 (끊어읽기 오류):
+       - 단어 한 덩어리 중간에서 숨을 멈추거나 뚝 끊어 읽는 경우 (예: "국...물이", "학...교에", "뜨거...워요")
+       - 의미 단위가 아닌 곳에서 불필요하게 길게 멈칫거리는 부자연스러운 휴지가 있는 경우
+       - 감지 시 반드시 errors에 다음 항목 추가:
+         category: "억양 및 운율", subCategory: "끊어읽기(휴지)", tag: "[어색한 휴지]" (또는 "[단어 중간 끊어짐]", "[의미단위 끊어읽기]")
+         tip: "단어 중간에 숨을 멈추거나 끊지 말고, 하나의 호흡으로 부드럽게 이어서 읽어 보세요."
+         그리고 categoryScores.intonation 점수를 감점하세요.
+   (2) 문장 종결 억양 및 리듬:
+       - 평서문인데 끝을 질문하듯이 올리는 경우 -> tag: "[평서문 하강조]", tip: "문장의 마지막 음절을 위로 올리지 말고 차분하게 낮추어 내려 읽으세요."
+       - 의문문인데 끝을 내리는 경우 -> tag: "[의문문 상승조]", tip: "질문할 때는 문장 끝을 자연스럽게 살짝 올려 읽으세요."
+
+3. 음운 변동 및 자음/모음 오류:
+   - 연음([이어 읽기(연음)]), 비음화([닮은 소리(비음화)]), 유음화([부드러운 소리(유음화)]), 된소리되기([단단한 소리(경음화)]), 거센소리되기([합쳐진 소리(축약)]) 등 한국어 특유의 소리 변화를 오디오에서 정확히 반영했는지 채점하세요.
 
 ════════════════════════════════════════════════════════════════
 ### 1. 분류 체계 및 태그 정의 규칙 (엄격 준수)
@@ -666,22 +691,10 @@ async function runScoring(
 
 4. 억양 및 운율 (Suprasegmental) - category: "억양 및 운율"
 - subCategory: "문장종결억양", "끊어읽기(휴지)", "발화속도/리듬"
-- tag 예시: "[평서문 하강조]", "[의문문 상승조]", "[의미단위 끊어읽기]", "[음절박자 균일도]"
+- tag 예시: "[평서문 하강조]", "[의문문 상승조]", "[의미단위 끊어읽기]", "[어색한 휴지]", "[단어 중간 끊어짐]", "[음절박자 균일도]"
 
 ════════════════════════════════════════════════════════════════
-### 2. 채점 및 평가 지침
-1. 점수 산출 (0~100점):
-   - overallScore: 전체 발화의 완성도 (${minAllowed}~${maxAllowed}점 사이의 정수)
-   - categoryScores: consonant(자음), vowel(모음), rule(음운변동), intonation(억양) 각 100점 만점 기준 점수 산출
-2. 학습자 친화적 피드백:
-   - tip 필드: 전문 언어학 용어(조음점, 비음화 등)를 바로 나열하지 말고, 학습자가 직관적으로 이해할 수 있는 행동 지침(예: "입술을 둥글게 모으지 말고 턱을 내리세요", "받침 소리를 뒤로 넘겨서 발음하세요")을 tip에 제공하세요.
-3. 무오류 처리:
-   - 특정 범주에 오류가 없다면 해당 categoryScore는 100점으로 산정하고, 오류가 없으면 errors 배열은 빈 배열([])로 반환합니다.
-4. masteredTags:
-   - 학습자가 정확하게 잘 발음한 태그/규칙 목록 (예: ["[이어 읽기(연음)]", "[ㅓ vs ㅗ]"]).
-
-════════════════════════════════════════════════════════════════
-### 3. 출력 형식 (반드시 유효한 JSON만 반환할 것)
+### 2. 출력 형식 (반드시 유효한 JSON만 반환할 것)
 {
   "overallScore": ${metrics.algoScore},
   "categoryScores": {
@@ -690,7 +703,7 @@ async function runScoring(
     "rule": 65,
     "intonation": 80
   },
-  "summary": "${userNick}님, (자음과 모음, 음운 변동에 대한 종합 평가 1~2문장)",
+  "summary": "${userNick}님, (자음/모음, 억양 및 어색한 휴지 유무를 포함한 종합 평가 1~2문장)",
   "errors": [
     {
       "id": "err-1",
@@ -715,7 +728,7 @@ async function runScoring(
   "ruleFormula": "ㄱ 받침 + ㅁ = [ㅇ]"
 }`;
 
-  const raw = await callGemini(genAI, prompt, undefined, 0.2);
+  const raw = await callGemini(genAI, prompt, base64Audio, 0.2);
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("채점 JSON 파싱 실패");
 
@@ -738,26 +751,27 @@ async function runScoring(
     errorTypes?: string[];
   };
 
-  const parsedScore = data.overallScore ?? data.score;
-  if (typeof parsedScore === "number" && parsedScore === 0) {
+  const isSilence = recognized === "(침묵)" || !recognized.trim();
+  if (isSilence) {
     return {
       score: 0,
       overallScore: 0,
       categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
-      summary: data.summary ?? data.explanation ?? `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
-      explanation: data.explanation ?? data.summary ?? `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
-      advice: data.advice ?? "마이크 가까이에서 다시 한번 녹음해 보세요.",
+      summary: `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
+      explanation: `${userNick}님, 목소리가 감지되지 않았어요. 마이크에 대고 또렷하게 말씀해 주세요.`,
+      advice: "마이크 가까이에서 다시 한번 녹음해 보세요.",
       errors: [],
       masteredTags: [],
       errorTypes: ["침묵"],
-      correct: data.correct ?? standardPron,
-      ruleFormula: data.ruleFormula,
+      correct: standardPron,
+      ruleFormula: undefined,
     };
   }
 
+  const parsedScore = data.overallScore ?? data.score;
   const rawScore = typeof parsedScore === "number" ? parsedScore : metrics.algoScore;
   const clampedOverall = Math.max(
-    minAllowed,
+    15,
     Math.min(maxAllowed, rawScore, metrics.hardCeiling)
   );
 
@@ -826,9 +840,8 @@ export async function POST(req: Request): Promise<Response> {
       return NextResponse.json({ error: "오디오 또는 목표 문장이 없습니다." }, { status: 400 });
     }
 
-    // 1차 침묵 차단: 오디오 파일 크기가 너무 작거나 클라이언트 마이크 에너지 프레임이 4 미만일 때
-    const speechFrames = speechFramesRaw !== null ? Number(speechFramesRaw) : null;
-    if (audioFile.size < 2000 || (speechFrames !== null && !Number.isNaN(speechFrames) && speechFrames < 4)) {
+    // 1차 침묵 차단: 오디오 파일 크기가 너무 작아 빈 파일인 경우에만 차단
+    if (audioFile.size < 1500) {
       return NextResponse.json({
         score: 0,
         overallScore: 0,
@@ -851,7 +864,7 @@ export async function POST(req: Request): Promise<Response> {
     const genAI       = new GoogleGenerativeAI(apiKey);
     const base64Audio = Buffer.from(await audioFile.arrayBuffer()).toString("base64");
 
-    // ── 1단계: 100% 블라인드 STT (targetText 미제공) ────────────
+    // ── 1단계: 100% 블라인드 STT (targetText 미제공, 들은 그대로) ──
     let recognized: string;
     try {
       recognized = await runBlindSTT(genAI, base64Audio);
@@ -877,12 +890,11 @@ export async function POST(req: Request): Promise<Response> {
     const rHangulOnly = r.replace(/[^가-힣]/g, "");
     const tHangulOnly = targetText.replace(/[^가-힣]/g, "");
 
-    // 2차 침묵·잡음·비한국어 차단
+    // 2차 침묵 차단: 오직 실제로 말소리가 없거나 (침묵)인 경우만 차단
     if (
       !r ||
-      rHangulOnly.length === 0 ||
-      /(침묵|잡음|인식\s*불가|소음|무음|숨소리|기침)/.test(r) ||
-      /^[.…\s음어아으흠하후헤히]+$/.test(r)
+      r === "(침묵)" ||
+      /(침묵|소음|무음|숨소리|기침)/.test(r) && rHangulOnly.length === 0
     ) {
       return NextResponse.json({
         score: 0,
@@ -898,63 +910,30 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // 환각 차단 (목표 문장보다 3배 이상 긴 경우)
-    if (rHangulOnly.length > Math.max(tHangulOnly.length * 3, 15)) {
-      return NextResponse.json({
-        score: 0,
-        overallScore: 0,
-        categoryScores: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
-        summary: `${userNick}님, 주변 소음이 섞여 음성이 정확히 인식되지 않았어요.`,
-        errors: [],
-        masteredTags: [],
-        recognized: "(잡음)",
-        correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
-        explanation: `${userNick}님, 주변 소음이 섞여 음성이 정확히 인식되지 않았어요.`,
-        advice: "조용한 환경에서 마이크에 가까이 대고 목표 문장만 또렷하게 말해보세요.",
-      });
-    }
-
-    // ── 음절 정밀 정렬 및 엄격 알고리즘 평가 ────────────────────
+    // ── 음절 정밀 정렬 및 알고리즘 평가 ────────────────────
     const metrics = evaluatePronunciation(r, targetText, targetPronunciation);
     console.log(
       `📊 정밀분석: 유사도=${Math.round(metrics.weightedSim * 100)}%, 알고리즘점수=${metrics.algoScore}, 상한=${metrics.hardCeiling}, 받침오류=${metrics.codaErrors}, 모음오류=${metrics.vowelErrors}, 불일치=${metrics.mismatches}, 누락=${metrics.omittedCount}`
     );
 
-    // 너무 짧게 말했거나 전혀 다른 말을 한 경우 조기 저점 처리
-    if (rHangulOnly.length < tHangulOnly.length * 0.25) {
-      return NextResponse.json({
-        score: Math.min(10, metrics.algoScore),
-        overallScore: Math.min(10, metrics.algoScore),
-        categoryScores: { consonant: 10, vowel: 10, rule: 10, intonation: 10 },
-        summary: `${userNick}님, 말소리가 너무 짧게 인식되었습니다("${recognized}"). 문장 전체를 끝까지 말해보세요.`,
-        errors: [],
-        masteredTags: [],
-        recognized,
-        correct: targetPronunciation || `[${toStandardPronunciation(targetText)}]`,
-        explanation: `${userNick}님, 말소리가 너무 짧게 인식되었습니다("${recognized}"). 문장 전체를 끝까지 말해보세요.`,
-        advice: "문장을 처음부터 끝까지 완전하게 발음해보세요.",
-        syllableResults: metrics.syllableResults,
-      });
-    }
-
     // ── 연음 실패 감지 ──────────────────────────────────────────
     const { suspected: liaisonFail, penalty: liaisonPenalty } =
       detectLiaisonFailure(targetText, audioFile.size);
 
-    // ── 2단계: AI 피드백 및 채점 ─────────
+    // ── 2단계: AI 멀티모달 오디오 청취 + 음운/억양/휴지 정밀 평가 ──
     let scored: ScoringResult;
     try {
-      scored = await runScoring(genAI, recognized, targetText, targetPronunciation, context, userNick, metrics);
+      scored = await runScoring(genAI, base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics);
     } catch (e) {
       console.error("채점 실패:", e);
-      const fallback = Math.max(0, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
+      const fallback = Math.max(15, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
       return NextResponse.json({
         score: fallback,
         overallScore: fallback,
         categoryScores: {
           consonant: Math.min(100, fallback + 5),
           vowel: Math.min(100, fallback + 5),
-          rule: Math.max(0, fallback - 10),
+          rule: Math.max(10, fallback - 10),
           intonation: fallback,
         },
         summary: metrics.errorSummary.length > 0
@@ -972,8 +951,8 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // AI가 오디오를 듣고 침묵(0점)으로 판정한 경우 즉시 0점 반환
-    if (scored.score === 0) {
+    // 오직 실제 침묵일 때만 침묵 0점 반환 (들은 말이 있으면 그대로 점수와 인식어 반환)
+    if (recognized === "(침묵)") {
       return NextResponse.json({
         score: 0,
         overallScore: 0,
