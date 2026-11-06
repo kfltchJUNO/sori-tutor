@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import {
   X, BarChart3, CheckCircle2, AlertTriangle, Sparkles,
-  BookOpen, Clock, ChevronDown, ChevronUp, Award, RefreshCw, Layers
+  BookOpen, Clock, ChevronDown, ChevronUp, Award, RefreshCw, Layers, Flame
 } from "lucide-react";
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
   univKey: "dongguk" | "dongguk3" | "dankook";
   univName: string;
   themeColor: "amber" | "blue";
+  onStartWeaknessDrill?: () => void;
 }
 
 export interface StudentRecordItem {
@@ -61,6 +62,7 @@ export default function StudentHistoryModal({
   univKey,
   univName,
   themeColor,
+  onStartWeaknessDrill,
 }: Props) {
   const [records, setRecords] = useState<StudentRecordItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -124,6 +126,7 @@ export default function StudentHistoryModal({
         total: 0,
         avgScore: 0,
         bestScore: 0,
+        weakCount: 0,
         categoryAverages: { consonant: 0, vowel: 0, rule: 0, intonation: 0 },
         errorTagCounts: [] as { tag: string; category: string; subCategory: string; count: number; latestTip: string }[],
         masteredTagSet: [] as string[],
@@ -189,10 +192,13 @@ export default function StudentHistoryModal({
       .map(([tag, data]) => ({ tag, ...data }))
       .sort((a, b) => b.count - a.count);
 
+    const weakCount = records.filter(r => (r.score < 75) || (r.errors && r.errors.length > 0)).length;
+
     return {
       total,
       avgScore,
       bestScore,
+      weakCount,
       categoryAverages,
       errorTagCounts,
       masteredTagSet: Array.from(masteredSet),
@@ -300,6 +306,30 @@ export default function StudentHistoryModal({
                     <span className="text-lg font-black text-emerald-700">{stats.bestScore}점</span>
                   </div>
                 </div>
+
+                {/* 취약 발음 집중 복습 배너 */}
+                {onStartWeaknessDrill && stats.weakCount > 0 && (
+                  <div className="bg-gradient-to-r from-rose-500 to-amber-500 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5 font-black text-sm">
+                        <Flame size={18} className="text-amber-200 fill-amber-200" />
+                        취약 발음 집중 복습 모드 ({stats.weakCount}개 문장)
+                      </div>
+                      <p className="text-[11px] text-rose-100 mt-0.5 leading-snug">
+                        점수가 75점 미만이거나 오류가 감지된 문장만 모아서 빠르게 재학습합니다.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onStartWeaknessDrill();
+                      }}
+                      className="px-3 py-2 bg-white text-rose-600 font-black text-xs rounded-xl shadow-xs hover:bg-rose-50 transition shrink-0 flex items-center gap-1 active:scale-95"
+                    >
+                      지금 복습
+                    </button>
+                  </div>
+                )}
 
                 {/* 2. 4대 영역별 점수 분석 */}
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-3xl space-y-3">

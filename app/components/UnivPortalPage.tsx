@@ -8,12 +8,13 @@ import { auth, db, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, updateDoc, collection, getDocs, addDoc,
-  query, orderBy, serverTimestamp, setDoc, onSnapshot, where, writeBatch
+  query, orderBy, serverTimestamp, setDoc, onSnapshot, where, writeBatch, limit
 } from "firebase/firestore";
 import {
   Volume2, Mic, Square, RefreshCw, ChevronLeft, ChevronRight,
   Sparkles, CheckCircle2, Clock, AlertCircle, Languages, Loader2, LogOut,
-  Shuffle, Layers, Bell, X, Settings, VolumeX, Sliders, BarChart3, Award
+  Shuffle, Layers, Bell, X, Settings, VolumeX, Sliders, BarChart3, Award,
+  Flame, Headphones, WifiOff, RotateCcw
 } from "lucide-react";
 import AudioWaveform from "./AudioWaveform";
 import PwaInstallPrompt from "./PwaInstallPrompt";
@@ -89,6 +90,18 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
   // ── 학생 학습 기록 및 오류 분석 모달 상태 ──
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
+  // ── A/B 리플레이 (내 목소리 재생) ──
+  const [playingMyAudio, setPlayingMyAudio] = useState(false);
+  const myAudioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  // ── 취약 발음 집중 복습 모드 (약점 훈련) ──
+  const [weakSentenceSet, setWeakSentenceSet] = useState<Set<string>>(new Set());
+  const [weakModeOnly, setWeakModeOnly] = useState(false);
+
+  // ── 네트워크 불안정 시 오디오 임시 보관 (Offline Retry) ──
+  const pendingAudioBlobRef = useRef<Blob | null>(null);
+  const [networkError, setNetworkError] = useState<{ message: string; canRetry: boolean } | null>(null);
+
   // ── 환경 설정 상태 (음량 조절 & 알람 허용 ON/OFF) ──
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [volume, setVolume] = useState<number>(() => {
@@ -114,6 +127,31 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     if (audioPlayerRef.current) {
       audioPlayerRef.current.volume = newVol;
     }
+    if (myAudioPlayerRef.current) {
+      myAudioPlayerRef.current.volume = newVol;
+    }
+  };
+
+  const handlePlayMyAudio = () => {
+    if (playingMyAudio) {
+      myAudioPlayerRef.current?.pause();
+      setPlayingMyAudio(false);
+      return;
+    }
+    if (!audioUrl) return;
+
+    if (playingAudio) {
+      audioPlayerRef.current?.pause();
+      setPlayingAudio(false);
+    }
+
+    const audio = new Audio(audioUrl);
+    audio.volume = Math.max(0, Math.min(1, volume));
+    myAudioPlayerRef.current = audio;
+    setPlayingMyAudio(true);
+    audio.onended = () => setPlayingMyAudio(false);
+    audio.onerror = () => setPlayingMyAudio(false);
+    audio.play().catch(() => setPlayingMyAudio(false));
   };
 
   const handleToggleNotifications = (targetVal?: boolean) => {
@@ -192,6 +230,38 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     }
   };
 
+  const loadWeakSentences = async (email: string) => {
+    try {
+      const histRef = collection(db, "sori_users", email, "history");
+      const q = query(histRef, orderBy("date", "desc"), limit(100));
+      const snap = await getDocs(q);
+      const set = new Set<string>();
+      snap.forEach((d) => {
+        const data = d.data();
+        if ((data.score !== undefined && data.score < 75) || (Array.isArray(data.errors) && data.errors.length > 0)) {
+          if (data.text) set.add(data.text);
+        }
+      });
+      setWeakSentenceSet(set);
+    } catch (e) {
+      console.warn("Failed to load weak sentences:", e);
+    }
+  };
+
+  // 인터넷 복구 감지 리스너
+  useEffect(() => {
+    const handleOnline = () => {
+      if (networkError && pendingAudioBlobRef.current) {
+        setNetworkError({
+          message: "인터넷 연결이 복구되었습니다! 아래 '채점 다시 시도' 버튼을 눌러주세요.",
+          canRetry: true,
+        });
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [networkError]);
+
   const loadUserData = async (email: string) => {
     try {
       const userRef = doc(db, "sori_users", email);
@@ -210,6 +280,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         await setDoc(userRef, initData);
         setUserData(initData);
       }
+      await loadWeakSentences(email);
     } catch (e) {
       console.error(e);
     }
@@ -287,6 +358,16 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
   // 녹음 시작
   const startRecording = async () => {
     try {
+      if (playingAudio) {
+        audioPlayerRef.current?.pause();
+        setPlayingAudio(false);
+      }
+      if (playingMyAudio) {
+        myAudioPlayerRef.current?.pause();
+        setPlayingMyAudio(false);
+      }
+      setNetworkError(null);
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
       chunksRef.current = [];
@@ -297,6 +378,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         setAudioUrl(URL.createObjectURL(blob));
         setAudioBlob(blob);
+        pendingAudioBlobRef.current = blob;
         chunksRef.current = [];
         stream.getTracks().forEach(t => t.stop());
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -348,15 +430,31 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     }
   };
 
-  // 발음 분석 (전액 무료 + 학생 학습 기록 자동 저장)
-  const handleAnalyze = async () => {
-    if (!audioBlob || !currentProblem) return;
+  // 발음 분석 (전액 무료 + 학생 학습 기록 자동 저장 + 네트워크 오류 시 로컬 보관)
+  const handleAnalyze = async (customBlob?: Blob) => {
+    const targetBlob = customBlob || audioBlob || pendingAudioBlobRef.current;
+    if (!targetBlob || !currentProblem) return;
+
+    // 녹음 데이터 안전하게 임시 보관
+    pendingAudioBlobRef.current = targetBlob;
     setAnalyzing(true);
+    setNetworkError(null);
+
+    // 오프라인 사전 감지
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setNetworkError({
+        message: "인터넷 연결이 끊겨 있습니다. 녹음 파일이 안전하게 임시 보관되었습니다. 연결 후 '채점 다시 시도'를 눌러주세요.",
+        canRetry: true,
+      });
+      setAnalyzing(false);
+      return;
+    }
+
     setResult(null);
     setTranslation(null);
 
     const formData = new FormData();
-    formData.append("audio", audioBlob);
+    formData.append("audio", targetBlob);
     formData.append("targetText", currentProblem.text);
     if (currentProblem.pronunciation) {
       formData.append("targetPronunciation", currentProblem.pronunciation);
@@ -366,6 +464,9 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
 
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: formData });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
       if (data.error) {
         alert(data.error);
@@ -375,6 +476,15 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         const tier = getTier(data.score, isSilence);
         const voiceUrl = feedbackVoices[tier] ?? null;
         playScoreFeedback(data.score, isSilence, voiceUrl, volume).catch(() => {});
+
+        // 취약 문제 세트 업데이트 (75점 미만 또는 오류 존재 시)
+        if (data.score < 75 || (Array.isArray(data.errors) && data.errors.length > 0)) {
+          setWeakSentenceSet(prev => new Set(prev).add(currentProblem.text));
+        }
+
+        // 성공 시 임시 보관 데이터 및 네트워크 오류 해제
+        pendingAudioBlobRef.current = null;
+        setNetworkError(null);
 
         // 학생 학습 기록(history) Firestore 저장 (오류 유형 및 4대 영역 점수 포함)
         if (currentUser?.email) {
@@ -402,7 +512,11 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
         }
       }
     } catch (e) {
-      alert("분석 중 오류가 발생했습니다.");
+      console.error("Analysis network error:", e);
+      setNetworkError({
+        message: "인터넷 연결이 불안정하여 채점을 완료하지 못했습니다. 녹음 파일이 보관되어 있으니 다시 시도해 주세요.",
+        canRetry: true,
+      });
     } finally {
       setAnalyzing(false);
     }
@@ -430,6 +544,10 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
 
   // 정답 오디오 재생
   const handlePlayModelAudio = (url?: string, text?: string) => {
+    if (playingMyAudio) {
+      myAudioPlayerRef.current?.pause();
+      setPlayingMyAudio(false);
+    }
     if (playingAudio) {
       audioPlayerRef.current?.pause();
       setPlayingAudio(false);
@@ -441,6 +559,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       audioPlayerRef.current = audio;
       setPlayingAudio(true);
       audio.onended = () => setPlayingAudio(false);
+      audio.onerror = () => setPlayingAudio(false);
       audio.play().catch(() => setPlayingAudio(false));
     } else if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
       const u = new SpeechSynthesisUtterance(text);
@@ -449,6 +568,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       u.volume = Math.max(0, Math.min(1, volume));
       setPlayingAudio(true);
       u.onend = () => setPlayingAudio(false);
+      u.onerror = () => setPlayingAudio(false);
       window.speechSynthesis.speak(u);
     }
   };
@@ -472,9 +592,14 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
     return { chaptersWithCount: sorted, unassignedCount: unassigned };
   }, [problemList]);
 
-  // ── 과 필터링 및 랜덤 셔플된 문제 목록 ──
+  // ── 과 필터링 및 취약 문장 필터링, 랜덤 셔플된 문제 목록 ──
   const displayList = useMemo(() => {
-    let filtered = problemList.filter((item) => {
+    let base = problemList;
+    if (weakModeOnly) {
+      base = base.filter((item) => weakSentenceSet.has(item.text));
+    }
+
+    let filtered = base.filter((item) => {
       const rawCh = item.chapter;
       const ch = rawCh !== undefined && rawCh !== null && rawCh !== "" ? Number(rawCh) : 0;
       if (selectedChapter === "all") return true;
@@ -493,18 +618,72 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
       return copy;
     }
     return filtered;
-  }, [problemList, selectedChapter, isRandom, randomKey]);
+  }, [problemList, selectedChapter, isRandom, randomKey, weakModeOnly, weakSentenceSet]);
 
-  // 과 또는 랜덤 상태 변경 시 인덱스 및 결과 리셋
+  // 과 또는 랜덤 상태 또는 취약 복습 모드 변경 시 인덱스 및 결과 리셋
   useEffect(() => {
     setCurrentIndex(0);
     setResult(null);
     setTranslation(null);
     setAudioUrl(null);
     setAudioBlob(null);
-  }, [selectedChapter, isRandom, randomKey]);
+    setNetworkError(null);
+    if (playingAudio) {
+      audioPlayerRef.current?.pause();
+      setPlayingAudio(false);
+    }
+    if (playingMyAudio) {
+      myAudioPlayerRef.current?.pause();
+      setPlayingMyAudio(false);
+    }
+  }, [selectedChapter, isRandom, randomKey, weakModeOnly]);
 
   const currentProblem = displayList[currentIndex];
+
+  // 발음 오류 시각적 하이라이트 (Syllable / Word Visualizer)
+  const renderSentenceWithHighlights = () => {
+    if (!currentProblem) return null;
+    if (!result || !Array.isArray(result.errors) || result.errors.length === 0) {
+      return (
+        <h2 className="text-2xl font-black text-slate-900 leading-snug">
+          {currentProblem.text}
+        </h2>
+      );
+    }
+
+    const words = currentProblem.text.split(" ");
+    return (
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 leading-snug">
+        {words.map((word: string, i: number) => {
+          const cleanWord = word.replace(/[^가-힣a-zA-Z0-9]/g, "");
+          const matchingErr = result.errors.find((e: any) => {
+            if (!e.targetWord) return false;
+            const cleanTarget = e.targetWord.replace(/[^가-힣a-zA-Z0-9]/g, "");
+            return cleanWord.includes(cleanTarget) || cleanTarget.includes(cleanWord);
+          });
+
+          if (matchingErr) {
+            return (
+              <span key={i} className="inline-flex flex-col items-center">
+                <span className="text-2xl font-black text-rose-600 underline decoration-rose-400 decoration-wavy decoration-2 underline-offset-4 bg-rose-50 px-2 py-0.5 rounded-xl border border-rose-200 shadow-2xs">
+                  {word}
+                </span>
+                <span className="text-[10px] font-bold text-rose-600 bg-white border border-rose-200 px-1.5 py-0.5 rounded-md shadow-2xs mt-1">
+                  정답 [{matchingErr.expectedPhoneme}] ↔ 내소리 [{matchingErr.userPhoneme || "오류"}]
+                </span>
+              </span>
+            );
+          }
+
+          return (
+            <span key={i} className="text-2xl font-black text-slate-900">
+              {word}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
 
   const handleNext = () => {
     if (currentIndex < displayList.length - 1) {
@@ -813,6 +992,23 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
 
                     {/* 등록된 과 및 미배정 그룹 탭 목록 (가로 스크롤) */}
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                      {/* 취약 발음 집중 복습 토글 버튼 */}
+                      {weakSentenceSet.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setWeakModeOnly(!weakModeOnly)}
+                          className={`text-xs px-3 py-1.5 rounded-xl font-black shrink-0 transition flex items-center gap-1.5 shadow-xs ${
+                            weakModeOnly
+                              ? "bg-rose-600 text-white animate-pulse"
+                              : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                          }`}
+                          title="점수가 75점 미만이거나 오류가 감지된 문장만 모아서 학습합니다"
+                        >
+                          <Flame size={13} className={weakModeOnly ? "fill-white text-white" : "fill-rose-500 text-rose-500"} />
+                          취약 복습 ({weakSentenceSet.size})
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setSelectedChapter("all")}
@@ -856,6 +1052,23 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                     </div>
                   </div>
 
+                  {/* 취약 복습 모드 활성화 알림 배너 */}
+                  {weakModeOnly && (
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 p-2.5 rounded-2xl flex items-center justify-between text-xs animate-in fade-in">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <Flame size={15} className="text-rose-500 fill-rose-500 shrink-0" />
+                        <span>취약 문장 집중 훈련 모드 ({displayList.length}개 문장)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setWeakModeOnly(false)}
+                        className="text-[11px] font-bold text-rose-600 underline hover:text-rose-800"
+                      >
+                        전체 모드로 복귀
+                      </button>
+                    </div>
+                  )}
+
                   {/* 상단 진행률 & 챕터 표시 */}
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
@@ -876,9 +1089,7 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                   {/* 문장 카드 */}
                   <div className="bg-gradient-to-b from-white to-slate-50/50 p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                     <div className="flex items-start justify-between gap-2">
-                      <h2 className="text-2xl font-black text-slate-900 leading-snug">
-                        {currentProblem.text}
-                      </h2>
+                      {renderSentenceWithHighlights()}
                       <button
                         onClick={() => handlePlayModelAudio(currentProblem.audio_path, currentProblem.pronunciation || currentProblem.text)}
                         className={`p-3 rounded-2xl border transition shadow-sm shrink-0 ${
@@ -915,6 +1126,47 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                       </p>
                     )}
                   </div>
+
+                  {/* A/B 비교 듣기 바 (원어민 표준 발음 vs 내 녹음 목소리) */}
+                  {(audioUrl || result) && (
+                    <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-2xl flex items-center justify-between gap-2 shadow-2xs animate-in fade-in">
+                      <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
+                        <Headphones size={15} className="text-indigo-600" />
+                        <span>비교 듣기 (A/B 리플레이)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handlePlayModelAudio(currentProblem.audio_path, currentProblem.pronunciation || currentProblem.text)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-2xs ${
+                            playingAudio
+                              ? "bg-indigo-600 text-white animate-pulse"
+                              : "bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50"
+                          }`}
+                          title="원어민 표준 발음 듣기"
+                        >
+                          <Volume2 size={13} />
+                          {playingAudio ? "재생 중..." : "🔊 원어민 소리"}
+                        </button>
+
+                        {audioUrl && (
+                          <button
+                            type="button"
+                            onClick={handlePlayMyAudio}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-2xs ${
+                              playingMyAudio
+                                ? "bg-rose-500 text-white animate-pulse"
+                                : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50"
+                            }`}
+                            title="내가 방금 녹음한 목소리 다시 듣기"
+                          >
+                            <Headphones size={13} />
+                            {playingMyAudio ? "재생 중..." : "🎧 내 목소리"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 분석 결과 카드 */}
                   {result && (
@@ -1064,10 +1316,34 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
                       </button>
                     </div>
 
+                    {/* 네트워크 불안정 시 로컬 임시 보관 & 재시도 배너 */}
+                    {networkError && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs space-y-2 animate-in fade-in">
+                        <div className="flex items-start gap-2 text-amber-900">
+                          <WifiOff size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="font-bold">네트워크 연결 불안정 (음성 안전 보관됨)</p>
+                            <p className="text-[11px] text-amber-700 leading-relaxed mt-0.5">{networkError.message}</p>
+                          </div>
+                        </div>
+                        {networkError.canRetry && (audioBlob || pendingAudioBlobRef.current) && (
+                          <button
+                            type="button"
+                            onClick={() => handleAnalyze()}
+                            disabled={analyzing}
+                            className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+                          >
+                            {analyzing ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                            <span>보관된 녹음으로 채점 다시 시도</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* 녹음 완료 후 채점 받기 버튼 */}
                     {audioBlob && !recording && !result && (
                       <button
-                        onClick={handleAnalyze}
+                        onClick={() => handleAnalyze()}
                         disabled={analyzing}
                         className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-base rounded-2xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50"
                       >
@@ -1270,6 +1546,11 @@ export default function UnivPortalPage({ config }: { config: UnivPortalConfig })
           univKey={config.univKey}
           univName={config.univName}
           themeColor={config.themeColor}
+          onStartWeaknessDrill={() => {
+            setWeakModeOnly(true);
+            setSelectedChapter("all");
+            setCurrentIndex(0);
+          }}
         />
       )}
     </div>
