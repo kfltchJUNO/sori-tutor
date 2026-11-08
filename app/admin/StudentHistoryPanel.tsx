@@ -7,6 +7,7 @@ import { adminFetch } from "@/lib/firebase";
 import {
   BarChart3, RefreshCw, Loader2, User, Calendar, Award,
   CheckCircle2, AlertCircle, Search, Filter, ChevronDown, ChevronUp,
+  Download, FileSpreadsheet,
 } from "lucide-react";
 import type {
   StudentLearningSummary,
@@ -54,6 +55,26 @@ function getCourseLabel(type: string) {
     default:
       return { text: type, cls: "bg-slate-100 text-slate-700" };
   }
+}
+
+// ── CSV 다운로드 유틸 (Excel 한글 깨짐 방지 UTF-8 BOM 포함) ──
+function escapeCSV(val: any): string {
+  if (val === null || val === undefined) return '""';
+  const str = String(val).replace(/"/g, '""');
+  return `"${str}"`;
+}
+
+function downloadCSV(csvContent: string, fileName: string) {
+  // \uFEFF: UTF-8 BOM -> Excel에서 한글 깨짐 없이 즉시 오픈
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export default function StudentHistoryPanel({
@@ -158,6 +179,146 @@ export default function StudentHistoryPanel({
     return list;
   }, [students, selectedEmail, courseFilter, searchQuery, univ]);
 
+  // ── 1. 학생별 학습 통계 요약 CSV 다운로드 ──────────────────
+  const handleExportSummaryCSV = () => {
+    if (students.length === 0) return;
+
+    const headers = [
+      "학번",
+      "이름",
+      "이메일",
+      "소속 대학",
+      "승인 상태",
+      "총 연습 횟수",
+      `${univLabel} 문장 횟수`,
+      "전체 평균 점수",
+      "최고 점수",
+      "자음 평균 점수",
+      "모음 평균 점수",
+      "음운변동 평균 점수",
+      "억양 평균 점수",
+      "최근 학습 일시",
+    ];
+
+    const rows = students.map((stu) => {
+      const withCategory = stu.records.filter((r) => r.categoryScores);
+      const avgConsonant =
+        withCategory.length > 0
+          ? Math.round(
+              withCategory.reduce((acc, r) => acc + (r.categoryScores?.consonant ?? 0), 0) /
+                withCategory.length
+            )
+          : "";
+      const avgVowel =
+        withCategory.length > 0
+          ? Math.round(
+              withCategory.reduce((acc, r) => acc + (r.categoryScores?.vowel ?? 0), 0) /
+                withCategory.length
+            )
+          : "";
+      const avgRule =
+        withCategory.length > 0
+          ? Math.round(
+              withCategory.reduce((acc, r) => acc + (r.categoryScores?.rule ?? 0), 0) /
+                withCategory.length
+            )
+          : "";
+      const avgIntonation =
+        withCategory.length > 0
+          ? Math.round(
+              withCategory.reduce((acc, r) => acc + (r.categoryScores?.intonation ?? 0), 0) /
+                withCategory.length
+            )
+          : "";
+
+      return [
+        stu.studentId || "-",
+        stu.name || "-",
+        stu.email,
+        univLabel,
+        stu.status === "approved" ? "승인완료" : "대기중",
+        stu.totalCount,
+        stu.univCount,
+        stu.totalCount > 0 ? stu.avgScore : "",
+        stu.totalCount > 0 ? stu.bestScore : "",
+        avgConsonant,
+        avgVowel,
+        avgRule,
+        avgIntonation,
+        formatDateTime(stu.lastStudyAtMs),
+      ]
+        .map(escapeCSV)
+        .join(",");
+    });
+
+    const csvContent = [headers.map(escapeCSV).join(","), ...rows].join("\r\n");
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    downloadCSV(csvContent, `소리튜터_${univLabel}_학생별학습통계_${dateStr}.csv`);
+  };
+
+  // ── 2. 문장별 상세 채점 기록 CSV 다운로드 ──────────────────
+  const handleExportDetailedCSV = () => {
+    if (filteredRecords.length === 0) return;
+
+    const headers = [
+      "학번",
+      "학생 이름",
+      "이메일",
+      "학습 일시",
+      "학습 코스",
+      "챕터/과",
+      "목표 문장",
+      "정답 표준 발음",
+      "실제 발화(인식)",
+      "채점 점수",
+      "자음 점수",
+      "모음 점수",
+      "음운변동 점수",
+      "억양 점수",
+      "감지된 오류 태그",
+      "AI 종합 평가",
+      "AI 맞춤 조언/팁",
+    ];
+
+    const rows = filteredRecords.map((r) => {
+      const errorTags =
+        Array.isArray(r.errors) && r.errors.length > 0
+          ? r.errors.map((e: any) => e.tag || e.subCategory || "").filter(Boolean).join(" | ")
+          : "";
+
+      return [
+        r.studentId || "-",
+        r.studentName || "-",
+        r.studentEmail || "-",
+        formatDateTime(r.dateMs),
+        getCourseLabel(r.type).text,
+        r.chapter ? `${r.chapter}과` : "-",
+        r.text || "-",
+        r.pronunciation || "-",
+        r.recognized || "-",
+        r.score ?? 0,
+        r.categoryScores?.consonant ?? "-",
+        r.categoryScores?.vowel ?? "-",
+        r.categoryScores?.rule ?? "-",
+        r.categoryScores?.intonation ?? "-",
+        errorTags || "오류 없음",
+        r.summary || r.feedback || "-",
+        r.advice || "-",
+      ]
+        .map(escapeCSV)
+        .join(",");
+    });
+
+    const csvContent = [headers.map(escapeCSV).join(","), ...rows].join("\r\n");
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const targetStudent = selectedEmail ? students.find((s) => s.email === selectedEmail) : null;
+    const fileName = targetStudent
+      ? `소리튜터_${targetStudent.name}_상세학습기록_${dateStr}.csv`
+      : `소리튜터_${univLabel}_상세학습기록_${dateStr}.csv`;
+
+    downloadCSV(csvContent, fileName);
+  };
+
   return (
     <div className="space-y-6">
       {/* 1. 상단 전체 요약 카드 */}
@@ -209,6 +370,14 @@ export default function StudentHistoryPanel({
                 전체 학생 기록 보기
               </button>
             )}
+            <button
+              onClick={handleExportSummaryCSV}
+              disabled={students.length === 0}
+              title="엑셀(Excel)에서 바로 열 수 있는 학생별 종합 통계 CSV를 다운로드합니다."
+              className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg transition shadow-xs disabled:opacity-40"
+            >
+              <Download size={13} /> 학생 통계 CSV
+            </button>
             <button
               onClick={loadHistory}
               disabled={loading}
@@ -359,6 +528,16 @@ export default function StudentHistoryPanel({
                 className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+
+            {/* 상세기록 CSV 다운로드 */}
+            <button
+              onClick={handleExportDetailedCSV}
+              disabled={filteredRecords.length === 0}
+              title="현재 조회 중인 문장별 상세 채점 내역(피드백 포함) CSV를 다운로드합니다."
+              className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg transition shadow-xs disabled:opacity-40"
+            >
+              <Download size={13} /> 상세기록 CSV
+            </button>
           </div>
         </div>
 

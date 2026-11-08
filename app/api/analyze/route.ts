@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { getNextGeminiApiKey, getGeminiKeyList } from "@/lib/geminiKeyPool";
 
 const MODEL_CANDIDATES: string[] = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
   "gemini-3.8-flash",
 ];
 
@@ -525,33 +527,53 @@ function detectLiaisonFailure(
 }
 
 // ══════════════════════════════════════════════════════════════
-// Gemini 릴레이 호출 (temperature 조절 지원)
+// Gemini 릴레이 호출 (멀티 키 로테이션 & 멀티 모델 폴백)
 // ══════════════════════════════════════════════════════════════
 async function callGemini(
-  genAI: GoogleGenerativeAI,
   prompt: string,
   base64Audio?: string,
   temperature: number = 0.1,
+  audioMimeType: string = "audio/webm",
 ): Promise<string> {
+  const keys = getGeminiKeyList();
+  if (keys.length === 0) throw new Error("API Key missing");
+
   let lastError: unknown;
-  for (const modelName of MODEL_CANDIDATES) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        safetySettings: SAFETY,
-        generationConfig: { temperature },
-      });
-      const parts: (string | { inlineData: { mimeType: string; data: string } })[] = [prompt];
-      if (base64Audio) parts.push({ inlineData: { mimeType: "audio/webm", data: base64Audio } });
-      const res = await model.generateContent(parts);
-      console.log(`✅ [${modelName}]`);
-      return res.response.text();
-    } catch (e: unknown) {
-      console.warn(`⚠️ [${modelName}]: ${e instanceof Error ? e.message.substring(0, 60) : String(e)}`);
-      lastError = e;
+  // 등록된 키 개수만큼 순환 시도 (한 키가 429/할당량 초과 시 다음 키로 자동 전환)
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const apiKey = getNextGeminiApiKey();
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    for (const modelName of MODEL_CANDIDATES) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          safetySettings: SAFETY,
+          generationConfig: { temperature },
+        });
+        const parts: (string | { inlineData: { mimeType: string; data: string } })[] = [prompt];
+        if (base64Audio) parts.push({ inlineData: { mimeType: audioMimeType, data: base64Audio } });
+        const res = await model.generateContent(parts);
+        console.log(`✅ [${modelName}] (key: ...${apiKey.slice(-4)})`);
+        return res.response.text();
+      } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn(`⚠️ [${modelName}] (key: ...${apiKey.slice(-4)}): ${errMsg.substring(0, 80)}`);
+        lastError = e;
+        // 429 한도 초과 또는 Quota 부족 시, 현재 키의 다른 모델 시도를 멈추고 다음 키로 즉시 전환
+        if (
+          errMsg.includes("429") ||
+          errMsg.includes("quota") ||
+          errMsg.includes("ResourceExhausted") ||
+          errMsg.includes("Too Many Requests")
+        ) {
+          console.warn(`⏳ [Rate limit 429/quota] 다음 API 키로 즉시 전환합니다.`);
+          break;
+        }
+      }
     }
   }
-  throw lastError ?? new Error("All models failed");
+  throw lastError ?? new Error("All keys and models failed");
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -560,8 +582,8 @@ async function callGemini(
 //   AI가 targetText("학교에 가요")를 컨닝하여 그대로 출력하던 문제를 원천 차단
 // ══════════════════════════════════════════════════════════════
 async function runBlindSTT(
-  genAI: GoogleGenerativeAI,
   base64Audio: string,
+  audioMimeType: string = "audio/webm",
 ): Promise<string> {
   const prompt = `당신은 한국어 발음 평가용 '음성 소리 그대로 받아쓰기(Phonetic STT)' 엔진입니다.
 
@@ -577,7 +599,7 @@ async function runBlindSTT(
 
 출력 형식: 오직 받아쓴 한글 텍스트(또는 "(침묵)") 한 줄만 출력하세요. 따옴표나 부가 설명 절대 금지.`;
 
-  const raw = await callGemini(genAI, prompt, base64Audio, 0.0);
+  const raw = await callGemini(prompt, base64Audio, 0.0, audioMimeType);
   return raw.replace(/^["'`]|["'`]$/g, "").trim();
 }
 
@@ -621,7 +643,6 @@ export interface ScoringResult {
 }
 
 async function runScoring(
-  genAI: GoogleGenerativeAI,
   base64Audio: string,
   recognized: string,
   targetText: string,
@@ -629,6 +650,7 @@ async function runScoring(
   context: string,
   userNick: string,
   metrics: EvaluationMetrics,
+  audioMimeType: string = "audio/webm",
 ): Promise<ScoringResult> {
   const minAllowed = Math.max(15, metrics.algoScore - 6);
   const maxAllowed = Math.min(Math.max(35, metrics.algoScore + 6), metrics.hardCeiling, 92);
@@ -728,7 +750,7 @@ async function runScoring(
   "ruleFormula": "ㄱ 받침 + ㅁ = [ㅇ]"
 }`;
 
-  const raw = await callGemini(genAI, prompt, base64Audio, 0.2);
+  const raw = await callGemini(prompt, base64Audio, 0.2, audioMimeType);
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("채점 JSON 파싱 실패");
 
@@ -856,18 +878,19 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    const apiKey = process.env.GOOGLE_API_KEY
-      ?? process.env.GOOGLE_TTS_API_KEY
-      ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) throw new Error("API Key missing");
+    const keys = getGeminiKeyList();
+    if (keys.length === 0) throw new Error("API Key missing");
 
-    const genAI       = new GoogleGenerativeAI(apiKey);
+    const audioMimeType = audioFile.type && audioFile.type.startsWith("audio/")
+      ? audioFile.type
+      : "audio/webm";
+
     const base64Audio = Buffer.from(await audioFile.arrayBuffer()).toString("base64");
 
     // ── 1단계: 100% 블라인드 STT (targetText 미제공, 들은 그대로) ──
     let recognized: string;
     try {
-      recognized = await runBlindSTT(genAI, base64Audio);
+      recognized = await runBlindSTT(base64Audio, audioMimeType);
     } catch (e) {
       console.error("STT 실패:", e);
       return NextResponse.json({
@@ -923,7 +946,7 @@ export async function POST(req: Request): Promise<Response> {
     // ── 2단계: AI 멀티모달 오디오 청취 + 음운/억양/휴지 정밀 평가 ──
     let scored: ScoringResult;
     try {
-      scored = await runScoring(genAI, base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics);
+      scored = await runScoring(base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics, audioMimeType);
     } catch (e) {
       console.error("채점 실패:", e);
       const fallback = Math.max(15, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
