@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
+import { getNextGeminiApiKey } from "@/lib/geminiKeyPool";
 
 // ── 고성능 → 효율 → 속도 순 릴레이 (2026.06 기준 유효 모델) ─
-import { resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
-
 const MODEL_CANDIDATES: string[] = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
@@ -17,6 +17,22 @@ const SAFETY = [
   { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
+
+// ── ElevenLabs 서킷 브레이커 & 정적 오디오 캐시 ───────────────
+let elevenLabsTrippedUntil = 0;
+const ELEVENLABS_COOLDOWN_MS = 30 * 60 * 1000; // 30분 쿨다운
+
+function tripElevenLabs(reason: string) {
+  elevenLabsTrippedUntil = Date.now() + ELEVENLABS_COOLDOWN_MS;
+  console.warn(`🚨 [ElevenLabs 서킷 브레이커 작동] ${reason} -> 30분 동안 Gemini 무료 TTS로 즉시 우회합니다.`);
+}
+
+function canUseElevenLabs(): boolean {
+  return Date.now() >= elevenLabsTrippedUntil;
+}
+
+// 인사말 등 동일 텍스트 오디오 인메모리 캐시 (API 호출 0회 재사용)
+const GREETING_AUDIO_CACHE = new Map<string, string>();
 
 // ── 릴레이 텍스트 생성 헬퍼 ─────────────────────────────────
 async function generateWithFallback(
@@ -132,9 +148,17 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
   const cleaned = cleanTextForTTS(text);
   if (!cleaned) return null;
 
-  // 1. ElevenLabs API 시도 (1순위)
+  // 0. 정적/동적 캐시 확인 (인사말 등 반복 문장 0ms 즉시 반환, API 호출 0회)
+  const cacheKey = `${personaId || "default"}_${cleaned}`;
+  if (GREETING_AUDIO_CACHE.has(cacheKey)) {
+    return GREETING_AUDIO_CACHE.get(cacheKey)!;
+  }
+
+  let synthesizedBase64: string | null = null;
+
+  // 1. ElevenLabs API 시도 (서킷 브레이커가 정상일 때만 호출)
   const elevenKey = process.env.ELEVENLABS_API_KEY;
-  if (elevenKey && elevenKey !== "your_elevenlabs_api_key_here") {
+  if (elevenKey && elevenKey !== "your_elevenlabs_api_key_here" && canUseElevenLabs()) {
     try {
       const PERSONA_ELEVENLABS_VOICES: Record<string, string> = {
         junho: "3lMatKOyHfWflJwj08H6",   // 남성 준호 (높임말)
@@ -169,129 +193,145 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
 
       if (v4Res.ok) {
         const buf = await v4Res.arrayBuffer();
-        return Buffer.from(buf).toString("base64");
-      }
-
-      // 1-B. eleven_v4 실패 시 eleven_multilingual_v2 폴백 ([tag] 제거본 사용)
-      const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
-        method: "POST",
-        headers: {
-          "xi-api-key": elevenKey,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          text: textForEl,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: isClonedVoice ? 0.75 : 0.65,
-            similarity_boost: isClonedVoice ? 0.75 : 0.8,
-            style: 0.0,
-            speed: 0.92,
-          },
-        }),
-      });
-
-      if (elRes.ok) {
-        const buf = await elRes.arrayBuffer();
-        return Buffer.from(buf).toString("base64");
+        synthesizedBase64 = Buffer.from(buf).toString("base64");
+      } else if (v4Res.status === 401 || v4Res.status === 429) {
+        tripElevenLabs(`HTTP ${v4Res.status}`);
       } else {
-        console.warn(`ElevenLabs TTS 한도 초과 또는 실패 (${elRes.status}), Gemini 무료 TTS로 폴백합니다.`);
+        // 1-B. eleven_v4 실패 시 eleven_multilingual_v2 폴백 ([tag] 제거본 사용)
+        const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
+          method: "POST",
+          headers: {
+            "xi-api-key": elevenKey,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg",
+          },
+          body: JSON.stringify({
+            text: textForEl,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: isClonedVoice ? 0.75 : 0.65,
+              similarity_boost: isClonedVoice ? 0.75 : 0.8,
+              style: 0.0,
+              speed: 0.92,
+            },
+          }),
+        });
+
+        if (elRes.ok) {
+          const buf = await elRes.arrayBuffer();
+          synthesizedBase64 = Buffer.from(buf).toString("base64");
+        } else if (elRes.status === 401 || elRes.status === 429) {
+          tripElevenLabs(`HTTP ${elRes.status}`);
+        } else {
+          console.warn(`ElevenLabs TTS 실패 (${elRes.status}), Gemini 무료 TTS로 폴백합니다.`);
+        }
       }
-    } catch (e) {
-      console.warn("ElevenLabs TTS 호출 오류 (Gemini TTS로 폴백):", e);
+    } catch (e: any) {
+      console.warn("ElevenLabs TTS 호출 오류 (서킷 브레이커 발동):", e?.message || e);
+      tripElevenLabs("Network Error");
     }
   }
 
-  // 2. Gemini API 무료 TTS 폴백 (GOOGLE_API_KEY만으로 무료 한도 내에서 작동)
-  const geminiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (geminiKey) {
-    const GEMINI_TTS_MODELS = [
-      "gemini-3.8-flash-lite-tts",
-      "gemini-3.8-flash-tts",
-      "gemini-3.1-flash-tts-preview",
-      "gemini-2.5-flash-preview-tts",
-    ];
-    const GEMINI_PERSONA_VOICES: Record<string, string> = {
-      junho: "Charon",  // 남성 차분한 톤
-      minwoo: "Puck",   // 남성 밝은 톤
-      chaewon: "Kore",  // 여성 단정한 톤
-      yujin: "Aoede",   // 여성 친근한 톤
-    };
-    const geminiVoice = (personaId && GEMINI_PERSONA_VOICES[personaId]) || "Charon";
+  // 2. Gemini API 무료 TTS 폴백 (멀티 키 로테이션 지원)
+  if (!synthesizedBase64) {
+    const geminiKey = getNextGeminiApiKey();
+    if (geminiKey) {
+      const GEMINI_TTS_MODELS = [
+        "gemini-3.8-flash-lite-tts",
+        "gemini-3.8-flash-tts",
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-flash-preview-tts",
+      ];
+      const GEMINI_PERSONA_VOICES: Record<string, string> = {
+        junho: "Charon",  // 남성 차분한 톤
+        minwoo: "Puck",   // 남성 밝은 톤
+        chaewon: "Kore",  // 여성 단정한 톤
+        yujin: "Aoede",   // 여성 친근한 톤
+      };
+      const geminiVoice = (personaId && GEMINI_PERSONA_VOICES[personaId]) || "Charon";
 
-    for (const ttsModel of GEMINI_TTS_MODELS) {
+      for (const ttsModel of GEMINI_TTS_MODELS) {
+        try {
+          const gemRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: cleaned }] }],
+                generationConfig: {
+                  responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: geminiVoice },
+                    },
+                  },
+                },
+              }),
+            }
+          );
+          if (gemRes.ok) {
+            const gemData = await gemRes.json();
+            const inlineData = gemData?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+            if (inlineData?.data) {
+              const buf = Buffer.from(inlineData.data, "base64");
+              if (buf.slice(0, 4).toString("utf-8") === "RIFF") {
+                synthesizedBase64 = inlineData.data;
+              } else {
+                synthesizedBase64 = pcm16ToWavBase64(inlineData.data, 24000);
+              }
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn(`Gemini TTS [${ttsModel}] 폴백 오류:`, e);
+        }
+      }
+    }
+  }
+
+  // 3. Google Cloud TTS 시도 (올바른 GOOGLE_TTS_API_KEY 사용)
+  if (!synthesizedBase64) {
+    const googleTtsKey = process.env.GOOGLE_TTS_API_KEY || getNextGeminiApiKey();
+    if (googleTtsKey) {
       try {
-        const gemRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${geminiKey}`,
+        const VOICES: Record<string, string> = {
+          su: "ko-KR-Chirp3-HD-Zephyr", min: "ko-KR-Chirp3-HD-Rasalgethi",
+          jin: "ko-KR-Chirp3-HD-Algenib", seol: "ko-KR-Chirp3-HD-Despina",
+          do: "ko-KR-Chirp3-HD-Achird", ju: "ko-KR-Chirp3-HD-Sadachbia",
+          hye: "ko-KR-Chirp3-HD-Aoede", woo: "ko-KR-Chirp3-HD-Charon",
+          hyun: "ko-KR-Chirp3-HD-Zubenelgenubi", sun: "ko-KR-Chirp3-HD-Vindemiatrix",
+        };
+        const targetVoice = voiceName || (personaId && VOICES[personaId]) || "ko-KR-Chirp3-HD-Zephyr";
+
+        const ttsResponse = await fetch(
+          `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleTtsKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: cleaned }] }],
-              generationConfig: {
-                responseModalities: ["AUDIO"],
-                speechConfig: {
-                  voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: geminiVoice },
-                  },
-                },
-              },
+              input: { text: cleaned },
+              voice: { languageCode: "ko-KR", name: targetVoice },
+              audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
             }),
           }
         );
-        if (gemRes.ok) {
-          const gemData = await gemRes.json();
-          const inlineData = gemData?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-          if (inlineData?.data) {
-            const buf = Buffer.from(inlineData.data, "base64");
-            if (buf.slice(0, 4).toString("utf-8") === "RIFF") {
-              return inlineData.data;
-            }
-            return pcm16ToWavBase64(inlineData.data, 24000);
-          }
+        const ttsData = await ttsResponse.json();
+        if (ttsResponse.ok && ttsData.audioContent) {
+          synthesizedBase64 = ttsData.audioContent;
         }
       } catch (e) {
-        console.warn(`Gemini TTS [${ttsModel}] 폴백 오류:`, e);
+        console.error("Google TTS 호출 오류:", e);
       }
     }
   }
 
-  // 2. Google Cloud TTS 시도 (올바른 GOOGLE_TTS_API_KEY 사용)
-  const googleTtsKey = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_API_KEY;
-  if (googleTtsKey) {
-    try {
-      const VOICES: Record<string, string> = {
-        su: "ko-KR-Chirp3-HD-Zephyr", min: "ko-KR-Chirp3-HD-Rasalgethi",
-        jin: "ko-KR-Chirp3-HD-Algenib", seol: "ko-KR-Chirp3-HD-Despina",
-        do: "ko-KR-Chirp3-HD-Achird", ju: "ko-KR-Chirp3-HD-Sadachbia",
-        hye: "ko-KR-Chirp3-HD-Aoede", woo: "ko-KR-Chirp3-HD-Charon",
-        hyun: "ko-KR-Chirp3-HD-Zubenelgenubi", sun: "ko-KR-Chirp3-HD-Vindemiatrix",
-      };
-      const targetVoice = voiceName || (personaId && VOICES[personaId]) || "ko-KR-Chirp3-HD-Zephyr";
-
-      const ttsResponse = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleTtsKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: { text: cleaned },
-            voice: { languageCode: "ko-KR", name: targetVoice },
-            audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
-          }),
-        }
-      );
-      const ttsData = await ttsResponse.json();
-      if (ttsResponse.ok && ttsData.audioContent) {
-        return ttsData.audioContent;
-      }
-    } catch (e) {
-      console.error("Google TTS 호출 오류:", e);
-    }
+  // 성공 시 140자 이하의 짧은 문장/인사말은 캐시에 보관하여 무제한 재사용
+  if (synthesizedBase64 && cleaned.length < 140) {
+    GREETING_AUDIO_CACHE.set(cacheKey, synthesizedBase64);
   }
 
-  return null;
+  return synthesizedBase64;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -299,9 +339,7 @@ export async function POST(req: Request): Promise<Response> {
     const formData = await req.formData();
     const action = formData.get("action") as string;
 
-    const apiKey = process.env.GOOGLE_API_KEY
-      ?? process.env.GOOGLE_TTS_API_KEY
-      ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = getNextGeminiApiKey();
     if (!apiKey) return NextResponse.json({ error: "API Key Error" }, { status: 500 });
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -381,24 +419,24 @@ Output JSON only (no markdown):
       const systemPrompt = isHonorific
         ? `[Role]: You are '${personaName}', a polite, warm, and professional Korean mentor/interviewer/senior helping a foreign learner practice formal & polite Korean (높임말 연습: 면접, 비즈니스, 윗사람과의 대화).
 [Tone]: Polite and formal modern Korean (정중한 현대 높임말: 하십시오체 '-습니다/-습니까' 및 예의 바른 해요체 '-해요/-어요'). NEVER use casual banmal (반말) and NEVER use old-fashioned/awkward endings like '~하네'(알겠네), '~하게'(다녀오게), '~하오'.
-[Guidelines]:
-1. Respond with warmth, respect, and encouragement suitable for an interview, workplace, or conversation with a senior/professor.
-2. Keep responses natural and concise (1-3 sentences).
+[Guidelines & Brevity Constraint]:
+1. [Length Constraint - CRITICAL]: Respond strictly in 1~2 short, natural sentences (under 40-50 Korean characters total). NEVER write long explanations, multiple paragraphs, or lecture-style text. Keep it punchy and quick for real-time voice chat.
+2. Respond with warmth, respect, and encouragement suitable for an interview, workplace, or conversation with a senior/professor.
 3. Always use natural commas (,) after greetings or interjections and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
 4. If the learner accidentally uses casual speech (반말) or awkward honorifics, gently model the natural honorific expression while keeping the conversation flowing.
 5. If the user speech is inaudible or silent, gently ask them in polite Korean to repeat once more.
-6. Always ask a polite, engaging follow-up question so the learner can continue practicing honorific Korean.
+6. Always ask exactly ONE polite, engaging follow-up question so the learner can continue practicing honorific Korean.
 7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`
         : `[Role]: You are '${personaName}', a close, warm, and cheerful same-age Korean friend (20대 동갑내기 절친) helping a foreign learner practice casual Korean (반말 연습: 친구와의 일상 대화).
 [Tone]: Friendly, natural modern casual Korean (친근한 현대 20대 반말: '-어/-아', '-야', '-지', '-거든', '-잖아'). NEVER use formal/polite endings ('-요', '-습니다') and NEVER use old-fashioned/middle-aged endings like '~하네'(알겠네, 고맙네), '~하게'(다녀오게, 잘 지내게), '~구먼'.
-[Guidelines]:
-1. React actively with empathy and excitement like a real 20s best friend (e.g., "아, 진짜? 대박이다!", "그랬구나, 많이 힘들었겠다.").
-2. Keep responses natural and concise (1-3 sentences).
+[Guidelines & Brevity Constraint]:
+1. [Length Constraint - CRITICAL]: Respond strictly in 1~2 short, natural sentences (under 40-50 Korean characters total). NEVER write long explanations, multiple paragraphs, or lecture-style text. Keep it punchy and quick for real-time voice chat.
+2. React actively with empathy and excitement like a real 20s best friend (e.g., "아, 진짜? 대박이다!", "그랬구나, 많이 힘들었겠다.").
 3. Always use natural commas (,) after interjections ("아, ", "응, ", "맞아, ") and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
 4. If the learner speaks too formally ('-요', '-습니다'), playfully remind them that you are close friends and encourage them to speak comfortably in banmal (반말).
 5. If the user speech is inaudible or silent, playfully ask them in casual banmal to repeat once more.
-6. Always ask a fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
+6. Always ask exactly ONE fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
 7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`;
 

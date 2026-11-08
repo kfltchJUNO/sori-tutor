@@ -483,14 +483,57 @@ export default function Home() {
     setChatStatus("select_persona");
   };
 
+  // ── 클라이언트 정적 오디오 캐시 (인사말 중복 요청 방지) ────
+  const personaGreetingCacheRef = useRef<Record<string, string>>({});
+
+  // ── 브라우저 Web Speech API 완전 무제한 폴백 ─────────────
+  const speakWithBrowserTTS = useCallback((text: string, personaId?: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "ko-KR";
+
+      if (personaId === "minwoo") {
+        utterance.pitch = 0.95;
+        utterance.rate = 1.05;
+      } else if (personaId === "yujin") {
+        utterance.pitch = 1.2;
+        utterance.rate = 1.0;
+      } else if (personaId === "chaewon") {
+        utterance.pitch = 1.1;
+        utterance.rate = 0.95;
+      } else {
+        utterance.pitch = 0.9;
+        utterance.rate = 0.95;
+      }
+
+      const voices = window.speechSynthesis.getVoices();
+      const koVoice =
+        voices.find(v => v.lang.startsWith("ko") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Yuna") || v.name.includes("Heami") || v.name.includes("Korean"))) ||
+        voices.find(v => v.lang.startsWith("ko"));
+      if (koVoice) {
+        utterance.voice = koVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn("브라우저 Web Speech API 재생 오류:", e);
+    }
+  }, []);
+
   const playModelMessageAudio = async (text: string, personaId?: string, currentAudio?: string) => {
     if (currentAudio) {
       try {
         const audio = new Audio(currentAudio);
-        audio.play().catch(e => console.error("오디오 재생 실패:", e));
+        audio.play().catch(e => {
+          console.warn("오디오 재생 실패 -> Web Speech API로 대체:", e);
+          speakWithBrowserTTS(text, personaId);
+        });
         return;
       } catch (e) {
-        console.error("오디오 재생 에러:", e);
+        speakWithBrowserTTS(text, personaId);
+        return;
       }
     }
     try {
@@ -503,11 +546,14 @@ export default function Home() {
       if (data.audioContent) {
         const mime = data.audioContent.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
         const audioSrc = `data:${mime};base64,${data.audioContent}`;
-        new Audio(audioSrc).play().catch(e => console.warn(e));
+        new Audio(audioSrc).play().catch(() => speakWithBrowserTTS(text, personaId));
         setChatHistory(prev => prev.map(m => m.text === text ? { ...m, audio: audioSrc } : m));
+      } else {
+        speakWithBrowserTTS(text, personaId);
       }
     } catch (e) {
-      console.error("TTS 요청 실패:", e);
+      console.error("TTS 요청 실패 -> Web Speech API 대체:", e);
+      speakWithBrowserTTS(text, personaId);
     }
   };
 
@@ -522,7 +568,16 @@ export default function Home() {
     setChatStatus("active");
     setChatFeedback(null);
 
-    // 2. 인사말 오디오 호출 및 재생
+    // 2. 클라이언트 캐시 확인 (캐시된 인사말이 있으면 0ms 즉시 재생, API 호출 0회)
+    const cachedAudio = personaGreetingCacheRef.current[personaId];
+    if (cachedAudio) {
+      setChatHistory([{ role: "model", text: greeting, audio: cachedAudio }]);
+      const audio = new Audio(cachedAudio);
+      audio.play().catch(() => speakWithBrowserTTS(greeting, personaId));
+      return;
+    }
+
+    // 3. 서버 정적 캐시 / TTS 호출
     try {
       setTtsLoading(true);
       const formData = new FormData();
@@ -536,14 +591,20 @@ export default function Home() {
       if (data.audioContent) {
         const mime = data.audioContent.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
         const audioSrc = `data:${mime};base64,${data.audioContent}`;
+        personaGreetingCacheRef.current[personaId] = audioSrc;
         setChatHistory([{ role: "model", text: greeting, audio: audioSrc }]);
         const audio = new Audio(audioSrc);
         audio.play().catch(err => {
-          console.warn("브라우저 자동 재생 제한 (스피커 아이콘을 클릭하여 들을 수 있습니다):", err);
+          console.warn("브라우저 자동 재생 제한:", err);
+          speakWithBrowserTTS(greeting, personaId);
         });
+      } else {
+        // 서버 TTS 한도 소진 시 브라우저 내장 음성으로 무제한 폴백
+        speakWithBrowserTTS(greeting, personaId);
       }
     } catch (e) {
-      console.error("인사말 TTS 실패:", e);
+      console.error("인사말 TTS 실패 -> 브라우저 Web Speech로 대체:", e);
+      speakWithBrowserTTS(greeting, personaId);
     } finally {
       setTtsLoading(false);
     }
@@ -584,9 +645,14 @@ export default function Home() {
       ];
       setChatHistory(newHistory);
       if (replyAudioSrc) {
-        new Audio(replyAudioSrc).play().catch((err) => {
-          console.warn("오디오 자동 재생 제한 (스피커 아이콘을 눌러 재생할 수 있습니다):", err);
+        const audio = new Audio(replyAudioSrc);
+        audio.play().catch((err) => {
+          console.warn("오디오 자동 재생 제한 -> 브라우저 Web Speech로 대체:", err);
+          speakWithBrowserTTS(data.aiText, selectedPersona);
         });
+      } else {
+        // 서버 오디오 미지원 또는 한도 소진 시 브라우저 Web Speech API로 무제한 폴백
+        speakWithBrowserTTS(data.aiText, selectedPersona);
       }
       if (data.ended) setChatStatus("ended");
       setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
