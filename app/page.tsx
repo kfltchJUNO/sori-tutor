@@ -583,7 +583,11 @@ export default function Home() {
         { role: "model", text: data.aiText, audio: replyAudioSrc },
       ];
       setChatHistory(newHistory);
-      if (replyAudioSrc) new Audio(replyAudioSrc).play();
+      if (replyAudioSrc) {
+        new Audio(replyAudioSrc).play().catch((err) => {
+          console.warn("오디오 자동 재생 제한 (스피커 아이콘을 눌러 재생할 수 있습니다):", err);
+        });
+      }
       if (data.ended) setChatStatus("ended");
       setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) { alert("통신 오류"); } finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }

@@ -7,6 +7,7 @@ import { resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
 const MODEL_CANDIDATES: string[] = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
   "gemini-3.8-flash",
 ];
 
@@ -34,6 +35,42 @@ async function generateWithFallback(
     }
   }
   throw lastError ?? new Error("All models failed");
+}
+
+// ── Gemini startChat history 규격 정규화 헬퍼 ─────────────────
+// 1) 첫 번째 메시지는 반드시 role: "user"여야 함 (model 인사말로 시작 시 user 시작 턴 삽입)
+// 2) 연속된 같은 role 메시지는 하나로 병합
+// 3) 마지막 메시지가 user일 경우 startChat 에러 방지를 위해 model 응답 보정
+function sanitizeGeminiHistory(
+  rawHistory: Array<{ role: string; text?: string; parts?: Array<{ text: string }> }>
+): Array<{ role: "user" | "model"; parts: [{ text: string }] }> {
+  const contents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
+
+  for (const item of rawHistory) {
+    const role: "user" | "model" = item.role === "model" ? "model" : "user";
+    const text = (item.text || item.parts?.[0]?.text || "").trim();
+    if (!text) continue;
+
+    if (contents.length === 0) {
+      if (role === "model") {
+        contents.push({ role: "user", parts: [{ text: "대화를 시작합니다." }] });
+      }
+      contents.push({ role, parts: [{ text }] });
+    } else {
+      const last = contents[contents.length - 1];
+      if (last.role === role) {
+        last.parts[0].text += "\n" + text;
+      } else {
+        contents.push({ role, parts: [{ text }] });
+      }
+    }
+  }
+
+  if (contents.length > 0 && contents[contents.length - 1].role === "user") {
+    contents.push({ role: "model", parts: [{ text: "네, 말씀하세요." }] });
+  }
+
+  return contents;
 }
 
 // ── 특수문자 제거 및 자연스러운 호흡(쉼표·휴지) 보정 (TTS용) ────
@@ -207,6 +244,10 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
           const gemData = await gemRes.json();
           const inlineData = gemData?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
           if (inlineData?.data) {
+            const buf = Buffer.from(inlineData.data, "base64");
+            if (buf.slice(0, 4).toString("utf-8") === "RIFF") {
+              return inlineData.data;
+            }
             return pcm16ToWavBase64(inlineData.data, 24000);
           }
         }
@@ -298,29 +339,37 @@ Output JSON only (no markdown):
       const audioFile   = formData.get("audio")       as Blob | null;
 
       const history = JSON.parse(historyStr || "[]");
-      let userText = "";
+      let userText = (formData.get("userText") as string) || (formData.get("text") as string) || "";
 
       // STT — 릴레이 모델로 음성 인식
-      if (audioFile) {
+      if (audioFile && audioFile.size > 0) {
         const base64Audio = Buffer.from(await audioFile.arrayBuffer()).toString("base64");
+        const mimeType = audioFile.type || "audio/webm";
         let lastErr: unknown;
         for (const modelName of MODEL_CANDIDATES) {
           try {
             const sttModel = genAI.getGenerativeModel({ model: modelName, safetySettings: SAFETY });
             const sttResult = await sttModel.generateContent([
-              "Transcribe exactly what the user said in Korean. Output only the transcribed text.",
-              { inlineData: { mimeType: "audio/webm", data: base64Audio } },
+              "Transcribe exactly what the user said in Korean. Output only the transcribed text without quotes or explanations. If inaudible or silence, output '(침묵)'.",
+              { inlineData: { mimeType, data: base64Audio } },
             ]);
-            userText = sttResult.response.text().trim();
-            console.log(`✅ STT [${modelName}]: "${userText}"`);
-            break;
-          } catch (e) {
-            console.warn(`⚠️ STT [${modelName}] 실패`);
+            const recognized = sttResult.response.text().trim();
+            if (recognized) {
+              userText = recognized;
+              console.log(`✅ STT [${modelName}]: "${userText}"`);
+              break;
+            }
+          } catch (e: any) {
+            console.warn(`⚠️ STT [${modelName}] 실패:`, e?.message || e);
             lastErr = e;
           }
         }
-        if (!userText) throw lastErr ?? new Error("STT all models failed");
       }
+
+      const isSilentOrInaudible = !userText || userText === "(침묵)" || userText === "(잡음)";
+      const promptUserText = isSilentOrInaudible
+        ? "(사용자의 음성이 작거나 인식되지 않았습니다. 자연스럽게 목소리가 잘 안 들렸으니 다시 말씀해달라고 답하세요.)"
+        : userText;
 
       // AI 응답 생성 — 페르소나별 맞춤 프롬프트 (준호/채원: 높임말 연습, 민우/유진: 반말 연습)
       const isHonorific = personaId === "junho" || personaId === "chaewon" || !personaId;
@@ -337,8 +386,9 @@ Output JSON only (no markdown):
 2. Keep responses natural and concise (1-3 sentences).
 3. Always use natural commas (,) after greetings or interjections and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
 4. If the learner accidentally uses casual speech (반말) or awkward honorifics, gently model the natural honorific expression while keeping the conversation flowing.
-5. Always ask a polite, engaging follow-up question so the learner can continue practicing honorific Korean.
-6. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+5. If the user speech is inaudible or silent, gently ask them in polite Korean to repeat once more.
+6. Always ask a polite, engaging follow-up question so the learner can continue practicing honorific Korean.
+7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`
         : `[Role]: You are '${personaName}', a close, warm, and cheerful same-age Korean friend (20대 동갑내기 절친) helping a foreign learner practice casual Korean (반말 연습: 친구와의 일상 대화).
 [Tone]: Friendly, natural modern casual Korean (친근한 현대 20대 반말: '-어/-아', '-야', '-지', '-거든', '-잖아'). NEVER use formal/polite endings ('-요', '-습니다') and NEVER use old-fashioned/middle-aged endings like '~하네'(알겠네, 고맙네), '~하게'(다녀오게, 잘 지내게), '~구먼'.
@@ -347,27 +397,29 @@ Output JSON only (no markdown):
 2. Keep responses natural and concise (1-3 sentences).
 3. Always use natural commas (,) after interjections ("아, ", "응, ", "맞아, ") and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
 4. If the learner speaks too formally ('-요', '-습니다'), playfully remind them that you are close friends and encourage them to speak comfortably in banmal (반말).
-5. Always ask a fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
-6. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+5. If the user speech is inaudible or silent, playfully ask them in casual banmal to repeat once more.
+6. Always ask a fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
+7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 [User Memory]: ${sharedMemory}`;
 
       let aiText = "";
       let usedModel = "";
+      const sanitizedHistory = sanitizeGeminiHistory(history);
 
       for (const modelName of MODEL_CANDIDATES) {
         try {
-          const model = genAI.getGenerativeModel({ model: modelName, safetySettings: SAFETY });
-          const chat  = model.startChat({
-            history: history.map((h: { role: string; text: string }) => ({
-              role: h.role, parts: [{ text: h.text }],
-            })),
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: systemPrompt,
+            safetySettings: SAFETY
           });
-          const result = await chat.sendMessage(`${systemPrompt}\n\nUser said: ${userText}`);
-          aiText     = result.response.text();
+          const chat = model.startChat({ history: sanitizedHistory });
+          const result = await chat.sendMessage(promptUserText);
+          aiText     = result.response.text().trim();
           usedModel  = modelName;
           break;
-        } catch (e) {
-          console.warn(`⚠️ Chat [${modelName}] 실패`);
+        } catch (e: any) {
+          console.warn(`⚠️ Chat [${modelName}] 실패:`, e?.message || e);
         }
       }
       if (!aiText) throw new Error("All models failed to generate response.");
@@ -376,9 +428,11 @@ Output JSON only (no markdown):
       const audioContent = await synthesizeTTS(aiText, personaId);
 
       return NextResponse.json({
-        userText, aiText,
+        userText: isSilentOrInaudible ? "(음성 인식 안 됨)" : userText,
+        aiText,
         audioContent,
-        usedModel, ended: false,
+        usedModel,
+        ended: false,
       });
     }
 
