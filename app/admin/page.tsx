@@ -3,6 +3,8 @@
 
 import DonggukSection from "./DonggukSection";
 import DankookSection from "./DankookSection";
+import ClassManagementSection from "./ClassManagementSection";
+import DemoSurveySection from "./DemoSurveySection";
 import NotificationSenderModal from "./NotificationSenderModal";
 
 import { useEffect, useState, useRef } from "react";
@@ -49,7 +51,7 @@ interface CurriculumDoc {
 
 interface ParsedLine { role: string; text: string; }
 
-type Tab = "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "dongguk" | "dankook" | "users" | "charges" | "inquiries";
+type Tab = "classes" | "surveys" | "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "dongguk" | "dankook" | "users" | "charges" | "inquiries";
 
 // ── 점수대 정보 ────────────────────────────────────────────
 const SCORE_TIERS = [
@@ -1477,8 +1479,10 @@ export default function AdminPage() {
   if (!isAdmin) return <div className="flex h-screen items-center justify-center text-red-500 font-bold">관리자 권한이 없습니다.</div>;
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: "dongguk",  label: "🏫 동국대 (1급/3급)" },
-    { id: "dankook",  label: "🐻 단국대 관리" },
+    { id: "classes",  label: "🏫 반·선생님 관리" },
+    { id: "surveys",  label: "📊 체험 설문 응답" },
+    { id: "dongguk",  label: "동국대 (1급/3급)" },
+    { id: "dankook",  label: "단국대 관리" },
     { id: "generate", label: "✨ AI 생성" },
     { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },
     { id: "audio",    label: "🎵 오디오" },
@@ -1514,6 +1518,16 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6">
+
+        {/* ──── 반 & 선생님 통합 관리 ──── */}
+        {activeTab === "classes" && (
+          <ClassManagementSection idToken={idToken} />
+        )}
+
+        {/* ──── 체험 설문 응답 통계 ──── */}
+        {activeTab === "surveys" && (
+          <DemoSurveySection idToken={idToken} />
+        )}
 
         {/* ──── 동국대 1급 관리 ──── */}
         {activeTab === "dongguk" && (

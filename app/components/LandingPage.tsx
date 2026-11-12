@@ -6,6 +6,7 @@
 // — 실제 Firestore 데이터 미리보기
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, limit, query } from "firebase/firestore";
 import Login from "./Login";
@@ -116,6 +117,24 @@ export default function LandingPage({ onUserChange }: { onUserChange: (u: any) =
             <div style={{ background: "#2563eb", borderRadius: 14, padding: "14px 32px", display: "inline-block" }}>
               <Login onUserChange={onUserChange} />
             </div>
+            <Link
+              href="/demo"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "14px 24px",
+                border: "2px solid #6366f1",
+                borderRadius: 14,
+                fontWeight: 800,
+                fontSize: 15,
+                color: "#4f46e5",
+                textDecoration: "none",
+                background: "#eef2ff",
+              }}
+            >
+              🎙️ 무료 체험 (Free Trial) →
+            </Link>
             <a href="#preview" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", border: "2px solid #e2e8f0", borderRadius: 14, fontWeight: 700, fontSize: 15, color: "#334155", textDecoration: "none", background: "#fff" }}>
               See Sample Lessons →
             </a>
