@@ -7,6 +7,7 @@ import { adminFetch } from "@/lib/firebase";
 import {
   School, User, Plus, RefreshCw, Loader2, Copy, Check, Trash2,
   Users, BookOpen, Download, AlertCircle, Edit2, ExternalLink, X,
+  QrCode, Printer, Filter, FlaskConical,
 } from "lucide-react";
 import type { ClassData } from "@/app/api/admin/classes/route";
 import type { TeacherData } from "@/app/api/admin/teachers/route";
@@ -32,10 +33,14 @@ export default function ClassManagementSection({ idToken }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 필터 상태
+  const [classFilter, setClassFilter] = useState<"all" | "regular" | "test">("all");
+
   // 모달 상태
   const [showCreateClassModal, setShowCreateClassModal] = useState(false);
   const [showCreateTeacherModal, setShowCreateTeacherModal] = useState(false);
   const [selectedClassForStudents, setSelectedClassForStudents] = useState<ClassData | null>(null);
+  const [selectedClassForQR, setSelectedClassForQR] = useState<ClassData | null>(null);
   const [classStudents, setClassStudents] = useState<ClassStudentInfo[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
 
@@ -45,6 +50,7 @@ export default function ClassManagementSection({ idToken }: Props) {
   const [newClassLevelOption, setNewClassLevelOption] = useState(0);
   const [newClassTeacherEmail, setNewClassTeacherEmail] = useState("");
   const [newClassMemo, setNewClassMemo] = useState("");
+  const [newClassIsTest, setNewClassIsTest] = useState(false);
   const [creatingClass, setCreatingClass] = useState(false);
 
   // 신규 선생님 폼
@@ -115,6 +121,7 @@ export default function ClassManagementSection({ idToken }: Props) {
             teacherEmail: newClassTeacherEmail,
             teacherName: selectedTeacher?.name || "선생님 미지정",
             memo: newClassMemo.trim(),
+            isTest: newClassIsTest,
           }),
         },
         idToken
@@ -126,6 +133,7 @@ export default function ClassManagementSection({ idToken }: Props) {
       setShowCreateClassModal(false);
       setNewClassName("");
       setNewClassMemo("");
+      setNewClassIsTest(false);
       loadData();
     } catch (e: any) {
       alert("오류: " + e.message);
@@ -359,11 +367,44 @@ export default function ClassManagementSection({ idToken }: Props) {
       {/* 2. 반(Class) 관리 뷰 */}
       {activeSubTab === "classes" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-black text-slate-900 text-base">개설된 반 목록</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-black text-slate-900 text-base">개설된 반 목록</h3>
+              {/* 테스트/정규 필터 탭 */}
+              <div className="flex items-center gap-1 text-xs font-bold bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setClassFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg transition ${
+                    classFilter === "all" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  전체 ({classes.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassFilter("regular")}
+                  className={`px-2.5 py-1 rounded-lg transition ${
+                    classFilter === "regular" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  정규 수업 ({classes.filter(c => !c.isTest).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassFilter("test")}
+                  className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+                    classFilter === "test" ? "bg-amber-500 text-white shadow-xs" : "text-amber-800 hover:bg-amber-100"
+                  }`}
+                >
+                  <FlaskConical size={11} /> 테스트 반 ({classes.filter(c => c.isTest).length})
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={() => setShowCreateClassModal(true)}
-              className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2 rounded-xl transition shadow-xs"
+              className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2 rounded-xl transition shadow-xs self-start sm:self-auto"
             >
               <Plus size={14} /> 새 반 개설하기
             </button>
@@ -382,16 +423,31 @@ export default function ClassManagementSection({ idToken }: Props) {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classes.map((cls) => (
+              {classes
+                .filter(cls => {
+                  if (classFilter === "test") return Boolean(cls.isTest);
+                  if (classFilter === "regular") return !cls.isTest;
+                  return true;
+                })
+                .map((cls) => (
                 <div
                   key={cls.id}
-                  className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4"
+                  className={`bg-white rounded-2xl border p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4 ${
+                    cls.isTest ? "border-amber-300 bg-amber-50/20" : "border-slate-200/90"
+                  }`}
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[11px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md">
-                        {cls.level}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md">
+                          {cls.level}
+                        </span>
+                        {cls.isTest && (
+                          <span className="text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                            <FlaskConical size={10} /> 테스트용
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-slate-700 font-medium">{cls.institution}</span>
                     </div>
                     <h4 className="font-black text-slate-900 text-base">{cls.name}</h4>
@@ -426,6 +482,13 @@ export default function ClassManagementSection({ idToken }: Props) {
                     </div>
 
                     <div className="flex items-center gap-1.5 pt-1">
+                      <button
+                        onClick={() => setSelectedClassForQR(cls)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200 transition"
+                        title="반 전용 학생 초대 QR 코드 보기 & 다운로드"
+                      >
+                        <QrCode size={13} /> QR
+                      </button>
                       <button
                         onClick={() => openClassStudentsModal(cls)}
                         className="flex-1 py-1.5 text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition text-center"
@@ -598,6 +661,21 @@ export default function ClassManagementSection({ idToken }: Props) {
                   placeholder="예: 2026학년도 가을학기 정규반"
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
+              </div>
+
+              {/* 테스트 반 설정 체크박스 */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={newClassIsTest}
+                    onChange={(e) => setNewClassIsTest(e.target.checked)}
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="font-bold text-amber-950 text-xs flex items-center gap-1">
+                    <FlaskConical size={13} className="text-amber-600" /> 🧪 테스트/체험용 반으로 설정 (정규 수업과 분리)
+                  </span>
+                </label>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
@@ -815,6 +893,161 @@ export default function ClassManagementSection({ idToken }: Props) {
           </div>
         </div>
       )}
+
+      {/* 모달 4: 반별 학생 초대 전용 QR 코드 모달 */}
+      {selectedClassForQR && (
+        <ClassQrModal
+          classData={selectedClassForQR}
+          onClose={() => setSelectedClassForQR(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── 반별 전용 학생 초대 QR 코드 모달 컴포넌트 ──────────────
+function ClassQrModal({
+  classData,
+  onClose,
+}: {
+  classData: ClassData;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const inviteUrl = `${origin}/join?code=${classData.inviteCode}`;
+  const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(
+    inviteUrl
+  )}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(qrImgUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `소리튜터_${classData.name}_QR코드.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return alert("팝업 차단을 해제해 주세요.");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${classData.name} - 학생 참여 QR 코드</title>
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 40px; }
+            h1 { font-size: 26px; margin-bottom: 6px; }
+            p { font-size: 14px; color: #475569; margin: 4px 0; }
+            .badge { display: inline-block; padding: 4px 12px; background: #e0e7ff; color: #3730a3; font-weight: bold; border-radius: 9999px; font-size: 13px; margin-bottom: 20px; }
+            .qr-box { margin: 24px auto; display: inline-block; padding: 16px; border: 2px solid #cbd5e1; border-radius: 20px; }
+            .qr-box img { width: 240px; height: 240px; }
+            .code-box { font-size: 18px; font-family: monospace; font-weight: bold; letter-spacing: 2px; color: #1e293b; margin: 12px 0; }
+            .instructions { max-width: 440px; margin: 20px auto; background: #f8fafc; padding: 16px; border-radius: 12px; font-size: 13px; text-align: left; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <h1>소리튜터 (Sori-Tutor)</h1>
+          <div class="badge">${classData.name} · ${classData.level}</div>
+          <p>담당 선생님: <strong>${classData.teacherName}</strong></p>
+          <div class="qr-box">
+            <img src="${qrImgUrl}" alt="QR Code" />
+          </div>
+          <div class="code-box">초대 코드: ${classData.inviteCode}</div>
+          <div class="instructions">
+            <strong>📱 참여 방법:</strong><br />
+            1. 스마트폰 카메라로 위 QR 코드를 스캔하세요.<br />
+            2. Google 계정으로 로그인 후 학번을 입력하세요.<br />
+            3. <strong>${classData.name}</strong> 전용 발음 학습실이 즉시 열립니다!
+          </div>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="text-left">
+            <h3 className="font-black text-slate-900 text-base">{classData.name}</h3>
+            <p className="text-xs text-slate-500 font-medium">학생 초대용 QR 코드</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* QR 이미지 카드 */}
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 inline-block shadow-inner">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={qrImgUrl}
+            alt={`${classData.name} QR 코드`}
+            className="w-48 h-48 mx-auto rounded-xl shadow-xs bg-white"
+          />
+        </div>
+
+        {/* 초대 코드 및 링크 */}
+        <div className="space-y-1.5">
+          <p className="text-xs font-mono font-black text-slate-900 tracking-wider">
+            초대 코드: <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{classData.inviteCode}</span>
+          </p>
+          <p className="text-[11px] text-slate-500 break-all truncate px-2 font-mono">
+            {inviteUrl}
+          </p>
+        </div>
+
+        {/* 액션 버튼들 */}
+        <div className="pt-2 flex flex-col gap-2">
+          <button
+            onClick={handleCopy}
+            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs"
+          >
+            {copied ? <Check size={14} className="text-emerald-300" /> : <Copy size={14} />}
+            {copied ? "초대 링크 복사 완료!" : "초대 링크 복사"}
+          </button>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+            >
+              {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              QR 다운로드
+            </button>
+            <button
+              onClick={handlePrint}
+              className="py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+            >
+              <Printer size={13} /> 인쇄하기
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

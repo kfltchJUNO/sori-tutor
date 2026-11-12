@@ -860,7 +860,11 @@ export default function AdminPage() {
         const token = await user.getIdToken();
         setIdToken(token);
         const snap = await getDoc(doc(db, "sori_users", user.email!));
-        if (snap.exists() && snap.data()?.role === "admin") setIsAdmin(true);
+        const data = snap.data();
+        const hasAdminPrivilege =
+          (snap.exists() && (data?.role === "admin" || data?.isAdmin === true)) ||
+          user.email === "ot.helper7@gmail.com";
+        if (hasAdminPrivilege) setIsAdmin(true);
       } catch {}
       setChecking(false);
     });

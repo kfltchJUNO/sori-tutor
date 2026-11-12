@@ -14,6 +14,7 @@ export interface ClassData {
   teacherName: string;
   inviteCode: string;
   memo?: string;
+  isTest?: boolean;
   studentCount: number;
   createdAtMs: number;
 }
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
         teacherName: d.teacherName || "선생님 미지정",
         inviteCode: d.inviteCode || "",
         memo: d.memo || "",
+        isTest: Boolean(d.isTest),
         studentCount: count,
         createdAtMs: d.createdAt?.toMillis?.() ?? (d.createdAt?._seconds ? d.createdAt._seconds * 1000 : Date.now()),
       };
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
     const teacherEmail = (body.teacherEmail || "").trim().toLowerCase();
     const teacherName = (body.teacherName || "").trim();
     const memo = (body.memo || "").trim();
+    const isTest = Boolean(body.isTest);
 
     if (!name) {
       return NextResponse.json({ error: "반 이름을 입력하세요." }, { status: 400 });
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
       teacherName,
       inviteCode,
       memo,
+      isTest,
       studentCount: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -153,6 +157,7 @@ export async function PUT(req: NextRequest) {
     if (body.teacherEmail !== undefined) updateData.teacherEmail = body.teacherEmail.trim().toLowerCase();
     if (body.teacherName !== undefined) updateData.teacherName = body.teacherName.trim();
     if (body.memo !== undefined) updateData.memo = body.memo.trim();
+    if (body.isTest !== undefined) updateData.isTest = Boolean(body.isTest);
 
     await adminDb.collection("sori_classes").doc(classId).update(updateData);
     return NextResponse.json({ success: true });

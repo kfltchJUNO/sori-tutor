@@ -73,13 +73,23 @@ export async function POST(req: NextRequest) {
       { merge: true }
     );
 
-    // 2) sori_users 에도 role: "teacher" 동기화 (기존 유저 정보 보존)
-    await adminDb.collection("sori_users").doc(email).set(
+    // 2) sori_users 에도 동기화 (단, 관리자 계정인 경우 role: "admin"을 절대 덮어쓰지 않고 관리자 권한 영구 유지!)
+    const userRef = adminDb.collection("sori_users").doc(email);
+    const userSnap = await userRef.get();
+    const existing = userSnap.data();
+    const isAlreadyAdmin =
+      existing?.role === "admin" ||
+      existing?.isAdmin === true ||
+      email === "ot.helper7@gmail.com";
+
+    await userRef.set(
       {
         email,
         name,
         institution,
-        role: "teacher",
+        role: isAlreadyAdmin ? "admin" : "teacher",
+        isAdmin: isAlreadyAdmin,
+        isTeacher: true,
         updatedAt: new Date(),
       },
       { merge: true }
@@ -108,11 +118,17 @@ export async function DELETE(req: NextRequest) {
     // sori_teachers에서 삭제
     await adminDb.collection("sori_teachers").doc(email).delete();
 
-    // sori_users에서 role을 teacher -> user 로 강등
+    // sori_users에서 권한 업데이트 (관리자는 role: "admin" 절대 유지)
     const userRef = adminDb.collection("sori_users").doc(email);
     const userSnap = await userRef.get();
-    if (userSnap.exists && userSnap.data()?.role === "teacher") {
-      await userRef.update({ role: "user", updatedAt: new Date() });
+    if (userSnap.exists) {
+      const d = userSnap.data();
+      const isAdmin = d?.role === "admin" || d?.isAdmin === true || email === "ot.helper7@gmail.com";
+      if (!isAdmin) {
+        await userRef.update({ role: "user", isTeacher: false, updatedAt: new Date() });
+      } else {
+        await userRef.update({ isTeacher: false, updatedAt: new Date() });
+      }
     }
 
     return NextResponse.json({ success: true });
