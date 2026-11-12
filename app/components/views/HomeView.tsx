@@ -11,12 +11,13 @@ interface Props {
   onFetchRanking: () => void;
   onFetchHistory: () => void;
   onOpenNickname: () => void;
-  onOpenDonggukModal: () => void;
-  onEnterDonggukCourse: () => void;
+  onEnterClassCourse?: () => void;
+  onOpenDonggukModal?: () => void;
+  onEnterDonggukCourse?: () => void;
   onOpenDongguk3Modal?: () => void;
   onEnterDongguk3Course?: () => void;
-  onOpenDankookModal: () => void;
-  onEnterDankookCourse: () => void;
+  onOpenDankookModal?: () => void;
+  onEnterDankookCourse?: () => void;
 }
 
 // Tailwind 동적 클래스 문제 방지 — 정적 클래스로 정의
@@ -50,17 +51,8 @@ const COURSES = [
 export default function HomeView({
   user, onSelectCourse, onEnterFreeTalking,
   onFetchRanking, onFetchHistory, onOpenNickname,
-  onOpenDonggukModal, onEnterDonggukCourse,
-  onOpenDongguk3Modal, onEnterDongguk3Course,
-  onOpenDankookModal, onEnterDankookCourse,
+  onEnterClassCourse,
 }: Props) {
-  const isDongguk1Approved = user.dongguk_status === "approved";
-  const isDongguk3Approved = user.dongguk3_status === "approved";
-  const isDankookApproved = user.dankook_status === "approved";
-
-  // 학교 인증 완료된 계정인지 여부
-  const isUnivApproved = isDongguk1Approved || isDongguk3Approved || isDankookApproved;
-
   return (
     <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
 
@@ -102,14 +94,12 @@ export default function HomeView({
 
       {/* 빠른 메뉴 (내 기록) */}
       <div className="flex gap-2">
-        {!isUnivApproved && (
-          <button
-            onClick={onFetchRanking}
-            className="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 px-3 py-2 rounded-full font-bold text-sm hover:bg-yellow-100 transition border border-yellow-100"
-          >
-            <Trophy size={14} /> 랭킹
-          </button>
-        )}
+        <button
+          onClick={onFetchRanking}
+          className="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 px-3 py-2 rounded-full font-bold text-sm hover:bg-yellow-100 transition border border-yellow-100"
+        >
+          <Trophy size={14} /> 랭킹
+        </button>
         <button
           onClick={onFetchHistory}
           className="flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-2 rounded-full font-bold text-sm hover:bg-slate-200 transition"
@@ -118,186 +108,84 @@ export default function HomeView({
         </button>
       </div>
 
-      {/* ── [A] 학교 인증 완료 계정 전용 화면 ── */}
-      {isUnivApproved ? (
-        <div className="space-y-4 pt-1">
-          {/* 학교 인증 계정 전용 안내 배너 */}
-          <div className="p-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl shadow-sm space-y-1">
-            <div className="flex items-center gap-2">
-              <GraduationCap size={20} className="text-amber-400" />
-              <h4 className="font-black text-sm text-amber-300">학교 전용 학습 모드 적용 중</h4>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              학교 인증 학생 계정은 커리큘럼 기준에 따라 등록된 <strong>지정 문장 학습</strong>만 이용하도록 제한되어 있습니다.
-            </p>
-          </div>
-
-          <div className="grid gap-3">
-            {/* 1. 동국대 1급 전용 코스 */}
-            {isDongguk1Approved && (
-              <div className="bg-white p-5 rounded-2xl border-2 border-amber-300 shadow-sm space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                        동국대 1급 인증 학생
-                      </span>
-                      {user.dongguk_student_id && (
-                        <span className="text-[11px] font-mono text-slate-500 font-bold">
-                          학번: {user.dongguk_student_id}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-black text-lg text-slate-900">동국한국어 1급 전용 문장 코스</h3>
-                    <p className="text-xs text-slate-500">
-                      수업 맞춤 1급 문장과 원어민 일레븐랩스 발음으로 연습합니다.
-                    </p>
-                  </div>
-                  <span className="text-3xl">🌱</span>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={onEnterDonggukCourse}
-                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2"
-                  >
-                    1급 코스 바로 시작하기 <ArrowRight size={16} />
-                  </button>
-                  <a
-                    href="/dongguk"
-                    className="p-3 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl border border-amber-200 transition"
-                    title="동국대 1급 전용 포털 열기"
-                  >
-                    <ExternalLink size={18} />
-                  </a>
-                </div>
+      {/* ── [A] 소속 반이 있는 학생 전용 맞춤 학습 카드 ── */}
+      {user.className && (
+        <div className="bg-white p-5 rounded-2xl border-2 border-indigo-500/80 shadow-md space-y-3 relative overflow-hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black bg-indigo-100 text-indigo-900 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  🏫 {user.className}
+                </span>
+                {user.classLevel && (
+                  <span className="text-xs font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
+                    {user.classLevel}
+                  </span>
+                )}
+                {user.studentId && (
+                  <span className="text-[11px] font-mono text-slate-500 font-bold">
+                    학번: {user.studentId}
+                  </span>
+                )}
               </div>
-            )}
-
-            {/* 2. 동국대 3급 전용 코스 */}
-            {isDongguk3Approved && (
-              <div className="bg-white p-5 rounded-2xl border-2 border-orange-300 shadow-sm space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
-                        동국대 3급 인증 학생
-                      </span>
-                      {user.dongguk3_student_id && (
-                        <span className="text-[11px] font-mono text-slate-500 font-bold">
-                          학번: {user.dongguk3_student_id}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-black text-lg text-slate-900">동국한국어 3급 전용 문장 코스</h3>
-                    <p className="text-xs text-slate-500">
-                      중급 표현과 심화 발음 규칙이 포함된 3급 전용 커리큘럼입니다.
-                    </p>
-                  </div>
-                  <span className="text-3xl">🌿</span>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={onEnterDongguk3Course || onEnterDonggukCourse}
-                    className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2"
-                  >
-                    3급 코스 바로 시작하기 <ArrowRight size={16} />
-                  </button>
-                  <a
-                    href="/dongguk3"
-                    className="p-3 bg-orange-50 hover:bg-orange-100 text-orange-800 rounded-xl border border-orange-200 transition"
-                    title="동국대 3급 전용 포털 열기"
-                  >
-                    <ExternalLink size={18} />
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {/* 3. 단국대학교 전용 코스 */}
-            {isDankookApproved && (
-              <div className="bg-white p-5 rounded-2xl border-2 border-blue-300 shadow-sm space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                        단국대학교 인증 학생
-                      </span>
-                      {user.dankook_student_id && (
-                        <span className="text-[11px] font-mono text-slate-500 font-bold">
-                          학번: {user.dankook_student_id}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-black text-lg text-slate-900">단국대학교 한국어 전용 코스</h3>
-                    <p className="text-xs text-slate-500">
-                      단국대 맞춤형 커리큘럼 문장으로 정확한 억양을 훈련합니다.
-                    </p>
-                  </div>
-                  <span className="text-3xl">🐻</span>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={onEnterDankookCourse}
-                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2"
-                  >
-                    단국대 코스 바로 시작하기 <ArrowRight size={16} />
-                  </button>
-                  <a
-                    href="/dankook"
-                    className="p-3 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl border border-blue-200 transition"
-                    title="단국대 전용 포털 열기"
-                  >
-                    <ExternalLink size={18} />
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* ── [B] 일반 사용자 화면: 기존 코스 선택 및 자유 회화 ── */
-        <div className="grid gap-3">
-          {COURSES.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onSelectCourse(item.id)}
-              className={`w-full p-4 rounded-2xl text-left bg-white shadow-sm border border-slate-100 transition group flex items-center gap-4 ${item.hoverBorder} ${item.hoverBg}`}
-            >
-              <div className={`w-12 h-12 rounded-2xl ${item.iconBg} ${item.iconText} flex items-center justify-center group-hover:scale-110 transition-transform shrink-0`}>
-                {item.icon}
-              </div>
-              <div>
-                <p className={`text-base font-bold text-slate-800 ${item.hoverText}`}>
-                  {item.t}
-                </p>
-                <p className="text-sm text-slate-400">{item.d}</p>
-              </div>
-            </button>
-          ))}
-
-          {/* 자유 회화 */}
-          <button
-            onClick={onEnterFreeTalking}
-            className="w-full p-4 rounded-2xl text-left bg-gradient-to-r from-emerald-50 to-teal-50 shadow-sm border border-emerald-100 hover:border-emerald-400 transition group flex items-center gap-4 relative overflow-hidden"
-          >
-            <div className="absolute top-2.5 right-3 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-700 border border-emerald-200 flex items-center gap-1">
-              <SoriIcon size={12} /> 2 Sori / 턴
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
-              <MessageCircle size={22} />
-            </div>
-            <div>
-              <p className="text-base font-bold text-slate-800 group-hover:text-emerald-700">
-                한국어 자유 회화 <span className="text-xs font-normal text-slate-400">(Beta)</span>
+              <h3 className="font-black text-lg text-slate-900 pt-1">
+                {user.className} 지정 문장 코스
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                선생님이 지정한 맞춤 커리큘럼 문장과 원어민 일레븐랩스 발음으로 집중 훈련합니다.
               </p>
-              <p className="text-sm text-slate-400">AI와 자유 대화</p>
             </div>
+            <span className="text-3xl shrink-0">🎯</span>
+          </div>
+
+          <button
+            onClick={onEnterClassCourse}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl shadow transition flex items-center justify-center gap-2"
+          >
+            수업 문장 바로 학습하기 <ArrowRight size={16} />
           </button>
         </div>
       )}
+
+      {/* ── [B] 일반 코스 선택 및 자유 회화 ── */}
+      <div className="grid gap-3 pt-1">
+        {COURSES.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onSelectCourse(item.id)}
+            className={`w-full p-4 rounded-2xl text-left bg-white shadow-sm border border-slate-100 transition group flex items-center gap-4 ${item.hoverBorder} ${item.hoverBg}`}
+          >
+            <div className={`w-12 h-12 rounded-2xl ${item.iconBg} ${item.iconText} flex items-center justify-center group-hover:scale-110 transition-transform shrink-0`}>
+              {item.icon}
+            </div>
+            <div>
+              <p className={`text-base font-bold text-slate-800 ${item.hoverText}`}>
+                {item.t}
+              </p>
+              <p className="text-sm text-slate-400">{item.d}</p>
+            </div>
+          </button>
+        ))}
+
+        {/* 한국어 자유 회화 */}
+        <button
+          onClick={onEnterFreeTalking}
+          className="w-full p-4 rounded-2xl text-left bg-gradient-to-r from-emerald-50 to-teal-50 shadow-sm border border-emerald-100 hover:border-emerald-400 transition group flex items-center gap-4 relative overflow-hidden"
+        >
+          <div className="absolute top-2.5 right-3 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-700 border border-emerald-200 flex items-center gap-1">
+            <SoriIcon size={12} /> 2 Sori / 턴
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+            <MessageCircle size={22} />
+          </div>
+          <div>
+            <p className="text-base font-bold text-slate-800 group-hover:text-emerald-700">
+              한국어 자유 회화 <span className="text-xs font-normal text-slate-400">(Beta)</span>
+            </p>
+            <p className="text-sm text-slate-400">AI와 자유 대화</p>
+          </div>
+        </button>
+      </div>
     </div>
   );
 }

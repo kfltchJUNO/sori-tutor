@@ -55,6 +55,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [userRole, setUserRole] = useState("guest");
+  const isAdminUser = userRole === "admin" || currentUser?.email === "ot.helper7@gmail.com";
   const [hearts, setHearts] = useState(3);
   const [tokens, setTokens] = useState(0);
   const [userAlias, setUserAlias] = useState("");
@@ -101,14 +102,24 @@ export default function Home() {
   // ── Embed 모드 (한업 HanUp 연동) ───────
   const [isEmbedMode, setIsEmbedMode] = useState(false);
   const [embedUser, setEmbedUser] = useState<{ id?: string; name?: string }>({});
-  // ── 동국대학교 1급 학생 연동 ─────────────
+  // ── 학생 소속 반 정보 ───────────────────
+  const [assignedClass, setAssignedClass] = useState<{
+    classId: string;
+    className: string;
+    classLevel?: string;
+  } | null>(null);
+
+  // ── 관리자 전용: 학생 시점 테스트 시뮬레이터 ──
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  const [selectedSimulatorTarget, setSelectedSimulatorTarget] = useState<string>("col:sori_curriculum_dongguk");
+  const [currentTestCourseTitle, setCurrentTestCourseTitle] = useState<string>("");
+
+  // ── 레거시 호환용 상태 (미승인 기본값) ──────
   const [donggukStatus, setDonggukStatus] = useState<"none" | "pending" | "approved">("none");
   const [showDonggukModal, setShowDonggukModal] = useState(false);
   const [donggukStudentIdInput, setDonggukStudentIdInput] = useState("");
   const [donggukApplying, setDonggukApplying] = useState(false);
-  // ── 동국대학교 3급 학생 연동 ─────────────
   const [dongguk3Status, setDongguk3Status] = useState<"none" | "pending" | "approved">("none");
-  // ── 단국대학교 학생 연동 ─────────────
   const [dankookStatus, setDankookStatus] = useState<"none" | "pending" | "approved">("none");
   const [showDankookModal, setShowDankookModal] = useState(false);
   const [dankookStudentIdInput, setDankookStudentIdInput] = useState("");
@@ -235,6 +246,15 @@ export default function Home() {
 
       setUserRole(role);
       setUserAlias(data.alias ?? "");
+      setAssignedClass(data.classId ? {
+        classId: data.classId,
+        className: data.className || "배속된 반",
+        classLevel: data.classLevel || "",
+      } : null);
+
+      if (role === "admin" || user.email === "ot.helper7@gmail.com") {
+        fetchAvailableClasses();
+      }
       setDonggukStatus(data.dongguk_status ?? "none");
       setDongguk3Status(data.dongguk3_status ?? "none");
       setDankookStatus(data.dankook_status ?? "none");
@@ -473,12 +493,14 @@ export default function Home() {
 
   // ── 프리토킹 진입 ─────────────────────
   const enterFreeTalking = () => {
-    if (isUnivApproved) {
-      alert("학교 인증 학생 계정은 학교 전용 학습 코스만 이용하실 수 있습니다.");
-      return;
+    if (!isAdminUser) {
+      if (isUnivApproved) {
+        alert("학교 인증 학생 계정은 학교 전용 학습 코스만 이용하실 수 있습니다.");
+        return;
+      }
+      if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
+      if (userRole !== "guest" && tokens < 2) return setShowPaymentModal(true);
     }
-    if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < 2) return setShowPaymentModal(true);
     setViewMode("freetalking");
     setChatStatus("select_persona");
   };
@@ -715,11 +737,11 @@ export default function Home() {
     } catch (e) { alert("피드백 생성 실패"); } finally { setLoading(false); }
   };
 
-  // ── 번역 — A: 서버 토큰 차감 (동국대/단국대 코스는 무료 제공) ─────────
+  // ── 번역 — A: 서버 토큰 차감 (관리자 테스트 및 수업 코스는 무료 제공) ─────────
   const handleTranslateFeedback = async () => {
-    const isUnivCourse = courseType === "dongguk" || courseType === "dongguk3" || courseType === "dankook";
+    const isFree = isEmbedMode || isAdminUser || !!assignedClass || courseType === "dongguk" || courseType === "dongguk3" || courseType === "dankook";
     const currency = userRole === "guest" ? "heart" : "token";
-    if (!isUnivCourse) {
+    if (!isFree) {
       if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
       if (userRole !== "guest" && tokens < 1) return setShowPaymentModal(true);
       if (!confirm("번역하시겠습니까? (1 소리)")) return;
@@ -737,7 +759,7 @@ export default function Home() {
       if (data.error) { alert(data.error); return; }
       setTranslation(data.translatedText);
 
-      if (!isUnivCourse) {
+      if (!isFree) {
         const spendRes = await spendToken("피드백 번역", currency);
         if (spendRes.success) {
           if (currency === "heart") setHearts(p => p - 1);
@@ -796,161 +818,152 @@ export default function Home() {
     }
   };
 
-  // ── 동국한국어 1급 코스 진입 ─────────
-  const enterDonggukCourse = async () => {
+  // ── 관리자: 전체 반 목록 조회 ──
+  const fetchAvailableClasses = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, "sori_classes"), orderBy("createdAt", "desc")));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAvailableClasses(list);
+    } catch (e) {
+      console.error("Classes fetch error:", e);
+    }
+  };
+
+  // ── 범용 커리큘럼 코스 진입 (반별 커리큘럼 및 관리자 학생 시점 테스트 지원) ──
+  const enterCurriculumCourse = async (colName: string, title?: string) => {
     setLoading(true);
-    setCourseType("dongguk");
     setResult(null);
     setCompletedLines([]);
     try {
-      const snap = await getDocs(
-        query(collection(db, "sori_curriculum_dongguk"), orderBy("chapter", "asc"))
-      );
+      let snap;
+      try {
+        snap = await getDocs(query(collection(db, colName), orderBy("chapter", "asc")));
+      } catch {
+        snap = await getDocs(collection(db, colName));
+      }
+
       let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       if (list.length === 0) {
-        list = [
-          {
-            id: "dongguk-sample-1",
-            text: "작년에 한국에 왔어요",
-            pronunciation: "[장년에 한구게 와써요]",
-            rule_formula: "ㄱ 받침 + ㄴ = [ㅇ]",
-            chapter: 1,
-            tip: "받침 [ㄱ] 뒤에 [ㄴ]이 오면 [ㅇ]으로 소리나요.",
-          },
-          {
-            id: "dongguk-sample-2",
-            text: "한국말을 잘하고 싶어요",
-            pronunciation: "[한국마를 자라고 시퍼요]",
-            rule_formula: "받침 + 모음 = [연음]",
-            chapter: 1,
-            tip: "받침 뒤에 모음(ㅇ)이 오면 받침이 다음 글자 첫소리로 넘어가요.",
-          },
-          {
-            id: "dongguk-sample-3",
-            text: "국립중앙박물관에 가요",
-            pronunciation: "[궁닙쯩앙방물과네 가요]",
-            rule_formula: "ㄱ 받침 + ㄹ/ㅁ = [ㅇ/ㄴ]",
-            chapter: 2,
-            tip: "선생님이 어드민 페이지에서 새로운 문장을 계속 추가해 주실 거예요!",
-          },
-        ];
+        if (colName === "sori_curriculum_dongguk") {
+          list = [
+            {
+              id: "dongguk-sample-1",
+              text: "작년에 한국에 왔어요",
+              pronunciation: "[장년에 한구게 와써요]",
+              rule_formula: "ㄱ 받침 + ㄴ = [ㅇ]",
+              chapter: 1,
+              tip: "받침 [ㄱ] 뒤에 [ㄴ]이 오면 [ㅇ]으로 소리나요.",
+            },
+            {
+              id: "dongguk-sample-2",
+              text: "한국말을 잘하고 싶어요",
+              pronunciation: "[한국마를 자라고 시퍼요]",
+              rule_formula: "받침 + 모음 = [연음]",
+              chapter: 1,
+              tip: "받침 뒤에 모음(ㅇ)이 오면 받침이 다음 글자 첫소리로 넘어가요.",
+            },
+            {
+              id: "dongguk-sample-3",
+              text: "국립중앙박물관에 가요",
+              pronunciation: "[궁닙쯩앙방물과네 가요]",
+              rule_formula: "ㄱ 받침 + ㄹ/ㅁ = [ㅇ/ㄴ]",
+              chapter: 2,
+              tip: "선생님이 등록하신 맞춤 문장입니다.",
+            },
+          ];
+        } else if (colName === "sori_curriculum_dongguk3") {
+          list = [
+            {
+              id: "dongguk3-sample-1",
+              text: "취미가 무엇인지 이야기해 봅시다",
+              pronunciation: "[취미가 무어신지 이야기해 봅씨다]",
+              rule_formula: "ㅅ 받침 + ㅂ = [ㅂㅆ]",
+              chapter: 1,
+              tip: "동국한국어 3급 지정 문장입니다.",
+            },
+          ];
+        } else if (colName === "sori_curriculum_dankook") {
+          list = [
+            {
+              id: "dankook-sample-1",
+              text: "단국대학교에서 한국어를 배워요",
+              pronunciation: "[단국때학꾜에서 한구거를 배워요]",
+              rule_formula: "국[ㄱ] + 대[ㄷ] = 때 (된소리되기)",
+              chapter: 1,
+              meaning_ko: "단국대학교에서 한국어를 배웁니다.",
+            },
+          ];
+        } else {
+          const generalSnap = await getDocs(collection(db, "sori_curriculum_sentence"));
+          list = generalSnap.docs.slice(0, 10).map(d => ({ id: d.id, ...d.data() }));
+        }
       }
 
+      if (list.length === 0) {
+        alert("선택하신 커리큘럼에 등록된 문장이 없습니다.");
+        return;
+      }
+
+      if (colName.includes("dongguk3")) setCourseType("dongguk3");
+      else if (colName.includes("dongguk")) setCourseType("dongguk");
+      else if (colName.includes("dankook")) setCourseType("dankook");
+      else if (colName.includes("word")) setCourseType("word");
+      else setCourseType("sentence");
+
+      setCurrentTestCourseTitle(title || "선택 수업 코스");
       setProblemList(list);
       initPractice(list);
       setViewMode("practice");
-    } catch (e) {
-      console.error("Dongguk course load error:", e);
-      alert("문장 목록을 불러오지 못했습니다.");
+    } catch (e: any) {
+      console.error("Course enter error:", e);
+      alert("문장을 불러오는 중 오류가 발생했습니다: " + (e?.message || ""));
     } finally {
       setLoading(false);
     }
   };
 
-  // ── 단국대학교 학생 연결 신청 ────────
-  const handleDankookApply = async () => {
-    if (!currentUser) return alert("로그인 후 이용해주세요.");
-    if (!dankookStudentIdInput.trim()) return alert("학번 또는 이름을 입력해주세요.");
-    setDankookApplying(true);
+  // 학생이 소속된 반의 수업 문장 코스 진입
+  const enterAssignedClass = async () => {
+    if (!assignedClass?.classId) return;
     try {
-      const userRef = doc(db, "sori_users", currentUser.email);
-      await updateDoc(userRef, {
-        dankook_status: "pending",
-        dankook_student_id: dankookStudentIdInput.trim(),
-        dankook_applied_at: serverTimestamp(),
-      });
-      setDankookStatus("pending");
-      setShowDankookModal(false);
-      setDankookStudentIdInput("");
-      alert("선생님께 인증 요청을 보냈습니다! 🐻\n선생님 확인이 완료되면 단국대 코스가 열립니다.");
+      const classSnap = await getDoc(doc(db, "sori_classes", assignedClass.classId));
+      if (classSnap.exists()) {
+        const cData = classSnap.data();
+        const col = cData.curriculumCollection || "sori_curriculum_sentence";
+        await enterCurriculumCourse(col, `${cData.name} (${cData.level || "수업"})`);
+      } else {
+        await enterCurriculumCourse("sori_curriculum_sentence", assignedClass.className);
+      }
     } catch (e) {
       console.error(e);
-      alert("신청 중 오류가 발생했습니다.");
-    } finally {
-      setDankookApplying(false);
+      await enterCurriculumCourse("sori_curriculum_sentence", assignedClass.className);
     }
   };
 
-  // ── 단국대 코스 진입 ─────────
-  const enterDankookCourse = async () => {
-    setLoading(true);
-    setCourseType("dankook");
-    setResult(null);
-    setCompletedLines([]);
-    try {
-      const snap = await getDocs(
-        query(collection(db, "sori_curriculum_dankook"), orderBy("chapter", "asc"))
-      );
-      let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      if (list.length === 0) {
-        list = [
-          {
-            id: "dankook-sample-1",
-            text: "단국대학교에서 한국어를 배워요",
-            pronunciation: "[단국때학꾜에서 한구거를 배워요]",
-            rule_formula: "국[ㄱ] + 대[ㄷ] = 때 (된소리되기)",
-            chapter: 1,
-            meaning_ko: "단국대학교에서 한국어를 배웁니다.",
-          },
-          {
-            id: "dankook-sample-2",
-            text: "친구들과 같이 도서관에 가요",
-            pronunciation: "[친구들과 가치 도서관에 가요]",
-            rule_formula: "같이 [가치] : 구개음화 (ㅌ + 이 = ㅊ)",
-            chapter: 1,
-            meaning_ko: "친구들과 함께 도서관에 갑니다.",
-          },
-        ];
-      }
-
-      setProblemList(list);
-      initPractice(list);
-      setViewMode("practice");
-    } catch (e) {
-      console.error("Dankook course load error:", e);
-      alert("단국대 문장 목록을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
+  // 관리자 전용: 학생 시점 시뮬레이터 시작
+  const handleStartSimulatorTest = async () => {
+    if (selectedSimulatorTarget.startsWith("class:")) {
+      const classId = selectedSimulatorTarget.replace("class:", "");
+      const targetClass = availableClasses.find(c => c.id === classId);
+      const col = targetClass?.curriculumCollection || "sori_curriculum_sentence";
+      await enterCurriculumCourse(col, `${targetClass?.name || "선택 반"} (${targetClass?.level || "수업"})`);
+    } else {
+      const col = selectedSimulatorTarget.replace("col:", "");
+      const titleMap: Record<string, string> = {
+        sori_curriculum_dongguk: "동국한국어 1급 (기초)",
+        sori_curriculum_dongguk3: "동국한국어 3급 (중급)",
+        sori_curriculum_dankook: "단국대학교 한국어",
+        sori_curriculum_sentence: "일반 문장 억양",
+        sori_curriculum_word: "기초 어휘",
+      };
+      await enterCurriculumCourse(col, titleMap[col] || "지정 커리큘럼");
     }
   };
 
-  // ── 동국한국어 3급 코스 진입 ─────────
-  const enterDongguk3Course = async () => {
-    setLoading(true);
-    setCourseType("dongguk3");
-    setResult(null);
-    setCompletedLines([]);
-    try {
-      const snap = await getDocs(
-        query(collection(db, "sori_curriculum_dongguk3"), orderBy("chapter", "asc"))
-      );
-      let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      if (list.length === 0) {
-        list = [
-          {
-            id: "dongguk3-sample-1",
-            text: "취미가 무엇인지 이야기해 봅시다",
-            pronunciation: "[취미가 무어신지 이야기해 봅씨다]",
-            rule_formula: "ㅅ 받침 + ㅂ = [ㅂㅆ]",
-            chapter: 1,
-            tip: "동국한국어 3급 지정 문장입니다.",
-          },
-        ];
-      }
-
-      setProblemList(list);
-      initPractice(list);
-      setViewMode("practice");
-    } catch (e) {
-      console.error("Dongguk3 course load error:", e);
-      alert("문장 목록을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const enterDonggukCourse = () => enterCurriculumCourse("sori_curriculum_dongguk", "동국한국어 1급");
+  const enterDongguk3Course = () => enterCurriculumCourse("sori_curriculum_dongguk3", "동국한국어 3급");
+  const enterDankookCourse = () => enterCurriculumCourse("sori_curriculum_dankook", "단국대학교 한국어");
 
   // ── 커리큘럼 선택 ─────────────────────
   const selectCourse = async (type: "word" | "sentence" | "dialogue") => {
@@ -1065,8 +1078,8 @@ export default function Home() {
     const currency = userRole === "guest" ? "heart" : "token";
     const cost = 1;
 
-    // Embed 모드이거나 대학 코스(동국대, 단국대)일 때는 토큰/하트 무료 통과
-    const isFreeCourse = isEmbedMode || courseType === "dongguk" || courseType === "dongguk3" || courseType === "dankook";
+    // Embed 모드, 관리자 테스트, 또는 소속 반 수업일 때는 토큰/하트 무료 통과
+    const isFreeCourse = isEmbedMode || isAdminUser || !!assignedClass || courseType === "dongguk" || courseType === "dongguk3" || courseType === "dankook";
     if (!isFreeCourse) {
       if (userRole === "guest" && hearts <= 0) return setShowPaymentModal(true);
       if (userRole !== "guest" && tokens < cost) return setShowPaymentModal(true);
@@ -1220,10 +1233,10 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2">
             {/* 관리자 어드민 버튼 — admin 계정에서만 표시 */}
-            {userRole === "admin" && (
+            {isAdminUser && (
               <a
                 href="/admin"
-                className="flex items-center gap-1 bg-slate-800 text-white px-2.5 py-1 rounded-full text-xs font-bold hover:bg-slate-700 transition"
+                className="flex items-center gap-1 bg-slate-900 text-white px-2.5 py-1 rounded-full text-xs font-bold hover:bg-slate-800 transition border border-slate-700"
               >
                 ⚙️ 어드민
               </a>
@@ -1235,6 +1248,60 @@ export default function Home() {
             <button onClick={handleLogout} className="text-xl hover:scale-110 transition" title="로그아웃">👋</button>
           </div>
         </header>
+      )}
+
+      {/* ── 관리자 전용: 학생 시점 테스트 시뮬레이터 바 ── */}
+      {isAdminUser && !isEmbedMode && (
+        <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white px-4 py-3 border-b-2 border-indigo-500/80 shadow-lg flex-none">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm">👑</span>
+              <span className="font-black text-xs text-amber-300">
+                관리자 학생 시점 테스트 모드
+              </span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full font-bold">
+                ⚡ 토큰 무제한 패스
+              </span>
+            </div>
+            <a
+              href="/admin"
+              className="text-[11px] font-bold bg-white/10 hover:bg-white/20 text-indigo-200 px-2.5 py-1 rounded-lg transition"
+            >
+              어드민 관리실 ➔
+            </a>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedSimulatorTarget}
+              onChange={(e) => setSelectedSimulatorTarget(e.target.value)}
+              className="flex-1 bg-slate-900 text-white text-xs font-bold px-2.5 py-2 rounded-xl border border-indigo-400/60 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <optgroup label="📋 개설된 반 (Classes)">
+                {availableClasses.map((cls) => (
+                  <option key={cls.id} value={`class:${cls.id}`}>
+                    {cls.name} ({cls.level || "기본"}{cls.isTest ? " · 🧪테스트반" : ""})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="📚 커리큘럼 급수 직접 선택">
+                <option value="col:sori_curriculum_dongguk">🌱 동국한국어 1급 (기초)</option>
+                <option value="col:sori_curriculum_dongguk3">🌿 동국한국어 3급 (중급)</option>
+                <option value="col:sori_curriculum_dankook">🐻 단국대학교 한국어</option>
+                <option value="col:sori_curriculum_sentence">📝 일반 문장 억양 연습</option>
+                <option value="col:sori_curriculum_word">💡 기초 어휘/단어 연습</option>
+              </optgroup>
+            </select>
+
+            <button
+              onClick={handleStartSimulatorTest}
+              disabled={loading}
+              className="shrink-0 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl shadow transition disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+            >
+              {loading ? "로딩..." : "학생 화면 시작 ▶"}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* 토큰/하트 표시 바 (Embed 모드에서는 숨김) */}
@@ -1278,20 +1345,16 @@ export default function Home() {
                 free_hearts: hearts, tokens, points: 0,
                 streak, today_count: todayCount,
                 last_access_date: "", shared_memory: sharedMemory, chat_count: chatCount,
-                dongguk_status: donggukStatus,
-                dongguk3_status: dongguk3Status,
-                dankook_status: dankookStatus,
+                className: assignedClass?.className,
+                classLevel: assignedClass?.classLevel,
+                studentId: currentUser.studentId || "",
               }}
               onSelectCourse={selectCourse}
               onEnterFreeTalking={enterFreeTalking}
               onFetchRanking={fetchRanking}
               onFetchHistory={fetchHistory}
               onOpenNickname={() => setShowNicknameModal(true)}
-              onOpenDonggukModal={() => setShowDonggukModal(true)}
-              onEnterDonggukCourse={enterDonggukCourse}
-              onEnterDongguk3Course={enterDongguk3Course}
-              onOpenDankookModal={() => setShowDankookModal(true)}
-              onEnterDankookCourse={enterDankookCourse}
+              onEnterClassCourse={enterAssignedClass}
             />
 
             {/* 광고 #4: 홈 화면 하단 */}
@@ -1487,45 +1550,73 @@ export default function Home() {
 
         {/* ── 연습 — C: PracticeView 컴포넌트 ── */}
         {viewMode === "practice" && currentProblem && (
-          <PracticeView
-            courseType={courseType!}
-            currentProblem={currentProblem}
-            result={result}
-            translation={translation}
-            parsedScript={parsedScript}
-            myRole={myRole}
-            targetLineIndex={targetLineIndex}
-            completedLines={completedLines}
-            isShadowingMode={isShadowingMode}
-            ttsLoading={ttsLoading}
-            loading={loading}
-            recording={recording}
-            audioUrl={audioUrl}
-            analyser={analyserRef.current}
-            onBack={() => {
-              if (isEmbedMode) {
-                if (typeof window !== "undefined") {
-                  window.parent.postMessage({ type: "SORI_EMBED_CLOSE" }, "*");
+          <div className="space-y-3">
+            {isAdminUser && (
+              <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white p-3 rounded-2xl shadow-md flex items-center justify-between text-xs border border-indigo-500/50">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shrink-0">
+                    👑 학생 시점 테스트 중
+                  </span>
+                  <span className="font-bold text-slate-200 truncate">
+                    {currentTestCourseTitle || "선택 수업 코스"} ({problemList.length}문장)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setViewMode("home")}
+                    className="bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer"
+                  >
+                    코스 변경
+                  </button>
+                  <a
+                    href="/admin"
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-lg font-black text-[11px] transition"
+                  >
+                    어드민
+                  </a>
+                </div>
+              </div>
+            )}
+            <PracticeView
+              courseType={courseType!}
+              currentProblem={currentProblem}
+              result={result}
+              translation={translation}
+              parsedScript={parsedScript}
+              myRole={myRole}
+              targetLineIndex={targetLineIndex}
+              completedLines={completedLines}
+              isShadowingMode={isShadowingMode}
+              ttsLoading={ttsLoading}
+              loading={loading}
+              recording={recording}
+              audioUrl={audioUrl}
+              analyser={analyserRef.current}
+              onBack={() => {
+                if (isEmbedMode) {
+                  if (typeof window !== "undefined") {
+                    window.parent.postMessage({ type: "SORI_EMBED_CLOSE" }, "*");
+                  }
+                } else {
+                  setViewMode("home");
                 }
-              } else {
-                setViewMode("home");
-              }
-            }}
-            onSetMyRole={setMyRole}
-            onSetTargetLine={(i) => { setTargetLineIndex(i); setResult(null); setAudioUrl(null); }}
-            onToggleShadowing={() => setIsShadowingMode(p => !p)}
-            onPlayTTS={handleGoogleTTS}
-            onRetry={() => { setResult(null); setAudioUrl(null); }}
-            onNext={() => { setResult(null); setAudioUrl(null); if (courseType !== "dialogue") handleNextProblem(); }}
-            onTranslate={handleTranslateFeedback}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onCancelAudio={() => { setAudioUrl(null); setAudioBlob(null); }}
-            onAnalyze={analyzeAudio}
-            onNextDialogue={handleNextProblem}
-            isAllMyLinesFinished={isAllMyLinesFinished}
-            isEmbedMode={isEmbedMode}
-          />
+              }}
+              onSetMyRole={setMyRole}
+              onSetTargetLine={(i) => { setTargetLineIndex(i); setResult(null); setAudioUrl(null); }}
+              onToggleShadowing={() => setIsShadowingMode(p => !p)}
+              onPlayTTS={handleGoogleTTS}
+              onRetry={() => { setResult(null); setAudioUrl(null); }}
+              onNext={() => { setResult(null); setAudioUrl(null); if (courseType !== "dialogue") handleNextProblem(); }}
+              onTranslate={handleTranslateFeedback}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              onCancelAudio={() => { setAudioUrl(null); setAudioBlob(null); }}
+              onAnalyze={analyzeAudio}
+              onNextDialogue={handleNextProblem}
+              isAllMyLinesFinished={isAllMyLinesFinished}
+              isEmbedMode={isEmbedMode}
+            />
+          </div>
         )}
 
         {/* 프리토킹 하단 녹음 바 */}
@@ -1567,79 +1658,6 @@ export default function Home() {
           onClose={() => setShowCheckinModal(false)}
           onReward={handleCheckinReward}
         />
-      )}
-
-      {/* E: 라이선스 모달 */}
-      {showDonggukModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🏫</span>
-                <h3 className="font-black text-lg text-slate-800">동국대학교 1급 학생 인증</h3>
-              </div>
-              <button onClick={() => setShowDonggukModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              동국대학교 한국어 1급 수업 학생이신가요?<br />
-              학번이나 반/이름을 입력하고 요청하시면, 선생님 승인 후 <strong>동국한국어 1급 발음 코스</strong>를 무료로 이용할 수 있습니다.
-            </p>
-            <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">학번 (또는 반 / 이름)</label>
-              <input
-                value={donggukStudentIdInput}
-                onChange={e => setDonggukStudentIdInput(e.target.value)}
-                placeholder="예: 2026123456 (또는 1급 3반 마이클)"
-                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800"
-              />
-            </div>
-            <button
-              onClick={handleDonggukApply}
-              disabled={donggukApplying}
-              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-xl shadow-md transition disabled:opacity-50"
-            >
-              {donggukApplying ? "전송 중..." : "선생님께 연결 요청하기"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showDankookModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🐻</span>
-                <h3 className="font-black text-lg text-slate-800">단국대학교 학생 인증</h3>
-              </div>
-              <button onClick={() => setShowDankookModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              단국대학교 한국어 수업 학생이신가요?<br />
-              학번이나 반/이름을 입력하고 요청하시면, 선생님 승인 후 <strong>단국대 전용 발음 및 번역 코스</strong>를 100% 무료로 이용할 수 있습니다.
-            </p>
-            <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">학번 (또는 반 / 이름)</label>
-              <input
-                value={dankookStudentIdInput}
-                onChange={e => setDankookStudentIdInput(e.target.value)}
-                placeholder="예: 32201234 (또는 초급 1반 안나)"
-                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
-              />
-            </div>
-            <button
-              onClick={handleDankookApply}
-              disabled={dankookApplying}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition disabled:opacity-50"
-            >
-              {dankookApplying ? "전송 중..." : "선생님께 인증 요청하기"}
-            </button>
-          </div>
-        </div>
       )}
 
       {/* 소리 충전소 */}

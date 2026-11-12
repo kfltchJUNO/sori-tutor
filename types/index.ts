@@ -24,6 +24,11 @@ export interface SoriUser {
   dankook_status?: "none" | "pending" | "approved";
   dankook_student_id?: string;
   dankook_applied_at?: string;
+  classId?: string;
+  className?: string;
+  classLevel?: string;
+  classTeacherEmail?: string;
+  studentId?: string;
 }
 
 export type SeriesId = "step-korean" | "basecamp-korean" | "dongguk-1" | "dongguk-3" | "dankook-1";

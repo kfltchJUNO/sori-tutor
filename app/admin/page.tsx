@@ -1,8 +1,6 @@
 "use client";
 // app/admin/page.tsx
 
-import DonggukSection from "./DonggukSection";
-import DankookSection from "./DankookSection";
 import ClassManagementSection from "./ClassManagementSection";
 import DemoSurveySection from "./DemoSurveySection";
 import NotificationSenderModal from "./NotificationSenderModal";
@@ -51,7 +49,7 @@ interface CurriculumDoc {
 
 interface ParsedLine { role: string; text: string; }
 
-type Tab = "classes" | "surveys" | "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "dongguk" | "dankook" | "users" | "charges" | "inquiries";
+type Tab = "classes" | "surveys" | "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "users" | "charges" | "inquiries";
 
 // ── 점수대 정보 ────────────────────────────────────────────
 const SCORE_TIERS = [
@@ -1484,9 +1482,7 @@ export default function AdminPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "classes",  label: "🏫 반·선생님 관리" },
-    { id: "surveys",  label: "📊 체험 설문 응답" },
-    { id: "dongguk",  label: "동국대 (1급/3급)" },
-    { id: "dankook",  label: "단국대 관리" },
+    { id: "surveys",  label: "🧪 테스트·체험 관리" },
     { id: "generate", label: "✨ AI 생성" },
     { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },
     { id: "audio",    label: "🎵 오디오" },
@@ -1531,24 +1527,6 @@ export default function AdminPage() {
         {/* ──── 체험 설문 응답 통계 ──── */}
         {activeTab === "surveys" && (
           <DemoSurveySection idToken={idToken} />
-        )}
-
-        {/* ──── 동국대 1급 관리 ──── */}
-        {activeTab === "dongguk" && (
-          <DonggukSection
-            idToken={idToken}
-            voices={ELEVENLABS_VOICES}
-            defaultVoiceId={DEFAULT_MALE_VOICE_ID}
-          />
-        )}
-
-        {/* ──── 단국대 관리 ──── */}
-        {activeTab === "dankook" && (
-          <DankookSection
-            idToken={idToken}
-            voices={ELEVENLABS_VOICES}
-            defaultVoiceId={DEFAULT_MALE_VOICE_ID}
-          />
         )}
 
         {/* ──── AI 생성 ──── */}

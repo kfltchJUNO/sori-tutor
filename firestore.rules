@@ -84,6 +84,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── 반(클래스) 컬렉션 ──
+    match /sori_classes/{classId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     // ── 관리자 CMS 및 초안 컬렉션 ──
     match /sori_drafts/{draftId} {
       allow read, write: if isAdmin();
