@@ -844,6 +844,15 @@ export default function Home() {
 
       let list: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+      if (colName === "sori_demo_sentences" && list.length > 0) {
+        list = list
+          .map(item => ({
+            ...item,
+            rule_formula: item.ruleExplanation || item.rule_formula || "",
+          }))
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+      }
+
       if (list.length === 0) {
         if (colName === "sori_curriculum_dongguk") {
           list = [
@@ -951,6 +960,7 @@ export default function Home() {
     } else {
       const col = selectedSimulatorTarget.replace("col:", "");
       const titleMap: Record<string, string> = {
+        sori_demo_sentences: "테스트 전용 문장 (1~6급)",
         sori_curriculum_dongguk: "동국한국어 1급 (기초)",
         sori_curriculum_dongguk3: "동국한국어 3급 (중급)",
         sori_curriculum_dankook: "단국대학교 한국어",
@@ -1285,6 +1295,7 @@ export default function Home() {
                 ))}
               </optgroup>
               <optgroup label="📚 커리큘럼 급수 직접 선택">
+                <option value="col:sori_demo_sentences">🧪 테스트 전용 문장 (1~6급)</option>
                 <option value="col:sori_curriculum_dongguk">🌱 동국한국어 1급 (기초)</option>
                 <option value="col:sori_curriculum_dongguk3">🌿 동국한국어 3급 (중급)</option>
                 <option value="col:sori_curriculum_dankook">🐻 단국대학교 한국어</option>

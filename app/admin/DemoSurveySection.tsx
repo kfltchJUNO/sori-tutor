@@ -1,6 +1,9 @@
 "use client";
 // app/admin/DemoSurveySection.tsx
-// 최고 관리자 전용: 테스트 문장 및 음성 관리, 체험 링크(/demo), 기기 횟수 리셋, 6개 국어 설문조사(국적·급수·학습기간·약점) 대시보드
+// 최고 관리자 전용: 테스트·체험 통합 관리 허브
+// 1. [🏫 테스트 반 & 체험 링크]: 공개 체험실(/demo) 및 테스트 반(Test Classes), QR코드, 학생 명단 원스톱 관리
+// 2. [📝 테스트 문장 & 음성 관리]: 1~6급 테스트 문장 CRUD 및 ElevenLabs 원어민 음성 자동 생성/재생
+// 3. [📊 설문 통계 & 응답]: 6개 국어 설문조사 통계 (만족도, 국적, 급수, 학습기간, 취약 영역) 및 엑셀 CSV 추출
 
 import { useState, useEffect, useRef } from "react";
 import { adminFetch } from "@/lib/firebase";
@@ -9,9 +12,13 @@ import {
   Languages, Filter, AlertCircle, Calendar, FlaskConical,
   QrCode, ExternalLink, RotateCcw, Copy, Check, Printer,
   Volume2, Plus, Trash2, Edit2, Play, Square, Sparkles,
-  Globe, BookOpen, Clock, Layers, CheckCircle2, X
+  Globe, BookOpen, Clock, Layers, CheckCircle2, X,
+  School, Users, User
 } from "lucide-react";
 import type { DemoSurveyData, DemoSentenceDoc } from "@/lib/demoData";
+import type { ClassData } from "@/app/api/admin/classes/route";
+import type { TeacherData } from "@/app/api/admin/teachers/route";
+import type { ClassStudentInfo } from "@/app/api/admin/classes/students/route";
 
 interface Props {
   idToken: string;
@@ -36,11 +43,48 @@ const LANG_LABEL_MAP: Record<string, string> = {
   my: "🇲🇲 မြန်မာ",
 };
 
-export default function DemoSurveySection({ idToken }: Props) {
-  // 상단 서브탭 ("sentences": 문장&음성 관리, "surveys": 체험링크&설문응답)
-  const [activeSubTab, setActiveSubTab] = useState<"sentences" | "surveys">("sentences");
+const TEST_COLLECTION_OPTIONS = [
+  { label: "🧪 테스트 전용 문장 (1~6급)", collection: "sori_demo_sentences", level: "테스트" },
+  { label: "일반 문장 커리큘럼", collection: "sori_curriculum_sentence", level: "일반 문장" },
+  { label: "동국대 1급 (기초)", collection: "sori_curriculum_dongguk", level: "동국대 1급" },
+  { label: "동국대 3급 (중급)", collection: "sori_curriculum_dongguk3", level: "동국대 3급" },
+  { label: "단국대 전용 코스", collection: "sori_curriculum_dankook", level: "단국대" },
+];
 
-  // ── 1. 설문 및 체험 통계 상태 ──
+export default function DemoSurveySection({ idToken }: Props) {
+  // 상단 서브탭 ("classes": 테스트반&체험링크, "sentences": 문장&음성 관리, "surveys": 설문응답&통계)
+  const [activeSubTab, setActiveSubTab] = useState<"classes" | "sentences" | "surveys">("classes");
+
+  // ── 1. 테스트 반 및 선생님 관리 상태 ──
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [teachers, setTeachers] = useState<TeacherData[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [classError, setClassError] = useState<string | null>(null);
+
+  // 테스트 반 모달 상태
+  const [showCreateTestClassModal, setShowCreateTestClassModal] = useState(false);
+  const [selectedTestClassForStudents, setSelectedTestClassForStudents] = useState<ClassData | null>(null);
+  const [selectedTestClassForQR, setSelectedTestClassForQR] = useState<ClassData | null>(null);
+  const [testClassStudents, setTestClassStudents] = useState<ClassStudentInfo[]>([]);
+  const [loadingTestStudents, setLoadingTestStudents] = useState(false);
+
+  // 새 테스트 반 폼 상태
+  const [newTestClassName, setNewTestClassName] = useState("");
+  const [newTestClassInstitution, setNewTestClassInstitution] = useState("소리튜터 테스트");
+  const [newTestClassLevelOption, setNewTestClassLevelOption] = useState(0);
+  const [newTestClassTeacherEmail, setNewTestClassTeacherEmail] = useState("");
+  const [newTestClassMemo, setNewTestClassMemo] = useState("");
+  const [creatingTestClass, setCreatingTestClass] = useState(false);
+
+  // 학생 수동 추가 폼 상태
+  const [addTestStudentEmail, setAddTestStudentEmail] = useState("");
+  const [addTestStudentName, setAddTestStudentName] = useState("");
+  const [addTestStudentId, setAddTestStudentId] = useState("");
+  const [addingTestStudent, setAddingTestStudent] = useState(false);
+
+  const [copiedInviteCode, setCopiedInviteCode] = useState<string | null>(null);
+
+  // ── 2. 설문 및 체험 통계 상태 ──
   const [surveys, setSurveys] = useState<DemoSurveyData[]>([]);
   const [stats, setStats] = useState<any>({
     totalCount: 0,
@@ -59,7 +103,7 @@ export default function DemoSurveySection({ idToken }: Props) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [showDemoQrModal, setShowDemoQrModal] = useState(false);
 
-  // ── 2. 데모 문장 & 음성 관리 상태 ──
+  // ── 3. 데모 문장 & 음성 관리 상태 ──
   const [sentences, setSentences] = useState<DemoSentenceDoc[]>([]);
   const [loadingSentences, setLoadingSentences] = useState(false);
   const [sentenceError, setSentenceError] = useState<string | null>(null);
@@ -83,9 +127,29 @@ export default function DemoSurveySection({ idToken }: Props) {
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const demoUrl = `${origin}/demo`;
-  const demoQrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(
+  const demoQrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(
     demoUrl
   )}`;
+
+  // 반 목록 & 선생님 목록 조회
+  const loadClasses = async () => {
+    setLoadingClasses(true);
+    setClassError(null);
+    try {
+      const [classRes, teacherRes] = await Promise.all([
+        adminFetch("/api/admin/classes", { method: "GET" }, idToken),
+        adminFetch("/api/admin/teachers", { method: "GET" }, idToken),
+      ]);
+      const classData = await classRes.json();
+      const teacherData = await teacherRes.json();
+      if (classRes.ok) setClasses(classData.classes || []);
+      if (teacherRes.ok) setTeachers(teacherData.teachers || []);
+    } catch (e: any) {
+      setClassError(e.message);
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
 
   // 설문 목록 불러오기
   const loadSurveys = async () => {
@@ -121,9 +185,134 @@ export default function DemoSurveySection({ idToken }: Props) {
   };
 
   useEffect(() => {
+    loadClasses();
     loadSurveys();
     loadSentences();
   }, [idToken]);
+
+  // ── 테스트 반 생성 핸들러 ──
+  const handleCreateTestClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTestClassName.trim()) return alert("테스트 반 이름을 입력하세요.");
+    setCreatingTestClass(true);
+    try {
+      const selectedOpt = TEST_COLLECTION_OPTIONS[newTestClassLevelOption];
+      const selectedTeacher = teachers.find(t => t.email === newTestClassTeacherEmail);
+
+      const res = await adminFetch(
+        "/api/admin/classes",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newTestClassName.trim(),
+            institution: newTestClassInstitution.trim(),
+            level: selectedOpt.level,
+            curriculumCollection: selectedOpt.collection,
+            teacherEmail: newTestClassTeacherEmail,
+            teacherName: selectedTeacher?.name || "선생님 미지정",
+            memo: newTestClassMemo.trim(),
+            isTest: true,
+          }),
+        },
+        idToken
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "테스트 반 생성 실패");
+
+      setShowCreateTestClassModal(false);
+      setNewTestClassName("");
+      setNewTestClassMemo("");
+      loadClasses();
+    } catch (e: any) {
+      alert("오류: " + e.message);
+    } finally {
+      setCreatingTestClass(false);
+    }
+  };
+
+  // ── 테스트 반 삭제 핸들러 ──
+  const handleDeleteTestClass = async (classId: string, name: string) => {
+    if (!confirm(`'${name}' 테스트 반을 정말 삭제하시겠습니까? (소속 학생들의 배정이 해제됩니다)`)) return;
+    try {
+      const res = await adminFetch(`/api/admin/classes?classId=${classId}`, { method: "DELETE" }, idToken);
+      if (!res.ok) throw new Error("테스트 반 삭제 실패");
+      loadClasses();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  // ── 테스트 반 소속 학생 목록 조회 ──
+  const openTestClassStudentsModal = async (c: ClassData) => {
+    setSelectedTestClassForStudents(c);
+    setLoadingTestStudents(true);
+    try {
+      const res = await adminFetch(`/api/admin/classes/students?classId=${c.id}`, { method: "GET" }, idToken);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "학생 목록 조회 실패");
+      setTestClassStudents(data.students || []);
+    } catch (e: any) {
+      alert("학생 목록 조회 실패: " + e.message);
+    } finally {
+      setLoadingTestStudents(false);
+    }
+  };
+
+  // ── 테스트 반에 학생 수동 배정 ──
+  const handleAddTestStudentToClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTestClassForStudents || !addTestStudentEmail.trim()) return;
+
+    setAddingTestStudent(true);
+    try {
+      const res = await adminFetch(
+        "/api/admin/classes/students",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            classId: selectedTestClassForStudents.id,
+            email: addTestStudentEmail.trim(),
+            name: addTestStudentName.trim(),
+            studentId: addTestStudentId.trim(),
+          }),
+        },
+        idToken
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "학생 배정 실패");
+
+      setAddTestStudentEmail("");
+      setAddTestStudentName("");
+      setAddTestStudentId("");
+      openTestClassStudentsModal(selectedTestClassForStudents);
+      loadClasses();
+    } catch (e: any) {
+      alert("학생 배정 오류: " + e.message);
+    } finally {
+      setAddingTestStudent(false);
+    }
+  };
+
+  // ── 테스트 반에서 학생 배정 해제 ──
+  const handleRemoveTestStudentFromClass = async (email: string) => {
+    if (!confirm(`'${email}' 학생을 이 테스트 반에서 제외하시겠습니까?`)) return;
+    try {
+      const res = await adminFetch(
+        `/api/admin/classes/students?email=${encodeURIComponent(email)}`,
+        { method: "DELETE" },
+        idToken
+      );
+      if (!res.ok) throw new Error("배정 해제 실패");
+      if (selectedTestClassForStudents) openTestClassStudentsModal(selectedTestClassForStudents);
+      loadClasses();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   // 기본 6문장 일괄 등록(시드)
   const handleSeedDefaultSentences = async () => {
@@ -172,7 +361,6 @@ export default function DemoSurveySection({ idToken }: Props) {
     setSavingSentence(true);
     try {
       if (editingSentence && !editingSentence.id.startsWith("default-")) {
-        // 수정
         const res = await adminFetch(
           "/api/demo/sentences",
           {
@@ -193,7 +381,6 @@ export default function DemoSurveySection({ idToken }: Props) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "수정 실패");
       } else {
-        // 신규 추가
         const res = await adminFetch(
           "/api/demo/sentences",
           {
@@ -355,6 +542,21 @@ export default function DemoSurveySection({ idToken }: Props) {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const handleCopyInviteCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedInviteCode(code);
+    setTimeout(() => setCopiedInviteCode(null), 2000);
+  };
+
+  const handleCopyInviteUrl = (code: string) => {
+    const url = `${origin}/join?code=${code}`;
+    navigator.clipboard.writeText(url);
+    setCopiedInviteCode(`url-${code}`);
+    setTimeout(() => setCopiedInviteCode(null), 2000);
+  };
+
+  const testClasses = classes.filter(c => c.isTest);
+
   const filteredSurveys = selectedLang === "all"
     ? surveys
     : surveys.filter((s) => s.language === selectedLang);
@@ -401,7 +603,19 @@ export default function DemoSurveySection({ idToken }: Props) {
   return (
     <div className="space-y-6">
       {/* ── 최상단 서브탭 바 ── */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 flex-wrap">
+        <button
+          onClick={() => setActiveSubTab("classes")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs transition ${
+            activeSubTab === "classes"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <School size={14} />
+          <span>🏫 테스트 반 & 체험 링크 ({testClasses.length + 1})</span>
+        </button>
+
         <button
           onClick={() => setActiveSubTab("sentences")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs transition ${
@@ -423,12 +637,245 @@ export default function DemoSurveySection({ idToken }: Props) {
           }`}
         >
           <MessageSquare size={14} />
-          <span>📊 체험 링크, 리셋 & 설문 응답 ({surveys.length})</span>
+          <span>📊 설문 통계 & 응답 ({surveys.length})</span>
         </button>
       </div>
 
       {/* ══════════════════════════════════════════════════════════
-          [서브탭 1] 테스트 문장 & 음성 관리 패널
+          [서브탭 1] 테스트 반 & 무설치 공개 체험실 통합 관제
+          ══════════════════════════════════════════════════════════ */}
+      {activeSubTab === "classes" && (
+        <div className="space-y-6">
+          {/* 🌟 1. 무설치 원클릭 공개 체험실 (/demo) 대표 카드 */}
+          <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-3xl p-6 shadow-md space-y-4 border border-indigo-800/40">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 bg-amber-400 text-slate-950 font-black text-xs rounded-full">
+                    PUBLIC DEMO
+                  </span>
+                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold rounded-full flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    실시간 운영 중 (하루 5회 기기 제한)
+                  </span>
+                  <h3 className="font-black text-lg">소리튜터 무설치 공개 발음 체험실</h3>
+                </div>
+                <p className="text-xs text-slate-300">
+                  학생들이 로그인이나 반 가입 없이 브라우저에서 바로 발음 검사를 체험하고 설문을 제출할 수 있는 공식 공개 링크입니다.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDemoQrModal(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10"
+                >
+                  <QrCode size={14} /> 체험 QR 코드
+                </button>
+                <a
+                  href="/demo"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition shadow"
+                >
+                  <ExternalLink size={14} /> 새 탭에서 열기
+                </a>
+              </div>
+            </div>
+
+            {/* 링크 복사 바 */}
+            <div className="flex items-center gap-2 bg-white/10 p-2 rounded-2xl border border-white/15 text-xs font-mono">
+              <span className="truncate flex-1 text-slate-200 px-2 font-bold">{demoUrl}</span>
+              <button
+                onClick={handleCopyLink}
+                className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition flex items-center gap-1 shrink-0"
+              >
+                {copiedLink ? <Check size={13} /> : <Copy size={13} />}
+                <span>{copiedLink ? "복사됨!" : "링크 복사"}</span>
+              </button>
+            </div>
+
+            {/* 🔄 기기 횟수 리셋 도구 및 누적 지표 */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3 flex-wrap text-xs">
+              <div className="flex items-center gap-4 text-slate-300">
+                <span>누적 설문 제출: <strong className="text-amber-300 font-bold">{surveys.length}건</strong></span>
+                <span>평균 만족도: <strong className="text-amber-300 font-bold">{stats.avgSatisfaction || "5.0"}★</strong></span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResetMyDevice}
+                  disabled={resetting}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-amber-300 border border-amber-300/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
+                  title="관리자 브라우저의 5회 횟수를 리셋하여 계속 체험 테스트 가능"
+                >
+                  <RotateCcw size={12} className={resetting ? "animate-spin" : ""} />
+                  <span>내 기기 횟수 초기화</span>
+                </button>
+
+                <button
+                  onClick={handleResetAllDevices}
+                  disabled={resetting}
+                  className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-400/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
+                  title="모든 사용자 기기의 일일 횟수를 일괄 초기화"
+                >
+                  <RotateCcw size={12} />
+                  <span>전체 기기 일괄 리셋</span>
+                </button>
+              </div>
+            </div>
+
+            {resetMessage && (
+              <div className="p-2.5 bg-emerald-500/20 border border-emerald-400/40 rounded-xl text-xs text-emerald-200 font-bold">
+                {resetMessage}
+              </div>
+            )}
+          </div>
+
+          {/* 🏫 2. 개설된 테스트 반 목록 (Test Classes) */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <FlaskConical className="text-amber-600" size={18} />
+                  개설된 테스트 전용 반 목록 ({testClasses.length})
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  정규 수업과 분리되어 특정 학생 집단이나 테스트 세션에 맞춤 배정할 수 있는 테스트 반입니다.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowCreateTestClassModal(true)}
+                className="flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-4 py-2 rounded-xl transition shadow-xs"
+              >
+                <Plus size={14} /> 새 테스트 반 개설하기
+              </button>
+            </div>
+
+            {loadingClasses ? (
+              <div className="py-12 text-center text-slate-700 text-xs">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+                테스트 반 목록을 불러오는 중...
+              </div>
+            ) : testClasses.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-dashed border-amber-300 p-8 text-center text-slate-700 text-xs space-y-2 bg-amber-50/20">
+                <FlaskConical size={36} className="mx-auto text-amber-500" />
+                <p className="font-bold text-slate-800 text-sm">아직 개설된 테스트 반이 없습니다.</p>
+                <p className="text-slate-500">
+                  우측 상단의 &apos;새 테스트 반 개설하기&apos;를 눌러 학생들에게 배정할 테스트 반을 만들어 보세요.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {testClasses.map((cls) => {
+                  const joinUrl = `${origin}/join?code=${cls.inviteCode}`;
+                  return (
+                    <div
+                      key={cls.id}
+                      className="bg-white rounded-2xl border-2 border-amber-300 bg-amber-50/10 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                              <FlaskConical size={10} /> 테스트용
+                            </span>
+                            <span className="text-[11px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md">
+                              {cls.level}
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-500 font-medium">{cls.institution || "소리튜터"}</span>
+                        </div>
+
+                        <h4 className="font-black text-slate-900 text-base">{cls.name}</h4>
+
+                        <p className="text-xs text-slate-600 flex items-center gap-1">
+                          <User size={13} className="text-indigo-600" /> 담당: <strong>{cls.teacherName || "선생님 미지정"}</strong>
+                        </p>
+
+                        <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          연결 커리큘럼: <strong className="text-slate-800 font-mono">{cls.curriculumCollection}</strong>
+                          {cls.memo && <p className="mt-1 text-slate-600">메모: {cls.memo}</p>}
+                        </div>
+                      </div>
+
+                      {/* 초대 코드 및 학생 수 */}
+                      <div className="pt-3 border-t border-amber-100 space-y-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500 font-medium">초대 코드</span>
+                          <div className="flex items-center gap-1 font-mono font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                            <span>{cls.inviteCode}</span>
+                            <button
+                              onClick={() => handleCopyInviteCode(cls.inviteCode)}
+                              className="text-slate-400 hover:text-indigo-600 p-0.5"
+                              title="코드 복사"
+                            >
+                              {copiedInviteCode === cls.inviteCode ? (
+                                <Check size={12} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={12} />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 링크 복사 및 QR 코드 버튼 */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyInviteUrl(cls.inviteCode)}
+                            className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs transition flex items-center justify-center gap-1"
+                          >
+                            {copiedInviteCode === `url-${cls.inviteCode}` ? (
+                              <>
+                                <Check size={12} className="text-emerald-600" /> 복사됨
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} /> 가입 링크 복사
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTestClassForQR(cls)}
+                            className="w-full py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs transition flex items-center justify-center gap-1 shadow-xs"
+                          >
+                            <QrCode size={12} /> QR 코드
+                          </button>
+                        </div>
+
+                        {/* 소속 학생 관리 & 삭제 */}
+                        <div className="flex items-center justify-between pt-1">
+                          <button
+                            onClick={() => openTestClassStudentsModal(cls)}
+                            className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 hover:underline"
+                          >
+                            <Users size={13} /> 소속 학생 ({cls.studentCount || 0}명) 관리 ➔
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteTestClass(cls.id, cls.name)}
+                            className="text-slate-400 hover:text-red-600 p-1 rounded transition"
+                            title="테스트 반 삭제"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════
+          [서브탭 2] 테스트 문장 & ElevenLabs 음성 관리 패널
           ══════════════════════════════════════════════════════════ */}
       {activeSubTab === "sentences" && (
         <div className="space-y-4">
@@ -436,10 +883,10 @@ export default function DemoSurveySection({ idToken }: Props) {
             <div>
               <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
                 <FlaskConical className="text-indigo-600" size={18} />
-                무설치 체험(/demo) 문장 및 ElevenLabs 음성 관리
+                테스트 문장 및 ElevenLabs 원어민 음성 관리
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                체험용 한국어 문장, 발음 표기, 음운 규칙 설명 및 원어민 ElevenLabs 음성을 관리합니다.
+                테스트 및 공개 체험에 사용되는 급수별(1~6급) 한국어 문장, 표준 발음 표기, 음운 규칙 해설 및 음성을 관리합니다.
               </p>
             </div>
 
@@ -458,27 +905,19 @@ export default function DemoSurveySection({ idToken }: Props) {
               >
                 <Plus size={14} /> 새 테스트 문장 추가
               </button>
-              <button
-                onClick={loadSentences}
-                disabled={loadingSentences}
-                className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl border border-slate-200 transition"
-                title="새로고침"
-              >
-                <RefreshCw size={14} className={loadingSentences ? "animate-spin" : ""} />
-              </button>
             </div>
           </div>
 
           {/* 급수 필터 */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             {["all", "1급", "2급", "3급", "4급", "5급", "6급"].map((lvl) => (
               <button
                 key={lvl}
                 onClick={() => setFilterLevel(lvl)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                className={`px-3 py-1.5 rounded-xl font-black transition shrink-0 ${
                   filterLevel === lvl
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    ? "bg-slate-900 text-white shadow"
+                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
                 }`}
               >
                 {lvl === "all" ? "전체 급수" : lvl}
@@ -486,110 +925,101 @@ export default function DemoSurveySection({ idToken }: Props) {
             ))}
           </div>
 
-          {/* 문장 목록 리스트 */}
+          {/* 문장 목록 */}
           {loadingSentences ? (
-            <div className="py-12 text-center text-slate-500 text-xs bg-white rounded-2xl border border-slate-200">
+            <div className="py-16 text-center text-slate-500 text-xs">
               <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-              테스트 문장을 불러오는 중...
+              문장 목록을 불러오는 중...
             </div>
           ) : filteredSentencesList.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs bg-white rounded-2xl border border-slate-200 space-y-3">
+            <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500 text-xs space-y-3">
+              <BookOpen size={32} className="mx-auto text-slate-400" />
               <p className="font-bold text-slate-700 text-sm">등록된 테스트 문장이 없습니다.</p>
-              <p>기본 6문장을 자동으로 채우거나 새 문장을 직접 추가하세요.</p>
-              <button
-                onClick={handleSeedDefaultSentences}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold"
-              >
-                기본 6문장 자동 생성
-              </button>
+              <p>우측 상단의 &apos;기본 6문장 일괄 등록&apos; 또는 &apos;새 테스트 문장 추가&apos;를 눌러 등록해 보세요.</p>
             </div>
           ) : (
-            <div className="grid gap-3">
-              {filteredSentencesList.map((item, idx) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredSentencesList.map((sen, idx) => (
                 <div
-                  key={item.id}
-                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-4 hover:border-indigo-300 transition"
+                  key={sen.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition space-y-3 flex flex-col justify-between"
                 >
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-indigo-100 text-indigo-800">
-                        {item.level}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono font-bold">
-                        순서 #{item.order || idx + 1}
-                      </span>
-                      {item.audio_path ? (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                          <Volume2 size={11} /> ElevenLabs 음성 보유
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md">
+                          {sen.level}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          #{sen.order ?? idx + 1}
+                        </span>
+                      </div>
+
+                      {/* 음성 상태 배지 */}
+                      {sen.audio_path ? (
+                        <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle2 size={10} /> 음성 연결됨
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500">
-                          Web Speech 브라우저 기본 음성
+                        <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+                          음성 미생성 (TTS 대체)
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <h4 className="font-black text-base text-slate-900">{item.text}</h4>
-                      <span className="text-xs font-bold text-indigo-600 font-mono">
-                        {item.pronunciation}
-                      </span>
-                    </div>
-
-                    {item.ruleExplanation && (
-                      <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-2 rounded-xl border border-slate-100">
-                        💡 {item.ruleExplanation}
-                      </p>
-                    )}
+                    <h4 className="font-black text-slate-900 text-base">{sen.text}</h4>
+                    <p className="text-xs font-bold text-indigo-600 font-mono">{sen.pronunciation}</p>
+                    <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      💡 {sen.ruleExplanation}
+                    </p>
                   </div>
 
-                  {/* 작업 버튼들 */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* 오디오 미리듣기 */}
-                    {item.audio_path && (
-                      <button
-                        onClick={() => handlePlayAudio(item.audio_path!)}
-                        className={`p-2 rounded-xl border transition ${
-                          playingAudioUrl === item.audio_path
-                            ? "bg-indigo-600 text-white border-indigo-600"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
-                        title="원어민 음성 미리듣기"
-                      >
-                        {playingAudioUrl === item.audio_path ? <Square size={14} className="fill-white" /> : <Play size={14} />}
-                      </button>
-                    )}
-
-                    {/* ElevenLabs 음성 생성 버튼 */}
-                    <button
-                      onClick={() => handleGenerateElevenLabsAudio(item)}
-                      disabled={generatingAudioId === item.id}
-                      className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center gap-1 disabled:opacity-50"
-                      title="ElevenLabs 원어민 고음질 오디오 생성"
-                    >
-                      {generatingAudioId === item.id ? (
-                        <Loader2 size={13} className="animate-spin text-amber-700" />
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      {sen.audio_path ? (
+                        <button
+                          type="button"
+                          onClick={() => handlePlayAudio(sen.audio_path!)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1"
+                        >
+                          {playingAudioUrl === sen.audio_path ? <Square size={12} /> : <Play size={12} />}
+                          <span>{playingAudioUrl === sen.audio_path ? "정지" : "미리듣기"}</span>
+                        </button>
                       ) : (
-                        <Sparkles size={13} className="text-amber-600" />
+                        <button
+                          type="button"
+                          disabled={generatingAudioId === sen.id}
+                          onClick={() => handleGenerateElevenLabsAudio(sen)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs disabled:opacity-50"
+                        >
+                          {generatingAudioId === sen.id ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Sparkles size={12} />
+                          )}
+                          <span>{generatingAudioId === sen.id ? "생성 중..." : "음성 생성"}</span>
+                        </button>
                       )}
-                      <span>{item.audio_path ? "음성 재생성" : "음성 생성"}</span>
-                    </button>
+                    </div>
 
-                    <button
-                      onClick={() => openSentenceModal(item)}
-                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 transition"
-                      title="수정"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteSentence(item)}
-                      className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition"
-                      title="삭제"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openSentenceModal(sen)}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition"
+                        title="문장 수정"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSentence(sen)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 transition"
+                        title="문장 삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -599,254 +1029,166 @@ export default function DemoSurveySection({ idToken }: Props) {
       )}
 
       {/* ══════════════════════════════════════════════════════════
-          [서브탭 2] 체험 링크, 횟수 리셋 & 다국어 설문 응답 관제
+          [서브탭 3] 다국어 설문 통계 & 응답 관제 패널
           ══════════════════════════════════════════════════════════ */}
       {activeSubTab === "surveys" && (
         <div className="space-y-6">
-          {/* 체험 링크 & QR 배포 카드 */}
-          <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 bg-amber-400 text-slate-950 font-black text-xs rounded-full">
-                    PUBLIC TRIAL
-                  </span>
-                  <h3 className="font-black text-lg">소리튜터 무설치 무료 체험 링크 & QR 배포</h3>
+          {/* 통계 요약 카드 4종 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold">전체 응답 수</span>
+              <p className="text-2xl font-black text-slate-900 mt-1">{stats.totalCount ?? surveys.length}명</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
+                <Star size={13} className="text-amber-500 fill-amber-500" /> 사용 편의성
+              </span>
+              <p className="text-2xl font-black text-amber-600 mt-1">{stats.avgSatisfaction || "5.0"} / 5.0</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
+                <Star size={13} className="text-indigo-500 fill-indigo-500" /> 피드백 명확도
+              </span>
+              <p className="text-2xl font-black text-indigo-600 mt-1">{stats.avgClarity || "5.0"} / 5.0</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
+                <Star size={13} className="text-emerald-500 fill-emerald-500" /> 재이용 의향
+              </span>
+              <p className="text-2xl font-black text-emerald-600 mt-1">{stats.avgRevisit || "5.0"} / 5.0</p>
+            </div>
+          </div>
+
+          {/* 설문 응답 목록 & 엑셀 추출 */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-black text-slate-900 text-base">체험자 설문 피드백</h3>
+                <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
+                  {filteredSurveys.length}건
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* 언어 필터 */}
+                <div className="flex items-center gap-1 text-xs">
+                  <Languages size={14} className="text-slate-400" />
+                  <select
+                    value={selectedLang}
+                    onChange={(e) => setSelectedLang(e.target.value)}
+                    className="p-1.5 border border-slate-200 rounded-xl font-bold bg-white focus:outline-none"
+                  >
+                    <option value="all">전체 언어</option>
+                    <option value="ko">🇰🇷 한국어</option>
+                    <option value="en">🇺🇸 English</option>
+                    <option value="zh">🇨🇳 中文</option>
+                    <option value="ja">🇯🇵 日本語</option>
+                    <option value="vi">🇻🇳 Tiếng Việt</option>
+                    <option value="my">🇲🇲 မြန်မာ</option>
+                  </select>
                 </div>
-                <p className="text-xs text-slate-300">
-                  학생들이 로그인 없이 브라우저에서 바로 발음 연습을 체험하고 설문을 제출할 수 있는 전용 링크입니다.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowDemoQrModal(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition"
-                >
-                  <QrCode size={14} /> QR 코드 보기
-                </button>
-                <a
-                  href="/demo"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition shadow"
-                >
-                  <ExternalLink size={14} /> 새 탭에서 열기
-                </a>
-              </div>
-            </div>
-
-            {/* 링크 복사 바 */}
-            <div className="flex items-center gap-2 bg-white/10 p-2 rounded-2xl border border-white/15 text-xs font-mono">
-              <span className="truncate flex-1 text-slate-200 px-2">{demoUrl}</span>
-              <button
-                onClick={handleCopyLink}
-                className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition flex items-center gap-1 shrink-0"
-              >
-                {copiedLink ? <Check size={13} /> : <Copy size={13} />}
-                <span>{copiedLink ? "복사됨!" : "링크 복사"}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 🔄 관리자 테스트 횟수 리셋 도구 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
-                  <RotateCcw size={15} className="text-amber-500" />
-                  관리자 전용 체험 횟수(하루 5회) 즉시 리셋 도구
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  기기 식별을 통해 하루 5회로 제한된 카운터를 즉시 0회로 초기화하여 관리자가 마음껏 반복 테스트할 수 있습니다.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleResetMyDevice}
-                  disabled={resetting}
-                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <RotateCcw size={13} /> 내 기기 5회 즉시 리셋
-                </button>
-                <button
-                  onClick={handleResetAllDevices}
-                  disabled={resetting}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
-                >
-                  전체 기기 일괄 리셋
-                </button>
-              </div>
-            </div>
-
-            {resetMessage && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold animate-in fade-in">
-                {resetMessage}
-              </div>
-            )}
-          </div>
-
-          {/* 4대 평가 평균 점수 대시보드 */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 block">Q1 사용 편의성</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-2xl font-black text-indigo-600">{stats.avgSatisfaction}</span>
-                <span className="text-xs text-slate-400">/ 5.0</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 block">Q2 피드백 명확성</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-2xl font-black text-blue-600">{stats.avgClarity}</span>
-                <span className="text-xs text-slate-400">/ 5.0</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 block">Q3 AI 음성 만족도</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-2xl font-black text-emerald-600">{stats.avgTts}</span>
-                <span className="text-xs text-slate-400">/ 5.0</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 block">Q4 재이용 의향</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-2xl font-black text-amber-600">{stats.avgRevisit}</span>
-                <span className="text-xs text-slate-400">/ 5.0</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 설문 응답 목록 리스트 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
-                  <MessageSquare className="text-indigo-600" size={18} />
-                  접수된 설문 응답 목록 ({filteredSurveys.length}건)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  체험자들이 제출한 국적, 급수, 학습기간, 취약 분야 및 평가 점수를 실시간 확인합니다.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedLang}
-                  onChange={(e) => setSelectedLang(e.target.value)}
-                  className="text-xs font-bold px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 focus:outline-none"
-                >
-                  <option value="all">전체 언어</option>
-                  <option value="ko">🇰🇷 한국어</option>
-                  <option value="en">🇺🇸 영어</option>
-                  <option value="zh">🇨🇳 중국어</option>
-                  <option value="ja">🇯🇵 일본어</option>
-                  <option value="vi">🇻🇳 베트남어</option>
-                  <option value="my">🇲🇲 미얀마어</option>
-                </select>
-
-                <button
-                  onClick={handleExportCSV}
-                  disabled={filteredSurveys.length === 0}
-                  className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg transition disabled:opacity-50"
-                >
-                  <Download size={13} /> 설문 CSV 추출
-                </button>
 
                 <button
                   onClick={loadSurveys}
                   disabled={loadingSurveys}
-                  className="p-1.5 text-slate-500 hover:bg-slate-50 rounded-lg border border-slate-200 transition"
+                  className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
                   title="새로고침"
                 >
-                  <RefreshCw size={13} className={loadingSurveys ? "animate-spin" : ""} />
+                  <RefreshCw size={14} className={loadingSurveys ? "animate-spin" : ""} />
+                </button>
+
+                <button
+                  onClick={handleExportCSV}
+                  disabled={filteredSurveys.length === 0}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition disabled:opacity-50"
+                >
+                  <Download size={14} /> 엑셀용 CSV 다운로드
                 </button>
               </div>
             </div>
 
             {loadingSurveys ? (
-              <div className="py-12 text-center text-slate-500 text-xs">
+              <div className="py-16 text-center text-slate-500 text-xs">
                 <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
                 설문 응답을 불러오는 중...
               </div>
             ) : filteredSurveys.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 text-xs space-y-1">
-                <p className="font-bold text-slate-700 text-sm">아직 접수된 설문 응답이 없습니다.</p>
-                <p>체험 링크(/demo)에서 사용자가 발음 연습 후 설문을 제출하면 이곳에 실시간 표시됩니다.</p>
+              <div className="py-16 text-center text-slate-400 text-xs">
+                아직 제출된 설문 응답이 없습니다.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100 max-h-[650px] overflow-y-auto pr-1">
+              <div className="divide-y divide-slate-100">
                 {filteredSurveys.map((sur) => (
                   <div key={sur.id} className="py-4 space-y-2.5">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black px-2 py-0.5 bg-slate-100 rounded-md text-slate-800">
                           {LANG_LABEL_MAP[sur.language] || sur.language}
                         </span>
 
+                        {/* 학습자 국적 */}
                         {sur.nationality && (
-                          <span className="text-xs font-black bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <span className="text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-md flex items-center gap-1">
                             <Globe size={11} /> {sur.nationality}
                           </span>
                         )}
 
+                        {/* 목표 급수 */}
                         {sur.targetLevel && (
-                          <span className="text-xs font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md">
-                            급수: {sur.targetLevel}
+                          <span className="text-xs font-bold px-2 py-0.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-md flex items-center gap-1">
+                            <BookOpen size={11} /> {sur.targetLevel}
                           </span>
                         )}
 
+                        {/* 학습 기간 */}
                         {sur.studyPeriod && (
-                          <span className="text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <span className="text-xs font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md flex items-center gap-1">
                             <Clock size={11} /> {sur.studyPeriod}
                           </span>
                         )}
+
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {formatDateTime(sur.createdAtMs)}
+                        </span>
                       </div>
 
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
-                        <Calendar size={11} /> {formatDateTime(sur.createdAtMs)}
+                      {/* 기기 ID */}
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        기기: {sur.deviceId.slice(0, 14)}...
                       </span>
                     </div>
 
-                    {/* 취약 분야 태그 */}
-                    {Array.isArray(sur.weaknesses) && sur.weaknesses.length > 0 && (
-                      <div className="flex items-center gap-1 flex-wrap text-xs">
-                        <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
-                          ⚠️ 약점:
+                    {/* 취약 영역 태그 */}
+                    {sur.weaknesses && sur.weaknesses.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                        <span className="text-slate-500 font-bold flex items-center gap-1">
+                          <Layers size={11} /> 본인 취약점:
                         </span>
-                        {sur.weaknesses.map((w, wIdx) => (
-                          <span
-                            key={wIdx}
-                            className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md text-[11px]"
-                          >
+                        {sur.weaknesses.map((w) => (
+                          <span key={w} className="px-2 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-md font-bold">
                             {w}
                           </span>
                         ))}
                       </div>
                     )}
 
-                    {/* 4대 평가 점수 뱃지 */}
-                    <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
-                        <span className="text-[10px] text-slate-500 block">Q1 사용성</span>
-                        <span className="font-black text-indigo-600">{sur.satisfaction}점</span>
+                    {/* 평점 배지 그리드 */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="bg-slate-50 p-2 rounded-xl">
+                        <span className="text-slate-500 text-[10px] block">사용 편의성</span>
+                        <strong className="text-slate-800 font-black">{sur.satisfaction} / 5</strong>
                       </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
-                        <span className="text-[10px] text-slate-500 block">Q2 피드백</span>
-                        <span className="font-black text-blue-600">{sur.feedbackClarity}점</span>
+                      <div className="bg-slate-50 p-2 rounded-xl">
+                        <span className="text-slate-500 text-[10px] block">피드백 도움도</span>
+                        <strong className="text-slate-800 font-black">{sur.feedbackClarity} / 5</strong>
                       </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
-                        <span className="text-[10px] text-slate-500 block">Q3 AI음성</span>
-                        <span className="font-black text-emerald-600">{sur.ttsQuality}점</span>
+                      <div className="bg-slate-50 p-2 rounded-xl">
+                        <span className="text-slate-500 text-[10px] block">AI 음성 퀄리티</span>
+                        <strong className="text-slate-800 font-black">{sur.ttsQuality} / 5</strong>
                       </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
-                        <span className="text-[10px] text-slate-500 block">Q4 재이용</span>
-                        <span className="font-black text-amber-600">{sur.revisitIntent}점</span>
+                      <div className="bg-slate-50 p-2 rounded-xl">
+                        <span className="text-slate-500 text-[10px] block">재이용 의향</span>
+                        <strong className="text-slate-800 font-black">{sur.revisitIntent} / 5</strong>
                       </div>
                     </div>
 
@@ -864,7 +1206,225 @@ export default function DemoSurveySection({ idToken }: Props) {
         </div>
       )}
 
-      {/* ── 문장 추가/수정 모달 ── */}
+      {/* ── 모달 1: 새 테스트 반 개설 모달 ── */}
+      {showCreateTestClassModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <FlaskConical size={18} className="text-amber-600" />
+                새 테스트 전용 반 개설하기
+              </h3>
+              <button
+                onClick={() => setShowCreateTestClassModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTestClass} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">테스트 반 이름 *</label>
+                <input
+                  type="text"
+                  value={newTestClassName}
+                  onChange={(e) => setNewTestClassName(e.target.value)}
+                  placeholder="예: 2026 1학기 발음 종합 테스트"
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">소속 기관 / 학교</label>
+                <input
+                  type="text"
+                  value={newTestClassInstitution}
+                  onChange={(e) => setNewTestClassInstitution(e.target.value)}
+                  placeholder="예: 소리튜터 본원, 동국대학교"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">테스트 커리큘럼 문장 선택 *</label>
+                <select
+                  value={newTestClassLevelOption}
+                  onChange={(e) => setNewTestClassLevelOption(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  {TEST_COLLECTION_OPTIONS.map((opt, idx) => (
+                    <option key={opt.collection} value={idx}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  💡 &apos;테스트 전용 문장&apos;을 선택하면 본 탭의 문장 관리에서 등록한 1~6급 문장이 바로 출제됩니다.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">담당 선생님 배정</label>
+                <select
+                  value={newTestClassTeacherEmail}
+                  onChange={(e) => setNewTestClassTeacherEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  <option value="">선생님 미지정 (관리자 직접 관리)</option>
+                  {teachers.map((t) => (
+                    <option key={t.email} value={t.email}>
+                      {t.name} ({t.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">메모 (선택)</label>
+                <input
+                  type="text"
+                  value={newTestClassMemo}
+                  onChange={(e) => setNewTestClassMemo(e.target.value)}
+                  placeholder="예: 발음 진단평가용"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateTestClassModal(false)}
+                  className="px-3 py-2 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingTestClass}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl transition shadow disabled:opacity-50"
+                >
+                  {creatingTestClass ? "생성 중..." : "테스트 반 개설"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 모달 2: 테스트 반 소속 학생 관리 모달 ── */}
+      {selectedTestClassForStudents && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-black text-slate-900 text-base">
+                  {selectedTestClassForStudents.name} 소속 학생 명단
+                </h3>
+                <p className="text-xs text-slate-500">
+                  초대 코드: <strong className="font-mono text-indigo-600">{selectedTestClassForStudents.inviteCode}</strong> · 소속 학생 {testClassStudents.length}명
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedTestClassForStudents(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 학생 수동 추가 폼 */}
+            <form onSubmit={handleAddTestStudentToClass} className="flex gap-1.5 flex-wrap p-3 bg-slate-50 rounded-2xl border border-slate-200">
+              <input
+                type="email"
+                required
+                value={addTestStudentEmail}
+                onChange={(e) => setAddTestStudentEmail(e.target.value)}
+                placeholder="학생 이메일 (구글)"
+                className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none"
+              />
+              <input
+                type="text"
+                value={addTestStudentName}
+                onChange={(e) => setAddTestStudentName(e.target.value)}
+                placeholder="이름"
+                className="w-24 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none"
+              />
+              <input
+                type="text"
+                value={addTestStudentId}
+                onChange={(e) => setAddTestStudentId(e.target.value)}
+                placeholder="학번/식별자"
+                className="w-24 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={addingTestStudent}
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition disabled:opacity-50"
+              >
+                {addingTestStudent ? <Loader2 size={12} className="animate-spin" /> : "추가"}
+              </button>
+            </form>
+
+            {/* 학생 목록 테이블 */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              {loadingTestStudents ? (
+                <div className="py-12 text-center text-slate-700 text-xs">
+                  <Loader2 size={20} className="animate-spin mx-auto mb-2 text-indigo-600" />
+                  소속 학생을 불러오는 중...
+                </div>
+              ) : testClassStudents.length === 0 ? (
+                <div className="py-10 text-center text-slate-500 text-xs">
+                  아직 이 테스트 반에 등록된 학생이 없습니다. 가입 링크/QR을 공유하거나 위에서 수동으로 등록하세요.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 text-xs">
+                  {testClassStudents.map((s) => (
+                    <div key={s.email} className="py-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900">{s.name}</span>
+                          {s.studentId && (
+                            <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono">
+                              {s.studentId}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 font-mono">{s.email}</p>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-right">
+                        <div>
+                          <p className="text-slate-500 text-[10px]">연습 {s.totalCount}회</p>
+                          <p className="font-bold text-indigo-600">{s.totalCount > 0 ? `${s.avgScore}점` : "-"}</p>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveTestStudentFromClass(s.email)}
+                          className="text-slate-400 hover:text-red-600 p-1 rounded transition"
+                          title="반에서 제외"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 모달 3: 테스트 반 초대 QR 코드 모달 ── */}
+      {selectedTestClassForQR && (
+        <TestClassQrModal
+          classData={selectedTestClassForQR}
+          onClose={() => setSelectedTestClassForQR(null)}
+        />
+      )}
+
+      {/* ── 모달 4: 문장 추가/수정 모달 ── */}
       {showSentenceModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
@@ -975,25 +1535,216 @@ export default function DemoSurveySection({ idToken }: Props) {
         </div>
       )}
 
-      {/* 대형 데모 QR 모달 */}
+      {/* ── 모달 5: 무설치 무료 체험(/demo) QR 모달 ── */}
       {showDemoQrModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
-            <h3 className="font-black text-slate-900 text-base">무설치 무료 체험(/demo) QR 코드</h3>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-black text-slate-900 text-base">무설치 무료 체험(/demo) QR</h3>
+              <button onClick={() => setShowDemoQrModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 inline-block shadow-inner">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={demoQrImgUrl} alt="데모 QR" className="w-52 h-52 mx-auto rounded-xl bg-white" />
             </div>
             <p className="text-xs font-mono text-slate-500 break-all">{demoUrl}</p>
-            <button
-              onClick={() => setShowDemoQrModal(false)}
-              className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold"
-            >
-              닫기
-            </button>
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                onClick={handleCopyLink}
+                className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition"
+              >
+                {copiedLink ? "복사됨!" : "링크 복사"}
+              </button>
+              <button
+                onClick={() => setShowDemoQrModal(false)}
+                className="py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 테스트 반 전용 QR 코드 모달 컴포넌트 ──────────────
+function TestClassQrModal({
+  classData,
+  onClose,
+}: {
+  classData: ClassData;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const inviteUrl = `${origin}/join?code=${classData.inviteCode}`;
+  const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(
+    inviteUrl
+  )}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(qrImgUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `소리튜터_${classData.name}_테스트QR.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return alert("팝업이 차단되었습니다. 팝업 허용 후 다시 시도해 주세요.");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${classData.name} - 테스트 초대 QR 코드</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              padding: 40px;
+              box-sizing: border-box;
+              text-align: center;
+            }
+            .card {
+              border: 3px solid #f59e0b;
+              border-radius: 24px;
+              padding: 36px 48px;
+              max-width: 440px;
+              box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            }
+            .badge {
+              display: inline-block;
+              background: #fef3c7;
+              color: #92400e;
+              border: 1px solid #fcd34d;
+              font-weight: 900;
+              font-size: 13px;
+              padding: 4px 12px;
+              border-radius: 999px;
+              margin-bottom: 12px;
+            }
+            h1 { font-size: 24px; margin: 0 0 8px 0; color: #0f172a; }
+            p { font-size: 14px; color: #64748b; margin: 4px 0 20px 0; }
+            img { width: 220px; height: 220px; border-radius: 16px; margin: 12px 0; }
+            .code-box {
+              background: #f8fafc;
+              border: 2px dashed #cbd5e1;
+              border-radius: 12px;
+              padding: 12px;
+              margin-top: 16px;
+            }
+            .code { font-family: monospace; font-size: 26px; font-weight: 900; color: #4338ca; letter-spacing: 4px; }
+            .url { font-size: 11px; color: #94a3b8; word-break: break-all; margin-top: 8px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="badge">🧪 발음 테스트 전용 반</div>
+            <h1>${classData.name}</h1>
+            <p>${classData.institution || "소리튜터"} · 담당: ${classData.teacherName || "선생님"}</p>
+            <img src="${qrImgUrl}" alt="QR Code" />
+            <div class="code-box">
+              <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">초대 코드</div>
+              <div class="code">${classData.inviteCode}</div>
+              <div class="url">${inviteUrl}</div>
+            </div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="text-left">
+            <span className="text-[10px] font-black bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md">
+              🧪 테스트 반 QR
+            </span>
+            <h3 className="font-black text-slate-900 text-base mt-1">{classData.name}</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-4 bg-slate-50 rounded-2xl border-2 border-amber-300 inline-block shadow-inner">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={qrImgUrl} alt="테스트 반 QR" className="w-52 h-52 mx-auto rounded-xl bg-white" />
+        </div>
+
+        <div className="space-y-1">
+          <p className="text-xs text-slate-500">초대 코드</p>
+          <p className="font-mono font-black text-2xl text-indigo-600 tracking-wider">
+            {classData.inviteCode}
+          </p>
+          <p className="text-[11px] font-mono text-slate-400 break-all">{inviteUrl}</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 pt-2">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1"
+          >
+            {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+            <span>{copied ? "복사됨" : "복사"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            <Download size={12} />
+            <span>{downloading ? "저장 중" : "저장"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-1 shadow-xs"
+          >
+            <Printer size={12} />
+            <span>인쇄</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

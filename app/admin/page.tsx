@@ -1481,7 +1481,7 @@ export default function AdminPage() {
   if (!isAdmin) return <div className="flex h-screen items-center justify-center text-red-500 font-bold">관리자 권한이 없습니다.</div>;
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: "classes",  label: "🏫 반·선생님 관리" },
+    { id: "classes",  label: "🏫 정규 반·선생님 관리" },
     { id: "surveys",  label: "🧪 테스트·체험 관리" },
     { id: "generate", label: "✨ AI 생성" },
     { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },

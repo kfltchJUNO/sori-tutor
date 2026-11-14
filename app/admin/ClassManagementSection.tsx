@@ -33,9 +33,6 @@ export default function ClassManagementSection({ idToken }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 필터 상태
-  const [classFilter, setClassFilter] = useState<"all" | "regular" | "test">("all");
-
   // 모달 상태
   const [showCreateClassModal, setShowCreateClassModal] = useState(false);
   const [showCreateTeacherModal, setShowCreateTeacherModal] = useState(false);
@@ -50,7 +47,6 @@ export default function ClassManagementSection({ idToken }: Props) {
   const [newClassLevelOption, setNewClassLevelOption] = useState(0);
   const [newClassTeacherEmail, setNewClassTeacherEmail] = useState("");
   const [newClassMemo, setNewClassMemo] = useState("");
-  const [newClassIsTest, setNewClassIsTest] = useState(false);
   const [creatingClass, setCreatingClass] = useState(false);
 
   // 신규 선생님 폼
@@ -121,7 +117,7 @@ export default function ClassManagementSection({ idToken }: Props) {
             teacherEmail: newClassTeacherEmail,
             teacherName: selectedTeacher?.name || "선생님 미지정",
             memo: newClassMemo.trim(),
-            isTest: newClassIsTest,
+            isTest: false,
           }),
         },
         idToken
@@ -133,7 +129,6 @@ export default function ClassManagementSection({ idToken }: Props) {
       setShowCreateClassModal(false);
       setNewClassName("");
       setNewClassMemo("");
-      setNewClassIsTest(false);
       loadData();
     } catch (e: any) {
       alert("오류: " + e.message);
@@ -368,38 +363,13 @@ export default function ClassManagementSection({ idToken }: Props) {
       {activeSubTab === "classes" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-black text-slate-900 text-base">개설된 반 목록</h3>
-              {/* 테스트/정규 필터 탭 */}
-              <div className="flex items-center gap-1 text-xs font-bold bg-slate-100 p-1 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setClassFilter("all")}
-                  className={`px-2.5 py-1 rounded-lg transition ${
-                    classFilter === "all" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  전체 ({classes.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClassFilter("regular")}
-                  className={`px-2.5 py-1 rounded-lg transition ${
-                    classFilter === "regular" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  정규 수업 ({classes.filter(c => !c.isTest).length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClassFilter("test")}
-                  className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
-                    classFilter === "test" ? "bg-amber-500 text-white shadow-xs" : "text-amber-800 hover:bg-amber-100"
-                  }`}
-                >
-                  <FlaskConical size={11} /> 테스트 반 ({classes.filter(c => c.isTest).length})
-                </button>
-              </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">
+                개설된 정규 반 목록 ({classes.filter(c => !c.isTest).length})
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                학교·학원 수업에 등록된 정규 수업 반입니다. (테스트/체험 반은 &apos;🧪 테스트·체험 관리&apos; 탭에서 관리)
+              </p>
             </div>
 
             <button
@@ -415,39 +385,26 @@ export default function ClassManagementSection({ idToken }: Props) {
               <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
               반 목록을 불러오는 중...
             </div>
-          ) : classes.length === 0 ? (
+          ) : classes.filter(c => !c.isTest).length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-700 text-xs space-y-2">
               <School size={36} className="mx-auto text-slate-700" />
-              <p className="font-bold text-slate-700 text-sm">아직 개설된 반이 없습니다.</p>
+              <p className="font-bold text-slate-700 text-sm">아직 개설된 정규 반이 없습니다.</p>
               <p>우측 상단의 &apos;새 반 개설하기&apos;를 눌러 급수와 선생님을 배정해 보세요.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {classes
-                .filter(cls => {
-                  if (classFilter === "test") return Boolean(cls.isTest);
-                  if (classFilter === "regular") return !cls.isTest;
-                  return true;
-                })
+                .filter(cls => !cls.isTest)
                 .map((cls) => (
                 <div
                   key={cls.id}
-                  className={`bg-white rounded-2xl border p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4 ${
-                    cls.isTest ? "border-amber-300 bg-amber-50/20" : "border-slate-200/90"
-                  }`}
+                  className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4"
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[11px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md">
-                          {cls.level}
-                        </span>
-                        {cls.isTest && (
-                          <span className="text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                            <FlaskConical size={10} /> 테스트용
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-[11px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md">
+                        {cls.level}
+                      </span>
                       <span className="text-xs text-slate-700 font-medium">{cls.institution}</span>
                     </div>
                     <h4 className="font-black text-slate-900 text-base">{cls.name}</h4>
@@ -663,19 +620,15 @@ export default function ClassManagementSection({ idToken }: Props) {
                 />
               </div>
 
-              {/* 테스트 반 설정 체크박스 */}
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl">
-                  <input
-                    type="checkbox"
-                    checked={newClassIsTest}
-                    onChange={(e) => setNewClassIsTest(e.target.checked)}
-                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
-                  />
-                  <span className="font-bold text-amber-950 text-xs flex items-center gap-1">
-                    <FlaskConical size={13} className="text-amber-600" /> 🧪 테스트/체험용 반으로 설정 (정규 수업과 분리)
-                  </span>
-                </label>
+              {/* 테스트 반 안내 */}
+              <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-slate-700 text-xs flex items-start gap-2">
+                <span className="text-indigo-600 font-bold">💡</span>
+                <div>
+                  <p className="font-bold text-indigo-950">테스트·체험용 반 개설 안내</p>
+                  <p className="text-[11px] text-indigo-800 mt-0.5">
+                    학생 체험용 및 발음 테스트 전용 반은 상단 <strong>&apos;🧪 테스트·체험 관리&apos;</strong> 탭에서 별도로 개설 및 관리하실 수 있습니다.
+                  </p>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
