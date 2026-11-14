@@ -3,19 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { adminDb } from "@/lib/firebaseAdmin";
-
-export interface DemoSurveyData {
-  id: string;
-  deviceId: string;
-  language: string;
-  satisfaction: number;
-  feedbackClarity: number;
-  ttsQuality: number;
-  revisitIntent: number;
-  comment: string;
-  targetLevel?: string;
-  createdAtMs: number;
-}
+import { DemoSurveyData } from "@/lib/demoData";
+export type { DemoSurveyData };
 
 // 1. 관리자 전용: 설문 응답 목록 및 통계 조회
 export async function GET(req: NextRequest) {
@@ -37,6 +26,9 @@ export async function GET(req: NextRequest) {
         revisitIntent: Number(d.revisitIntent) || 5,
         comment: d.comment || "",
         targetLevel: d.targetLevel || "미지정",
+        nationality: d.nationality || "",
+        studyPeriod: d.studyPeriod || "",
+        weaknesses: Array.isArray(d.weaknesses) ? d.weaknesses : [],
         createdAtMs: d.createdAt?.toMillis?.() ?? (d.createdAt?._seconds ? d.createdAt._seconds * 1000 : Date.now()),
       };
     });
@@ -75,6 +67,9 @@ export async function POST(req: NextRequest) {
     const revisitIntent = Math.min(5, Math.max(1, Number(body.revisitIntent) || 5));
     const comment = (body.comment || "").trim();
     const targetLevel = (body.targetLevel || "").trim();
+    const nationality = (body.nationality || "").trim();
+    const studyPeriod = (body.studyPeriod || "").trim();
+    const weaknesses = Array.isArray(body.weaknesses) ? body.weaknesses.map((w: any) => String(w).trim()).filter(Boolean) : [];
 
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
@@ -88,6 +83,9 @@ export async function POST(req: NextRequest) {
       revisitIntent,
       comment,
       targetLevel,
+      nationality,
+      studyPeriod,
+      weaknesses,
       createdAt: new Date(),
     });
 

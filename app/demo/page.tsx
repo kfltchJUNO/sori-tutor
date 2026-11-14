@@ -1,78 +1,37 @@
 "use client";
 // app/demo/page.tsx
-// 로그인 없는 무설치 원클릭 한국어 발음 훈련 체험 페이지 (기기당 하루 5회 제한 & 5개 국어 지원)
+// 로그인 없는 무설치 원클릭 한국어 발음 훈련 체험 페이지 (기기당 하루 5회 제한 & 6개 국어 지원 & 어드민 동적 문장 연동)
 
 import { useState, useEffect, useRef } from "react";
 import {
-  Volume2, Mic, Square, Sparkles, AlertCircle, RefreshCw,
+  Volume2, VolumeX, Mic, Square, Sparkles, AlertCircle, RefreshCw,
   CheckCircle2, Languages, Loader2, MessageSquare, ChevronRight,
-  Award, Headphones, Info, X, Star
+  Award, Headphones, Info, X, Star, Globe, Clock, BookOpen, Layers
 } from "lucide-react";
 import {
   SupportedLang, SUPPORTED_LANGS, DEMO_TEXTS, SURVEY_TEXTS
 } from "@/lib/demoI18n";
-
-interface DemoSentence {
-  id: string;
-  level: "1급" | "2급" | "3급";
-  text: string;
-  pronunciation: string;
-  ruleExplanation: string;
-}
-
-const DEMO_SENTENCES: DemoSentence[] = [
-  // 1급 (기초)
-  {
-    id: "s-1-1",
-    level: "1급",
-    text: "학교에 가요.",
-    pronunciation: "[학꾜에 가요]",
-    ruleExplanation: "학[ㄱ] + 교[ㄱ] = [꾜] (된소리되기/경음화) 및 부드러운 평서문 하강조 억양",
-  },
-  {
-    id: "s-1-2",
-    level: "1급",
-    text: "작년에 한국에 왔어요.",
-    pronunciation: "[장년에 한구게 와써요]",
-    ruleExplanation: "작[ㄱ] + 년[ㄴ] = [ㅇ] (비음화: 장년) / 한국[ㄱ] + 에 = [한구게] (이어 읽기: 연음)",
-  },
-  // 2급 (중초급)
-  {
-    id: "s-2-1",
-    level: "2급",
-    text: "한국 음식이 매워요?",
-    pronunciation: "[한구금시기 매워요?]",
-    ruleExplanation: "한국[ㄱ] + 음[ㅇ] = [한구금] (연음) / 끝 음절을 자연스럽게 살짝 올리는 의문문 상승조",
-  },
-  {
-    id: "s-2-2",
-    level: "2급",
-    text: "한국말을 잘하고 싶어요.",
-    pronunciation: "[한국마를 자라고 시퍼요]",
-    ruleExplanation: "말[ㄹ] + 을 = [마를] (연음) / 잘[ㄹ] + 하고 = [자라고] / 싶[ㅂ] + 어요 = [시퍼요]",
-  },
-  // 3급 (중급)
-  {
-    id: "s-3-1",
-    level: "3급",
-    text: "국물이 아주 뜨거우니까 조심하세요.",
-    pronunciation: "[궁무리 아주 뜨거우니까 조심하세요]",
-    ruleExplanation: "국[ㄱ] + 물[ㅁ] = [궁물] (닮은소리: 비음화) / [궁물] + 이 = [궁무리] (연음)",
-  },
-  {
-    id: "s-3-2",
-    level: "3급",
-    text: "국립중앙박물관에 가요.",
-    pronunciation: "[궁닙쯩앙방물과네 가요]",
-    ruleExplanation: "국[ㄱ] + 립[ㄹ] = [궁닙] (비음화) / 박[ㄱ] + 물[ㅁ] = [방물] / 관[ㄴ] + 에 = [과네]",
-  },
-];
+import {
+  DemoSentenceDoc, INITIAL_DEMO_SENTENCES
+} from "@/lib/demoData";
+import {
+  playScoreFeedback, getSoundFeedbackMode, setSoundFeedbackMode, SoundFeedbackMode
+} from "@/lib/scoreSound";
 
 export default function DemoPage() {
   const [lang, setLang] = useState<SupportedLang>("ko");
   const [deviceId, setDeviceId] = useState<string>("");
-  const [selectedLevel, setSelectedLevel] = useState<"1급" | "2급" | "3급">("1급");
+  const [selectedLevel, setSelectedLevel] = useState<string>("1급");
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
+
+  // 동적 문장 목록
+  const [sentences, setSentences] = useState<DemoSentenceDoc[]>(
+    INITIAL_DEMO_SENTENCES.map((s, idx) => ({ id: `init-${idx}`, ...s }))
+  );
+  const [loadingSentences, setLoadingSentences] = useState(true);
+
+  // 사운드 피드백 모드 (음성+효과음 vs 효과음만)
+  const [soundMode, setSoundMode] = useState<SoundFeedbackMode>("sfx_only");
 
   // 횟수 제한 상태
   const [remainingTrials, setRemainingTrials] = useState<number | null>(null);
@@ -96,11 +55,12 @@ export default function DemoPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<any>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const t = DEMO_TEXTS[lang];
   const sT = SURVEY_TEXTS[lang];
 
-  // 1. 기기 UUID 초기화 및 로컬 설정 불러오기
+  // 1. 기기 UUID 초기화, 로컬 설정 불러오기 및 동적 문장 조회
   useEffect(() => {
     let devId = localStorage.getItem("sori_demo_device_id");
     if (!devId) {
@@ -114,9 +74,27 @@ export default function DemoPage() {
       setLang(savedLang);
     }
 
-    // 서버 잔여 횟수 조회
+    setSoundMode(getSoundFeedbackMode());
+
+    // 서버 잔여 횟수 조회 & 동적 문장 조회
     fetchLimit(devId);
+    fetchSentences();
   }, []);
+
+  const fetchSentences = async () => {
+    setLoadingSentences(true);
+    try {
+      const res = await fetch("/api/demo/sentences");
+      const data = await res.json();
+      if (Array.isArray(data.sentences) && data.sentences.length > 0) {
+        setSentences(data.sentences);
+      }
+    } catch (e) {
+      console.warn("데모 문장 조회 실패, 기본 목록 유지:", e);
+    } finally {
+      setLoadingSentences(false);
+    }
+  };
 
   const fetchLimit = async (devId: string) => {
     setLoadingLimit(true);
@@ -139,11 +117,45 @@ export default function DemoPage() {
     localStorage.setItem("sori_demo_lang", newLang);
   };
 
-  const filteredSentences = DEMO_SENTENCES.filter((s) => s.level === selectedLevel);
-  const currentSentence = filteredSentences[currentSentenceIndex] || filteredSentences[0];
+  const toggleSoundMode = () => {
+    const nextMode: SoundFeedbackMode = soundMode === "sfx_only" ? "voice_and_sfx" : "sfx_only";
+    setSoundMode(nextMode);
+    setSoundFeedbackMode(nextMode);
+  };
 
-  // 2. TTS 원어민 발음 듣기 (Web Speech API 브라우저 무제한 TTS)
+  // 현재 급수 목록 추출
+  const availableLevels = Array.from(new Set(sentences.map((s) => s.level)));
+  const currentLevels = availableLevels.length > 0 ? availableLevels : ["1급", "2급", "3급"];
+
+  const filteredSentences = sentences.filter((s) => s.level === selectedLevel);
+  const currentSentence = filteredSentences[currentSentenceIndex] || filteredSentences[0] || sentences[0];
+
+  // 2. TTS / 원어민 발음 듣기 (ElevenLabs 오디오 우선 → Web Speech API 자동 폴백)
   const handlePlayNativeAudio = () => {
+    if (currentSentence?.audio_path) {
+      try {
+        if (audioPlayerRef.current) {
+          audioPlayerRef.current.pause();
+        }
+        const audio = new Audio(currentSentence.audio_path);
+        audioPlayerRef.current = audio;
+        setIsPlayingTTS(true);
+        audio.onended = () => setIsPlayingTTS(false);
+        audio.onerror = () => {
+          setIsPlayingTTS(false);
+          fallbackWebSpeech();
+        };
+        audio.play().catch(() => fallbackWebSpeech());
+        return;
+      } catch {
+        fallbackWebSpeech();
+        return;
+      }
+    }
+    fallbackWebSpeech();
+  };
+
+  const fallbackWebSpeech = () => {
     if (!("speechSynthesis" in window)) {
       alert("이 브라우저는 음성 합성을 지원하지 않습니다.");
       return;
@@ -152,7 +164,7 @@ export default function DemoPage() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(currentSentence.text);
     utterance.lang = "ko-KR";
-    utterance.rate = 0.88; // 학습자 친화적 차분한 속도
+    utterance.rate = 0.88; // 학습자 친화적 속도
 
     utterance.onstart = () => setIsPlayingTTS(true);
     utterance.onend = () => setIsPlayingTTS(false);
@@ -248,6 +260,11 @@ export default function DemoPage() {
       }
 
       setAnalysisResult(data);
+
+      // ── 효과음 / 멘트 재생 (효과음 모드 반영) ──
+      const isSilence = !data.recognized || data.recognized === "(침묵)" || data.recognized === "(잡음)";
+      playScoreFeedback(data.score, isSilence, null, 1.0, soundMode === "sfx_only").catch(() => {});
+
       if (data.demoRateLimit) {
         setRemainingTrials(data.demoRateLimit.remaining);
       }
@@ -277,24 +294,49 @@ export default function DemoPage() {
             </div>
             <div>
               <h1 className="font-black text-sm text-slate-900 leading-tight">소리튜터 (Sori-Tutor)</h1>
-              <p className="text-[10px] text-slate-700 font-medium">Free AI Pronunciation Trial</p>
+              <p className="text-[10px] text-slate-500 font-medium">Free AI Pronunciation Trial</p>
             </div>
           </div>
 
-          {/* 6개 국어 전환 툴바 */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
-            <Languages size={14} className="text-slate-700 ml-1 mr-0.5" />
-            <select
-              value={lang}
-              onChange={(e) => handleLangChange(e.target.value as SupportedLang)}
-              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-1"
+          <div className="flex items-center gap-1.5">
+            {/* 효과음 모드 토글 (목소리 부담 없는 모드 vs 음성 멘트) */}
+            <button
+              onClick={toggleSoundMode}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                soundMode === "sfx_only"
+                  ? "bg-amber-50 text-amber-900 border-amber-300"
+                  : "bg-indigo-50 text-indigo-900 border-indigo-200"
+              }`}
+              title={soundMode === "sfx_only" ? "현재: 효과음만 재생 (목소리 없음)" : "현재: 음성 멘트+효과음"}
             >
-              {SUPPORTED_LANGS.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.flag} {item.label}
-                </option>
-              ))}
-            </select>
+              {soundMode === "sfx_only" ? (
+                <>
+                  <VolumeX size={13} className="text-amber-600" />
+                  <span>🔔 효과음만</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 size={13} className="text-indigo-600" />
+                  <span>🔊 멘트+효과음</span>
+                </>
+              )}
+            </button>
+
+            {/* 6개 국어 전환 툴바 */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+              <Languages size={14} className="text-slate-500 ml-1 mr-0.5" />
+              <select
+                value={lang}
+                onChange={(e) => handleLangChange(e.target.value as SupportedLang)}
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-1"
+              >
+                {SUPPORTED_LANGS.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.flag} {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </header>
@@ -315,7 +357,7 @@ export default function DemoPage() {
             </span>
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t.title}</h2>
-          <p className="text-xs text-slate-700 max-w-md mx-auto">{t.subTitle}</p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">{t.subTitle}</p>
         </div>
 
         {/* 에러 또는 한도 초과 안내 */}
@@ -336,229 +378,254 @@ export default function DemoPage() {
           </div>
         )}
 
-        {/* 3. 급수 선택 탭 (1급 / 2급 / 3급) */}
-        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+        {/* 3. 급수 선택 탭 (동적 문장 레벨) */}
+        <div className="bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
           <div className="flex items-center justify-between px-2 pt-1 text-xs">
             <span className="font-bold text-slate-700">{t.selectLevel}</span>
-            <span className="text-[11px] text-indigo-600 font-medium">문장 2개 중 선택 가능</span>
+            <span className="text-[11px] text-indigo-600 font-medium">
+              해당 급수 문장 {filteredSentences.length}개 제공
+            </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-200/60 text-xs font-black">
-            <button
-              onClick={() => {
-                setSelectedLevel("1급");
-                setCurrentSentenceIndex(0);
-                setAnalysisResult(null);
-              }}
-              className={`py-2 rounded-lg transition ${
-                selectedLevel === "1급"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-700 hover:text-slate-900"
-              }`}
-            >
-              {t.level1}
-            </button>
-            <button
-              onClick={() => {
-                setSelectedLevel("2급");
-                setCurrentSentenceIndex(0);
-                setAnalysisResult(null);
-              }}
-              className={`py-2 rounded-lg transition ${
-                selectedLevel === "2급"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-700 hover:text-slate-900"
-              }`}
-            >
-              {t.level2}
-            </button>
-            <button
-              onClick={() => {
-                setSelectedLevel("3급");
-                setCurrentSentenceIndex(0);
-                setAnalysisResult(null);
-              }}
-              className={`py-2 rounded-lg transition ${
-                selectedLevel === "3급"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-700 hover:text-slate-900"
-              }`}
-            >
-              {t.level3}
-            </button>
-          </div>
-
-          {/* 문장 스위처 (1/2번 문장) */}
-          <div className="flex gap-2 pt-1 px-1">
-            {filteredSentences.map((s, idx) => (
+          <div className="flex gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-200/60 text-xs font-black overflow-x-auto">
+            {currentLevels.map((lvl) => (
               <button
-                key={s.id}
+                key={lvl}
                 onClick={() => {
-                  setCurrentSentenceIndex(idx);
+                  setSelectedLevel(lvl);
+                  setCurrentSentenceIndex(0);
                   setAnalysisResult(null);
                 }}
-                className={`flex-1 py-1.5 text-xs rounded-lg font-bold border transition truncate ${
-                  currentSentenceIndex === idx
-                    ? "bg-indigo-50 border-indigo-300 text-indigo-800"
-                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                className={`flex-1 min-w-[70px] py-2 rounded-lg transition ${
+                  selectedLevel === lvl
+                    ? "bg-white text-indigo-700 shadow-xs border border-indigo-200"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                문장 {idx + 1}: {s.text}
+                {lvl}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* 4. 목표 문장 카드 */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-indigo-200/80 shadow-md space-y-4 text-center">
-          <div className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold">
-            {t.targetSentence}
-          </div>
-
-          <div className="space-y-1">
-            <h3 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-              {currentSentence.text}
-            </h3>
-            <p className="text-sm font-bold text-indigo-600 font-mono">
-              {t.standardPron}: {currentSentence.pronunciation}
-            </p>
-          </div>
-
-          <p className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-            💡 <strong>핵심 발음 포인트:</strong> {currentSentence.ruleExplanation}
-          </p>
-
-          {/* 원어민 발음 듣기 버튼 */}
-          <div className="pt-2 flex justify-center">
-            <button
-              onClick={handlePlayNativeAudio}
-              disabled={isPlayingTTS}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-xs transition border border-indigo-200 shadow-xs"
-            >
-              <Volume2 size={16} className={isPlayingTTS ? "animate-bounce text-indigo-600" : ""} />
-              <span>{isPlayingTTS ? t.playing : t.listenNative}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 5. 마이크 녹음 버튼 영역 */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm text-center space-y-4">
-          <div className="flex flex-col items-center justify-center">
-            <button
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={analyzing || (remainingTrials !== null && remainingTrials <= 0 && !isRecording)}
-              className={`w-20 h-20 rounded-full flex items-center justify-center text-white transition-all transform active:scale-95 shadow-lg ${
-                isRecording
-                  ? "bg-red-500 hover:bg-red-600 animate-pulse ring-8 ring-red-100"
-                  : "bg-indigo-600 hover:bg-indigo-700 ring-8 ring-indigo-50"
-              } disabled:opacity-50`}
-            >
-              {isRecording ? <Square size={28} /> : <Mic size={32} />}
-            </button>
-
-            <p className="text-xs font-bold text-slate-700 mt-3">
-              {isRecording ? `${t.recordingBtn} (${recordingSeconds}초)` : t.recordBtn}
-            </p>
-          </div>
-
-          {analyzing && (
-            <div className="py-4 text-center space-y-2 text-indigo-600 text-xs font-bold animate-in fade-in">
-              <Loader2 size={24} className="animate-spin mx-auto text-indigo-600" />
-              <p>{t.analyzing}</p>
+          {/* 문장 선택 번호 탭 */}
+          {filteredSentences.length > 1 && (
+            <div className="flex items-center justify-center gap-1.5 pt-1">
+              {filteredSentences.map((s, idx) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    setCurrentSentenceIndex(idx);
+                    setAnalysisResult(null);
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition ${
+                    currentSentenceIndex === idx
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  문장 {idx + 1}
+                </button>
+              ))}
             </div>
           )}
         </div>
 
-        {/* 6. 발음 분석 결과 카드 */}
+        {/* 4. 목표 문장 카드 & 원어민 듣기 */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2.5 py-0.5 rounded-full">
+              {selectedLevel} · {t.targetSentence}
+            </span>
+            <button
+              onClick={handlePlayNativeAudio}
+              disabled={isPlayingTTS}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-full transition disabled:opacity-50"
+            >
+              <Volume2 size={14} className={isPlayingTTS ? "animate-bounce text-indigo-600" : ""} />
+              <span>{isPlayingTTS ? t.playing : t.listenNative}</span>
+            </button>
+          </div>
+
+          {/* 한글 문장 & 표준 발음 */}
+          <div className="space-y-1.5 text-center py-2">
+            <h3 className="text-2xl sm:text-3xl font-black text-slate-900 leading-snug">
+              {currentSentence?.text || "학교에 가요."}
+            </h3>
+            <p className="text-sm sm:text-base font-bold text-indigo-600 font-mono">
+              {currentSentence?.pronunciation || "[학꾜에 가요]"}
+            </p>
+          </div>
+
+          {/* 음운 규칙 / 억양 안내 */}
+          {currentSentence?.ruleExplanation && (
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs text-slate-600 flex items-start gap-2">
+              <Info size={15} className="text-indigo-500 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">{currentSentence.ruleExplanation}</p>
+            </div>
+          )}
+        </div>
+
+        {/* 5. 녹음 버튼 섹션 */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm text-center space-y-4">
+          <div className="flex flex-col items-center justify-center">
+            {isRecording ? (
+              <button
+                onClick={stopRecording}
+                className="w-20 h-20 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex flex-col items-center justify-center shadow-lg shadow-rose-200 transition transform active:scale-95 animate-pulse"
+              >
+                <Square size={26} className="fill-white" />
+                <span className="text-[10px] font-bold mt-1">{recordingSeconds}s</span>
+              </button>
+            ) : (
+              <button
+                onClick={startRecording}
+                disabled={analyzing || (remainingTrials !== null && remainingTrials <= 0)}
+                className="w-20 h-20 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 transition transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
+              >
+                {analyzing ? <Loader2 size={32} className="animate-spin" /> : <Mic size={32} />}
+              </button>
+            )}
+          </div>
+
+          <div>
+            <p className="font-black text-sm text-slate-800">
+              {isRecording ? t.recordingBtn : analyzing ? t.analyzing : t.recordBtn}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              마이크 버튼을 누르고 한국어로 소리 내어 말해보세요.
+            </p>
+          </div>
+        </div>
+
+        {/* 6. AI 발음 분석 결과 카드 */}
         {analysisResult && (
-          <div className="bg-white rounded-3xl p-6 border-2 border-emerald-200 shadow-lg space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Award size={20} className="text-emerald-600" />
-                <h4 className="font-black text-slate-900 text-base">{t.scoreLabel}</h4>
+          <div className="bg-white rounded-3xl p-6 border-2 border-indigo-500/80 shadow-md space-y-5 animate-in slide-in-from-bottom-3 duration-500">
+            {/* 총점 & 점수대 배지 */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="space-y-1">
+                <span className="text-xs font-bold text-slate-500">{t.scoreLabel}</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-black text-indigo-600">
+                    {analysisResult.score ?? 0}
+                  </span>
+                  <span className="text-sm font-bold text-slate-400">/ 100{t.points}</span>
+                </div>
               </div>
+
               <div className="text-right">
-                <span className="text-3xl font-black text-emerald-600">{analysisResult.overallScore ?? analysisResult.score}</span>
-                <span className="text-xs text-slate-700 font-bold ml-1">{t.points}</span>
+                <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full font-black text-xs">
+                  {analysisResult.score >= 90
+                    ? "🎺 완벽 (Perfect)"
+                    : analysisResult.score >= 75
+                    ? "✨ 우수 (Great)"
+                    : analysisResult.score >= 55
+                    ? "👍 양호 (Good)"
+                    : analysisResult.score >= 30
+                    ? "🔔 보통 (Okay)"
+                    : "😅 재도전 (Try Again)"}
+                </span>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {soundMode === "sfx_only" ? "🔔 효과음만 적용 중" : "🔊 음성 멘트 적용 중"}
+                </p>
               </div>
             </div>
 
-            {/* 실제 들린 발음 */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs space-y-1">
-              <span className="text-slate-700 font-medium">AI가 실제로 들은 발화 (들린 그대로):</span>
-              <p className="font-bold text-slate-900 text-sm font-mono">
-                &ldquo;{analysisResult.recognized || "(침묵)"}&rdquo;
-              </p>
-            </div>
-
-            {/* 4대 세부 영역 점수 */}
-            {analysisResult.categoryScores && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <p className="text-[10px] text-slate-700 font-bold">{t.catConsonant}</p>
-                  <p className="text-base font-black text-slate-900 mt-0.5">
-                    {analysisResult.categoryScores.consonant}점
-                  </p>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <p className="text-[10px] text-slate-700 font-bold">{t.catVowel}</p>
-                  <p className="text-base font-black text-slate-900 mt-0.5">
-                    {analysisResult.categoryScores.vowel}점
-                  </p>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <p className="text-[10px] text-slate-700 font-bold">{t.catRule}</p>
-                  <p className="text-base font-black text-slate-900 mt-0.5">
-                    {analysisResult.categoryScores.rule}점
-                  </p>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <p className="text-[10px] text-slate-700 font-bold">{t.catIntonation}</p>
-                  <p className="text-base font-black text-slate-900 mt-0.5">
-                    {analysisResult.categoryScores.intonation}점
-                  </p>
+            {/* 음절별 시각화 피드백 */}
+            {Array.isArray(analysisResult.syllableResults) && analysisResult.syllableResults.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-700">음절별 발음 정확도</span>
+                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200/80 justify-center">
+                  {analysisResult.syllableResults.map((syl: any, idx: number) => {
+                    const isMatch = syl.status === "match";
+                    const isSimilar = syl.status === "similar";
+                    return (
+                      <div
+                        key={idx}
+                        className={`px-3 py-2 rounded-xl text-center min-w-[48px] border transition ${
+                          isMatch
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-black"
+                            : isSimilar
+                            ? "bg-amber-50 text-amber-800 border-amber-300 font-bold"
+                            : "bg-rose-50 text-rose-800 border-rose-300 font-bold"
+                        }`}
+                      >
+                        <span className="text-base block">{syl.char}</span>
+                        <span className="text-[9px] block opacity-75">
+                          {isMatch ? "정확" : isSimilar ? "유사" : "틀림"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* 교정 피드백 팁 */}
-            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2">
-              <h5 className="font-black text-emerald-900 text-xs flex items-center gap-1.5">
-                <Sparkles size={14} className="text-emerald-600" /> {t.feedbackTitle}
-              </h5>
-              <p className="text-xs text-slate-800 leading-relaxed font-medium">
-                {analysisResult.summary || analysisResult.explanation || "전반적으로 자연스럽게 발음하셨습니다!"}
-              </p>
-
-              {analysisResult.errors && analysisResult.errors.length > 0 && (
-                <div className="space-y-1.5 pt-2 border-t border-emerald-200/60">
-                  {analysisResult.errors.map((err: any) => (
-                    <div key={err.id || err.tag} className="text-xs bg-white p-2 rounded-lg border border-emerald-200 space-y-1">
-                      <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
-                        {err.tag || err.subCategory}
-                      </span>
-                      <p className="text-slate-800 font-medium">{err.tip}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {/* 4대 세부 지표 (자음, 모음, 규칙, 억양) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                <span className="text-slate-500 block text-[10px]">{t.catConsonant}</span>
+                <span className="font-black text-slate-800 text-sm">
+                  {analysisResult.consonantScore ?? "-"}점
+                </span>
+              </div>
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                <span className="text-slate-500 block text-[10px]">{t.catVowel}</span>
+                <span className="font-black text-slate-800 text-sm">
+                  {analysisResult.vowelScore ?? "-"}점
+                </span>
+              </div>
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                <span className="text-slate-500 block text-[10px]">{t.catRule}</span>
+                <span className="font-black text-slate-800 text-sm">
+                  {analysisResult.ruleScore ?? "-"}점
+                </span>
+              </div>
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                <span className="text-slate-500 block text-[10px]">{t.catIntonation}</span>
+                <span className="font-black text-slate-800 text-sm">
+                  {analysisResult.pitchScore ?? "-"}점
+                </span>
+              </div>
             </div>
 
-            {/* 설문 유도 배너 */}
-            <div className="pt-2 flex items-center justify-between text-xs bg-indigo-50/80 p-3 rounded-2xl border border-indigo-200">
-              <span className="font-bold text-indigo-900">{t.surveyBannerTitle}</span>
-              <button
-                onClick={() => setShowSurveyModal(true)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition text-xs shrink-0"
-              >
-                {t.surveyBannerBtn}
-              </button>
-            </div>
+            {/* 구체적 교정 팁 */}
+            {analysisResult.explanation && (
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl text-xs space-y-1">
+                <h4 className="font-black text-indigo-950 flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-indigo-600" />
+                  {t.feedbackTitle}
+                </h4>
+                <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                  {analysisResult.explanation}
+                </p>
+                {analysisResult.advice && (
+                  <p className="text-indigo-800 font-bold pt-1">
+                    💡 {analysisResult.advice}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
+
+        {/* 하단 1분 설문 유도 배너 */}
+        <div className="p-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-3xl shadow-sm flex items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <h4 className="font-black text-xs sm:text-sm">{t.surveyBannerTitle}</h4>
+            <p className="text-[10px] text-slate-300">
+              학습자 맞춤형 기능을 위해 국적 및 약점 설문에 참여해 주세요.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowSurveyModal(true)}
+            className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition text-xs shrink-0 cursor-pointer shadow"
+          >
+            {t.surveyBannerBtn}
+          </button>
+        </div>
       </main>
 
-      {/* 7. 1분 만족도 설문조사 모달 (5개 국어 지원) */}
+      {/* 7. 1분 만족도 설문조사 모달 (국적, 급수, 학습기간, 약점 조사 추가) */}
       {showSurveyModal && (
         <DemoSurveyModal
           lang={lang}
@@ -575,7 +642,7 @@ export default function DemoPage() {
 function DemoSurveyModal({
   lang,
   deviceId,
-  targetLevel,
+  targetLevel: initialTargetLevel,
   onClose,
 }: {
   lang: SupportedLang;
@@ -585,6 +652,14 @@ function DemoSurveyModal({
 }) {
   const sT = SURVEY_TEXTS[lang];
 
+  // 신규 인구통계 및 학습 배경 필드
+  const [nationality, setNationality] = useState("VN");
+  const [customNationality, setCustomNationality] = useState("");
+  const [targetLevel, setTargetLevel] = useState(initialTargetLevel || "1급");
+  const [studyPeriod, setStudyPeriod] = useState("m1to3");
+  const [weaknesses, setWeaknesses] = useState<string[]>(["speaking", "pronunciation"]);
+
+  // 4대 만족도 및 주관식
   const [q1Score, setQ1Score] = useState(5);
   const [q2Score, setQ2Score] = useState(5);
   const [q3Score, setQ3Score] = useState(5);
@@ -593,22 +668,35 @@ function DemoSurveyModal({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  const toggleWeakness = (key: string) => {
+    setWeaknesses((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const finalNationality = nationality === "OTHER" && customNationality.trim()
+        ? customNationality.trim()
+        : sT.nationalityOptions?.[nationality] || nationality;
+
       await fetch("/api/demo/survey", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deviceId,
           language: lang,
+          nationality: finalNationality,
+          targetLevel,
+          studyPeriod: sT.studyPeriodOptions?.[studyPeriod] || studyPeriod,
+          weaknesses: weaknesses.map((w) => sT.weaknessOptions?.[w] || w),
           satisfaction: q1Score,
           feedbackClarity: q2Score,
           ttsQuality: q3Score,
           revisitIntent: q4Score,
           comment: q5Comment.trim(),
-          targetLevel,
         }),
       });
       setSubmitted(true);
@@ -640,7 +728,7 @@ function DemoSurveyModal({
             }`}
           >
             <span>{num}점</span>
-            <span className="text-[10px] opacity-75">
+            <span className="text-[9px] opacity-75">
               {num === 5 ? "최고" : num === 1 ? "미흡" : ""}
             </span>
           </button>
@@ -651,13 +739,13 @@ function DemoSurveyModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
         <div className="flex items-start justify-between border-b border-slate-100 pb-3">
           <div>
             <h3 className="font-black text-slate-900 text-base">{sT.modalTitle}</h3>
-            <p className="text-xs text-slate-700 mt-0.5">{sT.modalDesc}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{sT.modalDesc}</p>
           </div>
-          <button onClick={onClose} className="text-slate-700 hover:text-slate-700">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={20} />
           </button>
         </div>
@@ -666,7 +754,7 @@ function DemoSurveyModal({
           <div className="py-8 text-center space-y-3">
             <CheckCircle2 size={42} className="text-emerald-600 mx-auto" />
             <h4 className="text-base font-black text-slate-900">{sT.thankYouTitle}</h4>
-            <p className="text-xs text-slate-700">{sT.thankYouDesc}</p>
+            <p className="text-xs text-slate-500">{sT.thankYouDesc}</p>
             <button
               onClick={onClose}
               className="mt-4 px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
@@ -676,16 +764,132 @@ function DemoSurveyModal({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pr-1 space-y-4">
-            {renderRatingGroup(sT.q1, q1Score, setQ1Score)}
-            {renderRatingGroup(sT.q2, q2Score, setQ2Score)}
-            {renderRatingGroup(sT.q3, q3Score, setQ3Score)}
-            {renderRatingGroup(sT.q4, q4Score, setQ4Score)}
 
-            {/* 주관식 */}
+            {/* A. 국적 선택 */}
+            <div className="space-y-1.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+              <label className="block text-xs font-black text-slate-900 flex items-center gap-1">
+                <Globe size={13} className="text-indigo-600" />
+                {sT.nationalityTitle}
+              </label>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
+                {Object.keys(sT.nationalityOptions || {}).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setNationality(key)}
+                    className={`py-1.5 px-2 rounded-xl text-xs font-bold border transition truncate text-center ${
+                      nationality === key
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    {sT.nationalityOptions[key]}
+                  </button>
+                ))}
+              </div>
+              {nationality === "OTHER" && (
+                <input
+                  type="text"
+                  value={customNationality}
+                  onChange={(e) => setCustomNationality(e.target.value)}
+                  placeholder="국적을 직접 입력하세요 (e.g. Philippines)"
+                  className="mt-2 w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              )}
+            </div>
+
+            {/* B. 급수 및 학습 기간 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 급수 */}
+              <div className="space-y-1.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <label className="block text-xs font-black text-slate-900 flex items-center gap-1">
+                  <BookOpen size={13} className="text-indigo-600" />
+                  {sT.levelTitle}
+                </label>
+                <div className="grid grid-cols-3 gap-1 pt-1">
+                  {["1급", "2급", "3급", "4급", "5급", "6급"].map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setTargetLevel(lvl)}
+                      className={`py-1.5 text-xs font-bold rounded-xl border transition ${
+                        targetLevel === lvl
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 학습 기간 */}
+              <div className="space-y-1.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <label className="block text-xs font-black text-slate-900 flex items-center gap-1">
+                  <Clock size={13} className="text-indigo-600" />
+                  {sT.studyPeriodTitle}
+                </label>
+                <div className="grid grid-cols-2 gap-1 pt-1">
+                  {Object.keys(sT.studyPeriodOptions || {}).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setStudyPeriod(key)}
+                      className={`py-1.5 px-1.5 rounded-xl text-[11px] font-bold border transition truncate text-center ${
+                        studyPeriod === key
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {sT.studyPeriodOptions[key]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* C. 내가 생각하는 약점 (복수 선택) */}
+            <div className="space-y-1.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+              <label className="block text-xs font-black text-slate-900 flex items-center gap-1">
+                <Layers size={13} className="text-amber-600" />
+                {sT.weaknessTitle}
+              </label>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {Object.keys(sT.weaknessOptions || {}).map((key) => {
+                  const isChecked = weaknesses.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleWeakness(key)}
+                      className={`py-1.5 px-3 rounded-full text-xs font-bold border transition flex items-center gap-1 ${
+                        isChecked
+                          ? "bg-amber-400 text-slate-950 border-amber-400 shadow-xs font-black"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {isChecked && "✓ "}
+                      {sT.weaknessOptions[key]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* D. 4대 만족도 평가 */}
+            <div className="space-y-3 pt-1">
+              {renderRatingGroup(sT.q1, q1Score, setQ1Score)}
+              {renderRatingGroup(sT.q2, q2Score, setQ2Score)}
+              {renderRatingGroup(sT.q3, q3Score, setQ3Score)}
+              {renderRatingGroup(sT.q4, q4Score, setQ4Score)}
+            </div>
+
+            {/* E. 주관식 의견 */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-800">{sT.q5}</label>
               <textarea
-                rows={3}
+                rows={2}
                 value={q5Comment}
                 onChange={(e) => setQ5Comment(e.target.value)}
                 placeholder={sT.q5Placeholder}
@@ -704,7 +908,7 @@ function DemoSurveyModal({
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : sT.submitBtn}
               </button>

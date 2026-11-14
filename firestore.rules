@@ -90,6 +90,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── 데모/체험 전용 문장 컬렉션 ──
+    match /sori_demo_sentences/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── 관리자 CMS 및 초안 컬렉션 ──
     match /sori_drafts/{draftId} {
       allow read, write: if isAdmin();
