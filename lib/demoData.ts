@@ -22,6 +22,7 @@ export interface DemoSurveyData {
   feedbackClarity: number;
   ttsQuality: number;
   revisitIntent: number;
+  translationQuality?: number;
   comment: string;
   isKorean?: boolean;
   targetLevel?: string;

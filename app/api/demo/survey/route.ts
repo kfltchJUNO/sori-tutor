@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
         feedbackClarity: Number(d.feedbackClarity) || 5,
         ttsQuality: Number(d.ttsQuality) || 5,
         revisitIntent: Number(d.revisitIntent) || 5,
+        translationQuality: Number(d.translationQuality) || 0,
         comment: d.comment || "",
         isKorean,
         targetLevel: d.targetLevel || "미지정",
@@ -48,6 +49,10 @@ export async function GET(req: NextRequest) {
     const avgClarity = totalCount > 0 ? (surveys.reduce((a, s) => a + s.feedbackClarity, 0) / totalCount).toFixed(1) : "0.0";
     const avgTts = totalCount > 0 ? (surveys.reduce((a, s) => a + s.ttsQuality, 0) / totalCount).toFixed(1) : "0.0";
     const avgRevisit = totalCount > 0 ? (surveys.reduce((a, s) => a + s.revisitIntent, 0) / totalCount).toFixed(1) : "0.0";
+    const scoredTranslations = surveys.filter(s => s.translationQuality && s.translationQuality > 0);
+    const avgTranslationQuality = scoredTranslations.length > 0
+      ? (scoredTranslations.reduce((a, s) => a + (s.translationQuality || 0), 0) / scoredTranslations.length).toFixed(1)
+      : "0.0";
 
     const koreanTesterCount = surveys.filter(s => s.isKorean).length;
 
@@ -68,6 +73,7 @@ export async function GET(req: NextRequest) {
         avgClarity,
         avgTts,
         avgRevisit,
+        avgTranslationQuality,
         errorReportCount: errorReports.length,
         errorTypeCounts,
       },
@@ -88,6 +94,7 @@ export async function POST(req: NextRequest) {
     const feedbackClarity = Math.min(5, Math.max(1, Number(body.feedbackClarity) || 5));
     const ttsQuality = Math.min(5, Math.max(1, Number(body.ttsQuality) || 5));
     const revisitIntent = Math.min(5, Math.max(1, Number(body.revisitIntent) || 5));
+    const translationQuality = Math.min(5, Math.max(0, Number(body.translationQuality) || 0));
     const comment = (body.comment || "").trim();
     const isKorean = Boolean(
       body.isKorean ||
@@ -122,6 +129,7 @@ export async function POST(req: NextRequest) {
           feedbackClarity,
           ttsQuality,
           revisitIntent,
+          translationQuality,
           comment,
           isKorean,
           targetLevel,
@@ -145,6 +153,7 @@ export async function POST(req: NextRequest) {
       feedbackClarity,
       ttsQuality,
       revisitIntent,
+      translationQuality,
       comment,
       isKorean,
       targetLevel,

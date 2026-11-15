@@ -261,7 +261,8 @@ interface EvaluationMetrics {
 function evaluatePronunciation(
   recognized: string,
   targetText: string,
-  targetPronunciationHint?: string
+  targetPronunciationHint?: string,
+  isChoppySpeech: boolean = false
 ): EvaluationMetrics {
   const rChars = Array.from(recognized.replace(/[^가-힣]/g, ""));
   const tOrigChars = Array.from(targetText.replace(/[^가-힣]/g, ""));
@@ -289,15 +290,22 @@ function evaluatePronunciation(
     };
   }
 
-  // 목표 i번째 음절과 인식된 j번째 음절의 최대 유사도 (표기 / 표준발음 / DB발음가이드 중 최대)
+  // 목표 i번째 음절과 인식된 j번째 음절의 최대 유사도 (표준발음 / DB발음가이드 기준)
   const pairSim = (tIdx: number, rIdx: number): { sim: number; refChar: string } => {
     const rc = rChars[rIdx];
-    const candidates = [tOrigChars[tIdx]];
-    if (tStdChars[tIdx]) candidates.push(tStdChars[tIdx]);
-    if (tHintChars.length === n && tHintChars[tIdx]) candidates.push(tHintChars[tIdx]);
+    const origCh = tOrigChars[tIdx];
+    const stdCh = tHintChars.length === n && tHintChars[tIdx] ? tHintChars[tIdx] : (tStdChars[tIdx] ?? origCh);
+    const hasPhonologicalRule = stdCh !== origCh;
+
+    // 음운 규칙(연음, 비음화 등)이 적용되어 표준 발음이 표기와 다른 음절은,
+    // 글자 그대로(origCh) 읽으면 음운 규칙 미적용 오류! 따라서 표기(origCh)는 후보에서 제외하고 표준 발음(stdCh)만 비교.
+    const candidates = hasPhonologicalRule ? [stdCh] : [origCh];
+    if (tHintChars.length === n && tHintChars[tIdx] && !candidates.includes(tHintChars[tIdx])) {
+      candidates.push(tHintChars[tIdx]);
+    }
 
     let bestSim = -1;
-    let bestRef = tOrigChars[tIdx];
+    let bestRef = candidates[0];
     for (const cand of candidates) {
       const s = singleSyllableSimilarity(rc, cand);
       if (s > bestSim) {
@@ -489,6 +497,12 @@ function evaluatePronunciation(
     hardCeiling = Math.min(hardCeiling, 68);
   }
 
+  // 로봇식 끊어읽기(음절별 끊어읽기) 감지 시 점수 48점 이하로 엄격 캡
+  if (isChoppySpeech) {
+    hardCeiling = Math.min(hardCeiling, 48);
+    errorSummary.unshift("음절마다 뚝뚝 끊어 읽음 (부자연스러운 로봇식 발화)");
+  }
+
   algoScore = Math.max(0, Math.min(algoScore, hardCeiling));
 
   return {
@@ -506,24 +520,51 @@ function evaluatePronunciation(
 }
 
 // ══════════════════════════════════════════════════════════════
-// 연음(liaison) 실패 감지 (오디오 길이 기반 보조 지표)
+// 발화 스타일(로봇식 끊어읽기, 연음 실패) 감지
 // ══════════════════════════════════════════════════════════════
-function detectLiaisonFailure(
+interface SpeechStyleDetection {
+  isChoppy: boolean;
+  liaisonFail: boolean;
+  penalty: number;
+  reasons: string[];
+}
+
+function detectSpeechStyle(
+  recognized: string,
   targetText: string,
   audioSizeBytes: number
-): { suspected: boolean; penalty: number } {
+): SpeechStyleDetection {
+  const cleanTarget = targetText.replace(/[^가-힣]/g, "");
+  const sylCount = Array.from(cleanTarget).length;
+  const bytesPerSyl = sylCount > 0 ? audioSizeBytes / sylCount : 0;
+
+  // 1. 단어 분절 패턴 (STT 결과에서 한 글자씩 뚝뚝 띄어쓰기된 경우)
+  const words = recognized.trim().split(/\s+/).filter(Boolean);
+  const singleCharWords = words.filter(w => w.replace(/[^가-힣]/g, "").length === 1).length;
+  const isChoppySpaced = words.length >= 3 && (singleCharWords / words.length) >= 0.5;
+
+  // 2. 비정상적으로 긴 발화 시간 (음절당 바이트 수가 6,800 초과 - 일반 발화는 3,000~5,000)
+  const isAbnormallySlow = sylCount >= 4 && bytesPerSyl > 6800;
+
+  const isChoppy = isChoppySpaced || isAbnormallySlow;
+
+  // 3. 연음(liaison) 실패 감지
   const liaisonPattern = /[가-힣][이에아오우의외위애에]/g;
   const liaisonCount = (targetText.match(liaisonPattern) ?? []).length;
+  const liaisonFail = (isChoppy || bytesPerSyl > 7200) && liaisonCount > 0;
 
-  if (liaisonCount === 0) return { suspected: false, penalty: 0 };
+  const reasons: string[] = [];
+  let penalty = 0;
 
-  const syllableCount = (targetText.match(/[가-힣]/g) ?? []).length;
-  const bytesPerSyllable = syllableCount > 0 ? audioSizeBytes / syllableCount : 0;
+  if (isChoppy) {
+    penalty += 20;
+    reasons.push("음절마다 뚝뚝 끊어 읽음 (부자연스러운 로봇식 발화)");
+  } else if (liaisonFail) {
+    penalty += 12;
+    reasons.push("단어/음절 사이 끊어짐 (연음 미흡)");
+  }
 
-  const suspected = bytesPerSyllable > 7500 && liaisonCount > 0;
-  const penalty   = suspected ? 12 : 0;
-
-  return { suspected, penalty };
+  return { isChoppy, liaisonFail, penalty, reasons };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -662,9 +703,13 @@ async function runScoring(
   metrics: EvaluationMetrics,
   audioMimeType: string = "audio/webm",
   lang: string = "ko",
+  speechStyle?: SpeechStyleDetection,
 ): Promise<ScoringResult> {
-  const minAllowed = Math.max(15, metrics.algoScore - 6);
-  const maxAllowed = Math.min(Math.max(35, metrics.algoScore + 6), metrics.hardCeiling, 92);
+  const isChoppy = Boolean(speechStyle?.isChoppy);
+  const minAllowed = isChoppy ? 20 : Math.max(15, metrics.algoScore - 6);
+  const maxAllowed = isChoppy
+    ? Math.min(48, metrics.hardCeiling)
+    : Math.min(Math.max(35, metrics.algoScore + 6), metrics.hardCeiling, 92);
 
   const errorListText = metrics.errorSummary.length > 0
     ? metrics.errorSummary.join(", ")
@@ -692,7 +737,18 @@ async function runScoring(
 - 감지된 음절 오류 요약: ${errorListText}
 - 알고리즘 기준 점수: ${metrics.algoScore}점
 - 상황 맥락: ${context || "대학 한국어 발음 훈련"}
-
+${
+  isChoppy ? `
+════════════════════════════════════════════════════════════════
+### [🚨 엄격 감점 지침: 부자연스러운 로봇식 음절 단위 끊어읽기 감지]
+학습자가 한 글자씩 뚝뚝 끊어서 책을 읽듯이 부자연스럽게 발화했습니다 (로봇식 발화).
+1. overallScore는 절대로 50점을 넘지 못하며, 30~48점 사이로 엄격하게 부여하세요.
+2. categoryScores.intonation(억양 및 운율) 점수는 20~38점으로 대폭 감점하세요.
+3. categoryScores.rule(음운 변동) 점수는 25~45점으로 감점하세요.
+4. errors에 category: "억양 및 운율", subCategory: "끊어읽기(휴지)", tag: "[어색한 휴지]" 항목을 반드시 포함하여,
+   tip: "글자를 한 음절씩 뚝뚝 끊어서 로봇처럼 읽지 마시고, 단어와 문장을 한 호흡으로 부드럽게 이어서 읽어 보세요."를 제공하세요.
+` : ""
+}
 ════════════════════════════════════════════════════════════════
 ### [가장 중요한 채점 대원칙 - 들은 그대로 정밀 평가]
 1. 들은 그대로의 발화 인정 (절대 침묵으로 오판 금지):
@@ -820,7 +876,7 @@ ${translationPromptBlock}
   const parsedScore = data.overallScore ?? data.score;
   const rawScore = typeof parsedScore === "number" ? parsedScore : metrics.algoScore;
   const clampedOverall = Math.max(
-    15,
+    minAllowed,
     Math.min(maxAllowed, rawScore, metrics.hardCeiling)
   );
 
@@ -832,8 +888,8 @@ ${translationPromptBlock}
   const catScores: CategoryScores = {
     consonant: clamp(data.categoryScores?.consonant, 100),
     vowel: clamp(data.categoryScores?.vowel, 100),
-    rule: clamp(data.categoryScores?.rule, 100),
-    intonation: clamp(data.categoryScores?.intonation, 100),
+    rule: isChoppy ? Math.min(45, clamp(data.categoryScores?.rule, 100)) : clamp(data.categoryScores?.rule, 100),
+    intonation: isChoppy ? Math.min(38, clamp(data.categoryScores?.intonation, 100)) : clamp(data.categoryScores?.intonation, 100),
   };
 
   const cleanErrors: PronunciationErrorItem[] = Array.isArray(data.errors)
@@ -963,23 +1019,22 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // ── 음절 정밀 정렬 및 알고리즘 평가 ────────────────────
-    const metrics = evaluatePronunciation(r, targetText, targetPronunciation);
-    console.log(
-      `📊 정밀분석: 유사도=${Math.round(metrics.weightedSim * 100)}%, 알고리즘점수=${metrics.algoScore}, 상한=${metrics.hardCeiling}, 받침오류=${metrics.codaErrors}, 모음오류=${metrics.vowelErrors}, 불일치=${metrics.mismatches}, 누락=${metrics.omittedCount}`
-    );
+    // ── 발화 스타일 및 로봇식 끊어읽기/연음 감지 ──────────────
+    const speechStyle = detectSpeechStyle(r, targetText, audioFile.size);
 
-    // ── 연음 실패 감지 ──────────────────────────────────────────
-    const { suspected: liaisonFail, penalty: liaisonPenalty } =
-      detectLiaisonFailure(targetText, audioFile.size);
+    // ── 음절 정밀 정렬 및 알고리즘 평가 ────────────────────
+    const metrics = evaluatePronunciation(r, targetText, targetPronunciation, speechStyle.isChoppy);
+    console.log(
+      `📊 정밀분석: 유사도=${Math.round(metrics.weightedSim * 100)}%, 알고리즘점수=${metrics.algoScore}, 상한=${metrics.hardCeiling}, 받침오류=${metrics.codaErrors}, 모음오류=${metrics.vowelErrors}, 끊어읽기=${speechStyle.isChoppy}`
+    );
 
     // ── 2단계: AI 멀티모달 오디오 청취 + 음운/억양/휴지 정밀 평가 ──
     let scored: ScoringResult;
     try {
-      scored = await runScoring(base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics, audioMimeType, lang);
+      scored = await runScoring(base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics, audioMimeType, lang, speechStyle);
     } catch (e) {
       console.error("채점 실패:", e);
-      const fallback = Math.max(15, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
+      const fallback = Math.max(15, Math.min(metrics.algoScore - speechStyle.penalty, speechStyle.isChoppy ? 48 : metrics.hardCeiling));
       return NextResponse.json({
         score: fallback,
         overallScore: fallback,
@@ -1021,12 +1076,15 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // ── 최종 점수 보정 ──────────────────────────────────────────
-    let finalScore = scored.score - liaisonPenalty;
-    finalScore = Math.max(0, Math.min(finalScore, metrics.hardCeiling, 92));
+    let finalScore = scored.score - speechStyle.penalty;
+    const finalHardCeiling = speechStyle.isChoppy ? Math.min(metrics.hardCeiling, 48) : metrics.hardCeiling;
+    finalScore = Math.max(0, Math.min(finalScore, finalHardCeiling, 92));
     finalScore = Math.round(finalScore);
 
     let finalExplanation = scored.explanation;
-    if (liaisonFail && !finalExplanation.includes("이어")) {
+    if (speechStyle.isChoppy && !finalExplanation.includes("끊어")) {
+      finalExplanation += " 한 글자씩 뚝뚝 끊어서 읽지 마시고, 한 호흡으로 자연스럽게 이어서 읽는 연습을 해보세요.";
+    } else if (speechStyle.liaisonFail && !finalExplanation.includes("이어")) {
       finalExplanation += " 또한 글자와 글자 사이를 끊지 말고 부드럽게 이어서 읽어보세요.";
     }
 

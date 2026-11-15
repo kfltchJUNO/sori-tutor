@@ -92,6 +92,7 @@ export default function DemoSurveySection({ idToken }: Props) {
     avgClarity: "0.0",
     avgTts: "0.0",
     avgRevisit: "0.0",
+    avgTranslationQuality: "0.0",
     errorReportCount: 0,
     errorTypeCounts: {},
   });
@@ -613,7 +614,7 @@ export default function DemoSurveySection({ idToken }: Props) {
     const headers = [
       "제출일시", "구분(한국인테스터/외국인)", "언어", "학습자국적", "목표/현재급수", "학습기간", "자신이생각하는약점",
       "이상결과/오류경험여부", "오류유형목록", "오류상세설명",
-      "Q1_사용편의성(1~5)", "Q2_피드백도움(1~5)", "Q3_AI음성만족(1~5)", "Q4_재이용의향(1~5)",
+      "Q1_사용편의성(1~5)", "Q2_피드백도움(1~5)", "Q3_AI음성만족(1~5)", "Q4_재이용의향(1~5)", "Q5_모국어번역품질(1~5, 0=해당없음)",
       "주관식학생의견", "기기식별ID"
     ];
 
@@ -632,6 +633,7 @@ export default function DemoSurveySection({ idToken }: Props) {
       s.feedbackClarity,
       s.ttsQuality,
       s.revisitIntent,
+      s.translationQuality || 0,
       `"${(s.comment || "").replace(/"/g, '""').replace(/\n/g, " ")}"`,
       `"${s.deviceId}"`,
     ]);
@@ -1158,6 +1160,14 @@ export default function DemoSurveySection({ idToken }: Props) {
               <p className="text-2xl font-black text-purple-700 mt-1">{stats.avgSatisfaction || "5.0"}★</p>
               <p className="text-[11px] text-slate-400 mt-0.5">5.0 만점 기준</p>
             </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
+                <Languages size={13} className="text-indigo-600" /> 번역 만족도
+              </span>
+              <p className="text-2xl font-black text-indigo-700 mt-1">{stats.avgTranslationQuality || "5.0"}★</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">외국인 평가 (5.0 만점)</p>
+            </div>
           </div>
 
           {/* ⚠️ AI 채점 이상 결과 및 오류 보고 분석 카드 */}
@@ -1467,8 +1477,8 @@ export default function DemoSurveySection({ idToken }: Props) {
                       </div>
                     )}
 
-                    {/* 평점 배지 그리드 */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    {/* 평점 배지 그리드 (5개 항목) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                       <div className="bg-slate-50 p-2 rounded-xl">
                         <span className="text-slate-500 text-[10px] block">사용 편의성</span>
                         <strong className="text-slate-800 font-black">{sur.satisfaction} / 5</strong>
@@ -1484,6 +1494,12 @@ export default function DemoSurveySection({ idToken }: Props) {
                       <div className="bg-slate-50 p-2 rounded-xl">
                         <span className="text-slate-500 text-[10px] block">재이용 의향</span>
                         <strong className="text-slate-800 font-black">{sur.revisitIntent} / 5</strong>
+                      </div>
+                      <div className="bg-slate-50 p-2 rounded-xl">
+                        <span className="text-slate-500 text-[10px] block">번역 자연스러움</span>
+                        <strong className="text-slate-800 font-black">
+                          {sur.translationQuality ? `${sur.translationQuality} / 5` : "N/A (한국어)"}
+                        </strong>
                       </div>
                     </div>
 

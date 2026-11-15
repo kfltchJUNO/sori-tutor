@@ -948,11 +948,13 @@ function DemoSurveyModal({
       setNationality("KR");
       setTargetLevel(sT.nativeOption || "원어민 (해당 없음)");
       setStudyPeriod(sT.nativeOption || "원어민 (모국어)");
+      setQTranslationScore(0);
     } else {
       if (nationality === "KR") {
         setNationality("VN");
         setTargetLevel(initialTargetLevel || "1급");
         setStudyPeriod("m1to3");
+        setQTranslationScore(5);
       }
     }
   };
@@ -967,6 +969,7 @@ function DemoSurveyModal({
   const [q2Score, setQ2Score] = useState(5);
   const [q3Score, setQ3Score] = useState(5);
   const [q4Score, setQ4Score] = useState(5);
+  const [qTranslationScore, setQTranslationScore] = useState(5);
   const [q5Comment, setQ5Comment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -1003,6 +1006,7 @@ function DemoSurveyModal({
           feedbackClarity: q2Score,
           ttsQuality: q3Score,
           revisitIntent: q4Score,
+          translationQuality: qTranslationScore,
           comment: q5Comment.trim(),
         }),
       });
@@ -1265,12 +1269,57 @@ function DemoSurveyModal({
               </div>
             </div>
 
-            {/* D. 4대 만족도 평가 */}
+            {/* D. 5대 만족도 평가 (번역 품질 포함) */}
             <div className="space-y-3 pt-1">
               {renderRatingGroup(sT.q1, q1Score, setQ1Score)}
               {renderRatingGroup(sT.q2, q2Score, setQ2Score)}
               {renderRatingGroup(sT.q3, q3Score, setQ3Score)}
               {renderRatingGroup(sT.q4, q4Score, setQ4Score)}
+
+              {/* 신규: 모국어 번역 품질 문항 */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-slate-800">
+                    {sT.qTranslation}
+                  </label>
+                  {qTranslationScore === 0 && (
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full shrink-0">
+                      {sT.translationNa}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-6 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setQTranslationScore(0)}
+                    className={`py-2 text-[11px] font-bold rounded-xl border transition flex flex-col items-center justify-center ${
+                      qTranslationScore === 0
+                        ? "bg-slate-800 text-white border-slate-800 shadow-xs"
+                        : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>N/A</span>
+                    <span className="text-[8px] opacity-80 mt-0.5">해당없음</span>
+                  </button>
+                  {[1, 2, 3, 4, 5].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setQTranslationScore(num)}
+                      className={`py-2 text-xs font-bold rounded-xl border transition flex flex-col items-center justify-center gap-0.5 ${
+                        qTranslationScore === num
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span>{num}점</span>
+                      <span className="text-[9px] opacity-75">
+                        {num === 5 ? "최고" : num === 1 ? "미흡" : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* E. AI 채점 이상 결과 및 오류 보고 문항 */}
