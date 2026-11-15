@@ -387,13 +387,33 @@ Output JSON only (no markdown):
       const history = JSON.parse(historyStr || "[]");
       let userText = (formData.get("userText") as string) || (formData.get("text") as string) || "";
 
-      // STT — 릴레이 모델 및 멀티 키 로테이션으로 음성 인식
+      let userMood: {
+        mood: string;
+        emoji: string;
+        intonation: string;
+        vocalFeedback?: string;
+      } | null = null;
+
+      // STT 및 억양/음성 감정 멀티모달 정밀 분석 (1회 멀티모달 호출로 속도 최적화)
       if (audioFile && audioFile.size > 0) {
         const base64Audio = Buffer.from(await audioFile.arrayBuffer()).toString("base64");
         // application/octet-stream 등 비표준 MIME 방지 (Gemini 400 에러 원천 차단)
         const mimeType = audioFile.type && audioFile.type.startsWith("audio/")
           ? audioFile.type
           : "audio/webm";
+
+        const sttPrompt = `당신은 한국어 발음 및 음성 감정/억양 분석 전문가입니다.
+동봉된 오디오를 듣고 1) 들린 한국어 발화 그대로의 텍스트(STT), 2) 말소리의 억양(높낮이, 종결 억양, 속도, 톤), 3) 목소리 톤과 억양에서 유추되는 사용자의 기분/감정 상태를 정밀 분석하세요.
+사람의 말소리가 전혀 없고 완전한 무음인 경우에만 transcription을 '(침묵)'으로 표기하세요.
+
+반드시 유효한 JSON 객체만 반환하세요:
+{
+  "transcription": "들린 말 그대로의 한국어 텍스트",
+  "mood": "기분/감정 (예: 활기차고 자신감 넘침, 긴장되고 조심스러움, 차분하고 편안함, 지치거나 가라앉음, 기쁘고 반가움 등)",
+  "emoji": "감정에 맞는 이모지 1개 (예: 🌟, 🌿, 💡, ☕, 😊)",
+  "intonation": "억양 특징 요약 (예: 밝고 생동감 있는 상승 억양, 문장 끝을 또렷하게 맺는 당당한 억양, 살짝 긴장된 차분한 톤 등)",
+  "vocalFeedback": "발화 억양 및 목소리 톤에 대한 따뜻한 피드백/격려 한마디"
+}`;
 
         const keys = getGeminiKeyList();
         let sttDone = false;
@@ -402,21 +422,32 @@ Output JSON only (no markdown):
           const currentGenAI = new GoogleGenerativeAI(currentKey);
           for (const modelName of MODEL_CANDIDATES) {
             try {
-              const sttModel = currentGenAI.getGenerativeModel({ model: modelName, safetySettings: SAFETY });
+              const sttModel = currentGenAI.getGenerativeModel({
+                model: modelName,
+                safetySettings: SAFETY,
+                generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+              });
               const sttResult = await sttModel.generateContent([
-                "Transcribe exactly what the user said in Korean. Output only the transcribed text without quotes or explanations. If inaudible or silence, output '(침묵)'.",
+                sttPrompt,
                 { inlineData: { mimeType, data: base64Audio } },
               ]);
-              const recognized = sttResult.response.text().trim();
-              if (recognized) {
-                userText = recognized;
-                console.log(`✅ STT [${modelName}]: "${userText}"`);
+              const rawJson = sttResult.response.text().trim();
+              const parsed = JSON.parse(rawJson);
+              if (parsed.transcription) {
+                userText = parsed.transcription.trim();
+                userMood = {
+                  mood: parsed.mood || "차분하고 편안함",
+                  emoji: parsed.emoji || "🌿",
+                  intonation: parsed.intonation || "자연스러운 일상 억양",
+                  vocalFeedback: parsed.vocalFeedback || "자연스러운 발음이에요!",
+                };
+                console.log(`✅ 음성 분석 [${modelName}]: "${userText}", 기분=${userMood.mood}, 억양=${userMood.intonation}`);
                 sttDone = true;
                 break;
               }
             } catch (e: any) {
               const errMsg = e?.message || String(e);
-              console.warn(`⚠️ STT [${modelName}] 실패:`, errMsg.substring(0, 80));
+              console.warn(`⚠️ 음성 분석 [${modelName}] 실패:`, errMsg.substring(0, 80));
               if (errMsg.includes("429") || errMsg.includes("quota")) break;
             }
           }
@@ -446,6 +477,7 @@ Output JSON only (no markdown):
 5. If the user speech is inaudible or silent, gently ask them in polite Korean to repeat once more.
 6. Always ask exactly ONE polite, engaging follow-up question so the learner can continue practicing honorific Korean.
 7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+${userMood?.mood ? `[Learner Voice & Mood]: The learner voice tone sounds "${userMood.mood}" (Intonation: ${userMood.intonation}). Naturally reflect and warmly acknowledge their mood/tone in your first sentence (e.g. if nervous, gently reassure them; if lively, match their bright energy; if tired, comfort them), focusing on encouraging their spoken Korean practice!` : ""}
 [User Memory]: ${sharedMemory}`
         : `[Role]: You are '${personaName}', a close, warm, and cheerful same-age Korean friend (20대 동갑내기 절친) helping a foreign learner practice casual Korean (반말 연습: 친구와의 일상 대화).
 [Tone]: Friendly, natural modern casual Korean (친근한 현대 20대 반말: '-어/-아', '-야', '-지', '-거든', '-잖아'). NEVER use formal/polite endings ('-요', '-습니다') and NEVER use old-fashioned/middle-aged endings like '~하네'(알겠네, 고맙네), '~하게'(다녀오게, 잘 지내게), '~구먼'.
@@ -457,6 +489,7 @@ Output JSON only (no markdown):
 5. If the user speech is inaudible or silent, playfully ask them in casual banmal to repeat once more.
 6. Always ask exactly ONE fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
 7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
+${userMood?.mood ? `[Learner Voice & Mood]: The learner voice tone sounds "${userMood.mood}" (Intonation: ${userMood.intonation}). Naturally reflect and warmly acknowledge their mood/tone in your first sentence (e.g. if nervous, gently reassure them; if lively, match their bright energy; if tired, comfort them), focusing on encouraging their spoken Korean practice!` : ""}
 [User Memory]: ${sharedMemory}`;
 
       let aiText = "";
@@ -502,6 +535,7 @@ Output JSON only (no markdown):
         audioContent,
         usedModel,
         ended: false,
+        userMood,
       });
     }
 

@@ -142,7 +142,6 @@ export default function Home() {
 
   // ── 회화 ──────────────────────────────
   const [chatStatus, setChatStatus] = useState<"select_persona" | "active" | "ended">("select_persona");
-  const [chatTextInput, setChatTextInput] = useState("");
   const [selectedPersona, setSelectedPersona] = useState("");
   const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [chatFeedback, setChatFeedback] = useState<any>(null);
@@ -663,7 +662,7 @@ export default function Home() {
       const replyAudioSrc = data.audioContent ? `data:${audioMime};base64,${data.audioContent}` : null;
       const newHistory = [
         ...chatHistory,
-        { role: "user", text: data.userText },
+        { role: "user", text: data.userText, userMood: data.userMood },
         { role: "model", text: data.aiText, audio: replyAudioSrc },
       ];
       setChatHistory(newHistory);
@@ -682,59 +681,7 @@ export default function Home() {
     } catch (e) { alert("통신 오류"); } finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
   };
 
-  // ── 회화 텍스트 즉시 전송 (STT 대기 없이 1초대 즉각 응답) ──
-  const handleChatTextSend = async (textToSend?: string) => {
-    const text = (textToSend || chatTextInput).trim();
-    if (!text || loading) return;
-    const currency = userRole === "guest" ? "heart" : "token";
-    if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
-    if (userRole !== "guest" && tokens < 2) return setShowPaymentModal(true);
 
-    setChatTextInput("");
-    setLoading(true);
-    const formData = new FormData();
-    formData.append("action", "chat");
-    formData.append("userText", text);
-    formData.append("history", JSON.stringify(chatHistory));
-    formData.append("persona", selectedPersona);
-    formData.append("sharedMemory", sharedMemory);
-
-    try {
-      const res = await fetch("/api/chat", { method: "POST", body: formData });
-      const data = await res.json();
-      if (data.error) { alert(data.error); return; }
-
-      const spendRes = await spendToken("실전 회화 (1턴)", currency);
-      if (!spendRes.success) { alert(spendRes.error); return; }
-      if (currency === "heart") setHearts(p => p - 1);
-      else setTokens(spendRes.remaining ?? tokens - 2);
-
-      const audioMime = data.audioContent?.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
-      const replyAudioSrc = data.audioContent ? `data:${audioMime};base64,${data.audioContent}` : null;
-      const newHistory = [
-        ...chatHistory,
-        { role: "user", text },
-        { role: "model", text: data.aiText, audio: replyAudioSrc },
-      ];
-      setChatHistory(newHistory);
-      if (replyAudioSrc) {
-        const audio = new Audio(replyAudioSrc);
-        audio.play().catch((err) => {
-          console.warn("오디오 자동 재생 제한 -> 브라우저 Web Speech로 대체:", err);
-          speakWithBrowserTTS(data.aiText, selectedPersona);
-        });
-      } else {
-        speakWithBrowserTTS(data.aiText, selectedPersona);
-      }
-      if (data.ended) setChatStatus("ended");
-      setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    } catch (e: any) {
-      console.error(e);
-      alert("전송 실패: " + (e?.message || "네트워크 오류"));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // ── 메모리 동기화 ─────────────────────
   const handleMemoryUpdate = async (dialog: string) => {
@@ -1559,8 +1506,12 @@ export default function Home() {
                 <div className="flex-1 overflow-y-auto space-y-4 pb-4">
                   <div className="text-center text-xs text-slate-400 my-2">💡 모르는 단어를 클릭하면 뜻을 볼 수 있어요!</div>
                   {chatHistory.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] p-3 rounded-2xl text-sm relative group ${msg.role === "user" ? "bg-blue-600 text-white rounded-tr-none" : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"}`}>
+                    <div key={idx} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm relative group ${
+                        msg.role === "user"
+                          ? "bg-blue-600 text-white rounded-tr-none shadow-xs"
+                          : "bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-xs"
+                      }`}>
                         {renderClickableMessage(msg.text, msg.role)}
                         {msg.role === "model" && (
                           <button
@@ -1572,6 +1523,18 @@ export default function Home() {
                           </button>
                         )}
                       </div>
+
+                      {/* 🎙️ 음성 억양 및 기분 분석 배지 (학습자 음성 발화 직후 표출) */}
+                      {msg.role === "user" && msg.userMood && (
+                        <div className="mt-1.5 mr-1 max-w-[85%] flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/80 px-3 py-1.5 rounded-xl shadow-xs animate-in fade-in">
+                          <span className="text-sm shrink-0">{msg.userMood.emoji || "🎙️"}</span>
+                          <span className="text-indigo-700 font-black shrink-0">기분: {msg.userMood.mood}</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-slate-600 font-medium truncate" title={msg.userMood.intonation}>
+                            억양: {msg.userMood.intonation}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <div ref={chatScrollRef} />
@@ -1695,40 +1658,21 @@ export default function Home() {
             <div className="flex flex-col items-center gap-4">
               {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">AI가 답변을 생각하고 있어요... 🤔</div>}
               {!recording && !audioUrl && !loading && (
-                <div className="flex items-center gap-2 w-full">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      value={chatTextInput}
-                      onChange={(e) => setChatTextInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleChatTextSend();
-                        }
-                      }}
-                      placeholder="메시지 입력 또는 마이크로 말하기..."
-                      className="w-full py-3 pl-4 pr-10 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
-                    />
-                    {chatTextInput.trim() ? (
-                      <button
-                        type="button"
-                        onClick={() => handleChatTextSend()}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-xs"
-                        title="전송"
-                      >
-                        <Send size={14} />
-                      </button>
-                    ) : null}
-                  </div>
+                <div className="flex flex-col items-center gap-2 w-full py-1">
                   <button
-                    type="button"
                     onClick={startRecording}
-                    className="w-11 h-11 rounded-2xl bg-green-500 hover:bg-green-600 text-white shadow-md flex items-center justify-center shrink-0 hover:scale-105 transition"
-                    title="음성으로 말하기"
+                    className="w-20 h-20 rounded-full bg-gradient-to-tr from-green-600 via-emerald-500 to-teal-400 text-white shadow-xl shadow-green-500/30 flex flex-col items-center justify-center hover:scale-105 active:scale-95 transition ring-4 ring-green-100"
+                    title="탭하여 한국어로 말하기"
                   >
-                    <Mic size={22} />
+                    <Mic size={34} className="stroke-[2.5]" />
                   </button>
+                  <span className="text-xs font-black text-slate-700 flex items-center gap-1.5 mt-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    탭하여 한국어로 말하기 (음성 & 억양 인식)
+                  </span>
+                  <p className="text-[11px] text-slate-400">
+                    말을 마치면 자동으로 분석되거나, 완료 버튼을 누르세요.
+                  </p>
                 </div>
               )}
               {recording && (
