@@ -23,6 +23,7 @@ export interface DemoSurveyData {
   ttsQuality: number;
   revisitIntent: number;
   comment: string;
+  isKorean?: boolean;
   targetLevel?: string;
   nationality?: string;
   studyPeriod?: string;

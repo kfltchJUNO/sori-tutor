@@ -16,6 +16,12 @@ export async function GET(req: NextRequest) {
     
     const surveys: DemoSurveyData[] = snap.docs.map(doc => {
       const d = doc.data();
+      const isKorean = Boolean(
+        d.isKorean ||
+        d.nationality?.includes("한국") ||
+        d.nationality?.includes("KR") ||
+        d.nationality?.includes("Korea")
+      );
       return {
         id: doc.id,
         deviceId: d.deviceId || "",
@@ -25,6 +31,7 @@ export async function GET(req: NextRequest) {
         ttsQuality: Number(d.ttsQuality) || 5,
         revisitIntent: Number(d.revisitIntent) || 5,
         comment: d.comment || "",
+        isKorean,
         targetLevel: d.targetLevel || "미지정",
         nationality: d.nationality || "",
         studyPeriod: d.studyPeriod || "",
@@ -42,6 +49,8 @@ export async function GET(req: NextRequest) {
     const avgTts = totalCount > 0 ? (surveys.reduce((a, s) => a + s.ttsQuality, 0) / totalCount).toFixed(1) : "0.0";
     const avgRevisit = totalCount > 0 ? (surveys.reduce((a, s) => a + s.revisitIntent, 0) / totalCount).toFixed(1) : "0.0";
 
+    const koreanTesterCount = surveys.filter(s => s.isKorean).length;
+
     const errorReports = surveys.filter(s => s.experiencedError);
     const errorTypeCounts: Record<string, number> = {};
     surveys.forEach(s => {
@@ -54,6 +63,7 @@ export async function GET(req: NextRequest) {
       surveys,
       stats: {
         totalCount,
+        koreanTesterCount,
         avgSatisfaction,
         avgClarity,
         avgTts,
@@ -79,6 +89,12 @@ export async function POST(req: NextRequest) {
     const ttsQuality = Math.min(5, Math.max(1, Number(body.ttsQuality) || 5));
     const revisitIntent = Math.min(5, Math.max(1, Number(body.revisitIntent) || 5));
     const comment = (body.comment || "").trim();
+    const isKorean = Boolean(
+      body.isKorean ||
+      body.nationality === "KR" ||
+      body.nationality?.includes("한국") ||
+      body.nationality?.includes("Korea")
+    );
     const targetLevel = (body.targetLevel || "").trim();
     const nationality = (body.nationality || "").trim();
     const studyPeriod = (body.studyPeriod || "").trim();
@@ -107,6 +123,7 @@ export async function POST(req: NextRequest) {
           ttsQuality,
           revisitIntent,
           comment,
+          isKorean,
           targetLevel,
           nationality,
           studyPeriod,
@@ -129,6 +146,7 @@ export async function POST(req: NextRequest) {
       ttsQuality,
       revisitIntent,
       comment,
+      isKorean,
       targetLevel,
       nationality,
       studyPeriod,

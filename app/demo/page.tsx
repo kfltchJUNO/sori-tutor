@@ -769,11 +769,27 @@ function DemoSurveyModal({
   const sT = SURVEY_TEXTS[lang];
 
   // 신규 인구통계 및 학습 배경 필드
+  const [isKorean, setIsKorean] = useState(false);
   const [nationality, setNationality] = useState("VN");
   const [customNationality, setCustomNationality] = useState("");
   const [targetLevel, setTargetLevel] = useState(initialTargetLevel || "1급");
   const [studyPeriod, setStudyPeriod] = useState("m1to3");
   const [weaknesses, setWeaknesses] = useState<string[]>(["speaking", "pronunciation"]);
+
+  const handleToggleKorean = (checked: boolean) => {
+    setIsKorean(checked);
+    if (checked) {
+      setNationality("KR");
+      setTargetLevel(sT.nativeOption || "원어민 (해당 없음)");
+      setStudyPeriod(sT.nativeOption || "원어민 (모국어)");
+    } else {
+      if (nationality === "KR") {
+        setNationality("VN");
+        setTargetLevel(initialTargetLevel || "1급");
+        setStudyPeriod("m1to3");
+      }
+    }
+  };
 
   // AI 채점 오류 및 이상 결과 보고 상태
   const [experiencedError, setExperiencedError] = useState(false);
@@ -809,6 +825,7 @@ function DemoSurveyModal({
         body: JSON.stringify({
           deviceId,
           language: lang,
+          isKorean,
           nationality: finalNationality,
           targetLevel,
           studyPeriod: sT.studyPeriodOptions?.[studyPeriod] || studyPeriod,
@@ -891,6 +908,52 @@ function DemoSurveyModal({
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pr-1 space-y-4">
 
+            {/* 🇰🇷 한국인 테스터 전용 빠른 체크 버튼 */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                isKorean
+                  ? "bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border-indigo-300 shadow-xs ring-1 ring-indigo-200"
+                  : "bg-slate-50 border-slate-200/80 hover:bg-slate-100/70"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">🇰🇷</span>
+                    <h4 className="text-xs font-black text-slate-900">
+                      {sT.isKoreanTitle}
+                    </h4>
+                    {isKorean && (
+                      <span className="text-[10px] font-black px-2 py-0.5 bg-indigo-600 text-white rounded-full">
+                        선택됨
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {sT.isKoreanDesc}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleKorean(!isKorean)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shrink-0 shadow-xs ${
+                    isKorean
+                      ? "bg-indigo-600 text-white border border-indigo-600 ring-2 ring-indigo-200"
+                      : "bg-white text-slate-800 border border-slate-300 hover:border-slate-400 hover:bg-slate-50"
+                  }`}
+                >
+                  {isKorean ? (
+                    <>
+                      <Check size={14} className="stroke-[3]" />
+                      <span>{sT.isKoreanChecked}</span>
+                    </>
+                  ) : (
+                    <span>{sT.isKoreanBtn}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* A. 국적 선택 */}
             <div className="space-y-1.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
               <label className="block text-xs font-black text-slate-900 flex items-center gap-1">
@@ -902,7 +965,14 @@ function DemoSurveyModal({
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setNationality(key)}
+                    onClick={() => {
+                      if (key === "KR") {
+                        handleToggleKorean(true);
+                      } else {
+                        setIsKorean(false);
+                        setNationality(key);
+                      }
+                    }}
                     className={`py-1.5 px-2 rounded-xl text-xs font-bold border transition truncate text-center ${
                       nationality === key
                         ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
@@ -933,6 +1003,19 @@ function DemoSurveyModal({
                   {sT.levelTitle}
                 </label>
                 <div className="grid grid-cols-3 gap-1 pt-1">
+                  {isKorean && (
+                    <button
+                      type="button"
+                      onClick={() => setTargetLevel(sT.nativeOption || "원어민 (해당 없음)")}
+                      className={`py-1.5 text-xs font-bold rounded-xl border transition col-span-3 truncate px-2 text-center ${
+                        targetLevel === (sT.nativeOption || "원어민 (해당 없음)")
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {sT.nativeOption || "원어민 (해당 없음)"}
+                    </button>
+                  )}
                   {["1급", "2급", "3급", "4급", "5급", "6급"].map((lvl) => (
                     <button
                       key={lvl}
@@ -957,6 +1040,19 @@ function DemoSurveyModal({
                   {sT.studyPeriodTitle}
                 </label>
                 <div className="grid grid-cols-2 gap-1 pt-1">
+                  {isKorean && (
+                    <button
+                      type="button"
+                      onClick={() => setStudyPeriod(sT.nativeOption || "원어민 (모국어)")}
+                      className={`py-1.5 px-2 rounded-xl text-xs font-bold border transition truncate text-center col-span-2 ${
+                        studyPeriod === (sT.nativeOption || "원어민 (모국어)")
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {sT.nativeOption || "원어민 (모국어)"}
+                    </button>
+                  )}
                   {Object.keys(sT.studyPeriodOptions || {}).map((key) => (
                     <button
                       key={key}

@@ -594,12 +594,24 @@ export default function DemoSurveySection({ idToken }: Props) {
     ? surveys
     : surveys.filter((s) => s.language === selectedLang);
 
+  const koreanSurveyCount =
+    typeof stats.koreanTesterCount === "number"
+      ? stats.koreanTesterCount
+      : surveys.filter(
+          (s) =>
+            s.isKorean ||
+            s.nationality?.includes("한국") ||
+            s.nationality?.includes("KR") ||
+            s.nationality?.includes("Korea")
+        ).length;
+  const foreignerSurveyCount = Math.max(0, surveys.length - koreanSurveyCount);
+
   // 설문조사 CSV 추출 (국적, 급수, 학습기간, 약점, 오류 보고 컬럼 포함 + UTF-8 BOM)
   const handleExportCSV = () => {
     if (filteredSurveys.length === 0) return;
 
     const headers = [
-      "제출일시", "언어", "학습자국적", "목표/현재급수", "학습기간", "자신이생각하는약점",
+      "제출일시", "구분(한국인테스터/외국인)", "언어", "학습자국적", "목표/현재급수", "학습기간", "자신이생각하는약점",
       "이상결과/오류경험여부", "오류유형목록", "오류상세설명",
       "Q1_사용편의성(1~5)", "Q2_피드백도움(1~5)", "Q3_AI음성만족(1~5)", "Q4_재이용의향(1~5)",
       "주관식학생의견", "기기식별ID"
@@ -607,6 +619,7 @@ export default function DemoSurveySection({ idToken }: Props) {
 
     const rows = filteredSurveys.map((s) => [
       `"${formatDateTime(s.createdAtMs)}"`,
+      s.isKorean || s.nationality?.includes("한국") || s.nationality?.includes("KR") || s.nationality?.includes("Korea") ? '"한국인 테스터"' : '"외국인 학습자"',
       `"${LANG_LABEL_MAP[s.language] || s.language}"`,
       `"${s.nationality || "미지정"}"`,
       `"${s.targetLevel || "미지정"}"`,
@@ -1133,7 +1146,9 @@ export default function DemoSurveySection({ idToken }: Props) {
                 <MessageSquare size={13} className="text-emerald-600" /> 설문 제출자
               </span>
               <p className="text-2xl font-black text-emerald-700 mt-1">{surveys.length}명</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">중복 제출 자동 방지</p>
+              <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                🇰🇷 한국인 {koreanSurveyCount}명 · 🌍 외국인 {foreignerSurveyCount}명
+              </p>
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
@@ -1374,6 +1389,13 @@ export default function DemoSurveySection({ idToken }: Props) {
                         <span className="text-xs font-black px-2 py-0.5 bg-slate-100 rounded-md text-slate-800">
                           {LANG_LABEL_MAP[sur.language] || sur.language}
                         </span>
+
+                        {/* 한국인 테스터 배지 */}
+                        {(sur.isKorean || sur.nationality?.includes("한국") || sur.nationality?.includes("KR") || sur.nationality?.includes("Korea")) && (
+                          <span className="text-xs font-black px-2 py-0.5 bg-purple-100 text-purple-900 border border-purple-300 rounded-md flex items-center gap-1 shadow-xs">
+                            🇰🇷 한국인 테스터
+                          </span>
+                        )}
 
                         {/* 학습자 국적 */}
                         {sur.nationality && (

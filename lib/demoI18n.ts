@@ -229,6 +229,12 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
   ko: {
     modalTitle: "🎓 소리튜터 1분 이용 만족도 설문조사",
     modalDesc: "더 좋은 한국어 발음 교육 서비스를 만들기 위해 소중한 의견을 들려주세요.",
+    // 한국인 테스터 전용 옵션
+    isKoreanTitle: "🇰🇷 한국인(원어민 / 한국어 강사 / 일반 테스터)이신가요?",
+    isKoreanDesc: "체크하시면 국적과 학습 기간이 '원어민(모국어)'으로 자동 설정됩니다.",
+    isKoreanBtn: "한국인 테스터 체크",
+    isKoreanChecked: "한국인 테스터 선택됨",
+    nativeOption: "원어민 (해당 없음)",
     nationalityTitle: "🌍 국적 (Nationality)",
     nationalityPlaceholder: "국적을 선택해주세요",
     levelTitle: "🎯 현재 또는 목표 급수 (Level)",
@@ -250,6 +256,7 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
       more2y: "2년 이상",
     },
     nationalityOptions: {
+      KR: "🇰🇷 대한민국 (한국인)",
       VN: "🇻🇳 베트남",
       CN: "🇨🇳 중국",
       JP: "🇯🇵 일본",
@@ -291,6 +298,12 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
   en: {
     modalTitle: "🎓 Sori-Tutor 1-Minute Satisfaction Survey",
     modalDesc: "Please share your valuable feedback to help us build a better Korean learning experience.",
+    // Korean tester options
+    isKoreanTitle: "🇰🇷 Are you a Korean native speaker or beta tester?",
+    isKoreanDesc: "Checking this will set nationality and study period to 'Native Speaker'.",
+    isKoreanBtn: "Check as Korean Tester",
+    isKoreanChecked: "Korean Tester Selected",
+    nativeOption: "Native (N/A)",
     nationalityTitle: "🌍 Nationality",
     nationalityPlaceholder: "Select your nationality",
     levelTitle: "🎯 Current or Target Level",
@@ -312,6 +325,7 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
       more2y: "2+ years",
     },
     nationalityOptions: {
+      KR: "🇰🇷 South Korea (Native)",
       VN: "🇻🇳 Vietnam",
       CN: "🇨🇳 China",
       JP: "🇯🇵 Japan",
@@ -351,6 +365,12 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
   zh: {
     modalTitle: "🎓 Sori-Tutor 1分钟用户满意度问卷",
     modalDesc: "为了提供更好的韩语发音学习体验，请留下您宝贵的意见。",
+    // 韩国人测试者选项
+    isKoreanTitle: "🇰🇷 您是韩国人（母语者/教师/测试者）吗？",
+    isKoreanDesc: "勾选后国籍与学习时间将自动设置为‘母语者（不适用）’。",
+    isKoreanBtn: "韩国人测试者勾选",
+    isKoreanChecked: "已选择韩国人测试者",
+    nativeOption: "母语者（不适用）",
     nationalityTitle: "🌍 国籍 (Nationality)",
     nationalityPlaceholder: "请选择您的国籍",
     levelTitle: "🎯 当前或目标韩语级别 (Level)",
@@ -372,6 +392,7 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
       more2y: "2年以上",
     },
     nationalityOptions: {
+      KR: "🇰🇷 韩国 (母语/测试人员)",
       VN: "🇻🇳 越南",
       CN: "🇨🇳 中国",
       JP: "🇯🇵 日本",
@@ -411,6 +432,12 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
   ja: {
     modalTitle: "🎓 ソリチューター 1分満足度アンケート",
     modalDesc: "より良い韓国語教育サービスを提供するため、貴重なご意見をお聞かせください。",
+    // 韓国人テスター専用オプション
+    isKoreanTitle: "🇰🇷 韓国人（ネイティブ / 講師 / 一般テスター）ですか？",
+    isKoreanDesc: "チェックすると国籍と学習期間が「ネイティブ（母国語）」として自動設定されます。",
+    isKoreanBtn: "韓国人テスターとして回答",
+    isKoreanChecked: "韓国人テスター選択中",
+    nativeOption: "ネイティブ（該当なし）",
     nationalityTitle: "🌍 国籍 (Nationality)",
     nationalityPlaceholder: "国籍を選択してください",
     levelTitle: "🎯 目標・現在の韓国語レベル (Level)",
@@ -432,6 +459,7 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
       more2y: "2年以上",
     },
     nationalityOptions: {
+      KR: "🇰🇷 韓国 (ネイティブ/テスター)",
       VN: "🇻🇳 ベトナム",
       CN: "🇨🇳 中国",
       JP: "🇯🇵 日本",
@@ -471,6 +499,12 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
   vi: {
     modalTitle: "🎓 Khảo Sát Mức Độ Hài Lòng 1 Phút Về Sori-Tutor",
     modalDesc: "Vui lòng chia sẻ ý kiến quý báu để giúp chúng tôi nâng cao chất lượng học phát âm tiếng Hàn.",
+    // Tùy chọn dành cho tester người Hàn
+    isKoreanTitle: "🇰🇷 Bạn là người Hàn Quốc (Bản xứ / Giáo viên / Tester)?",
+    isKoreanDesc: "Khi chọn, quốc tịch và thời gian học sẽ tự động đặt là 'Người bản xứ'.",
+    isKoreanBtn: "Chọn Người Hàn Quốc (Tester)",
+    isKoreanChecked: "Đã chọn Tester Hàn Quốc",
+    nativeOption: "Người bản xứ (Không áp dụng)",
     nationalityTitle: "🌍 Quốc tịch (Nationality)",
     nationalityPlaceholder: "Chọn quốc tịch của bạn",
     levelTitle: "🎯 Trình độ tiếng Hàn hiện tại hoặc mục tiêu",
@@ -492,6 +526,7 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
       more2y: "Trên 2 năm",
     },
     nationalityOptions: {
+      KR: "🇰🇷 Hàn Quốc (Bản xứ)",
       VN: "🇻🇳 Việt Nam",
       CN: "🇨🇳 Trung Quốc",
       JP: "🇯🇵 Nhật Bản",
@@ -531,6 +566,12 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
   my: {
     modalTitle: "🎓 Sori-Tutor ၁ မိနစ် အသုံးပြုသူ စိတ်ကျေနပ်မှုစစ်တမ်း",
     modalDesc: "ပိုမိုကောင်းမွန်သော ကိုရီးယားစကားသင်ကြားရေး ဖြစ်စေရန် သင့်တန်ဖိုးရှိသော အကြံပြုချက်ကို မျှဝေပေးပါ။",
+    // ကိုရီးယား စမ်းသပ်သူ ရွေးချယ်မှု
+    isKoreanTitle: "🇰🇷 သင်သည် ကိုရီးယားလူမျိုး (မိခင်ဘာသာစကားပြောသူ/ဆရာ/စမ်းသပ်သူ) ဖြစ်ပါသလား။",
+    isKoreanDesc: "ရွေးချယ်ပါက နိုင်ငံသားနှင့် လေ့လာသည့်ကာလကို 'မိခင်ဘာသာစကား' အဖြစ် အလိုအလျောက် သတ်မှတ်ပေးပါမည်။",
+    isKoreanBtn: "ကိုရီးယား စမ်းသပ်သူအဖြစ် ရွေးပါ",
+    isKoreanChecked: "ကိုရီးယား စမ်းသပ်သူ ရွေးချယ်ပြီး",
+    nativeOption: "မိခင်ဘာသာစကား (မသက်ဆိုင်ပါ)",
     nationalityTitle: "🌍 နိုင်ငံသား (Nationality)",
     nationalityPlaceholder: "သင့်နိုင်ငံသားကို ရွေးချယ်ပါ",
     levelTitle: "🎯 ရည်မှန်းထားသော ကိုရီးယားဘာသာစကားအဆင့်",
@@ -552,6 +593,7 @@ export const SURVEY_TEXTS: Record<SupportedLang, any> = {
       more2y: "၂ နှစ်အထက်",
     },
     nationalityOptions: {
+      KR: "🇰🇷 တောင်ကိုရီးယား (ကိုရီးယား)",
       VN: "🇻🇳 ဗီယက်နမ်",
       CN: "🇨🇳 တရုတ်",
       JP: "🇯🇵 ဂျပန်",
