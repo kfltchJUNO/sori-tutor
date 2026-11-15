@@ -634,13 +634,23 @@ export interface ScoringResult {
   categoryScores: CategoryScores;
   summary: string;
   explanation: string;
+  explanationTranslated?: string;
   advice: string;
+  adviceTranslated?: string;
   errors: PronunciationErrorItem[];
   masteredTags: string[];
   correct: string;
   ruleFormula?: string;
   errorTypes: string[];
 }
+
+const LANG_TARGET_MAP: Record<string, string> = {
+  en: "English (영어)",
+  zh: "Simplified Chinese (중국어 간체)",
+  ja: "Japanese (일본어)",
+  vi: "Vietnamese (Tiếng Việt, 베트남어)",
+  my: "Burmese (မြန်မာဘာသာ, 미얀마어)",
+};
 
 async function runScoring(
   base64Audio: string,
@@ -651,6 +661,7 @@ async function runScoring(
   userNick: string,
   metrics: EvaluationMetrics,
   audioMimeType: string = "audio/webm",
+  lang: string = "ko",
 ): Promise<ScoringResult> {
   const minAllowed = Math.max(15, metrics.algoScore - 6);
   const maxAllowed = Math.min(Math.max(35, metrics.algoScore + 6), metrics.hardCeiling, 92);
@@ -660,6 +671,16 @@ async function runScoring(
     : "음절 단위 특이 오류 없음 (억양, 운율 및 자연스러움 평가)";
 
   const standardPron = targetPronunciation || `[${toStandardPronunciation(targetText)}]`;
+  const targetLangName = LANG_TARGET_MAP[lang];
+
+  const translationPromptBlock = targetLangName ? `
+════════════════════════════════════════════════════════════════
+### [다국어 번역 지침 (필수)]
+- 학습자의 모국어는 [${targetLangName}]입니다.
+- "explanation"(종합 평가)과 "advice"(교정 팁)는 표준 한국어로 명확히 작성하세요.
+- 동시에 "explanationTranslated" 필드에는 위 explanation 내용을 [${targetLangName}]로 자연스럽고 친절하게 번역하여 출력하세요.
+- 동시에 "adviceTranslated" 필드에는 위 advice 내용을 [${targetLangName}]로 자연스럽게 번역하여 출력하세요.
+` : "";
 
   const prompt = `당신은 엄격하고 정확한 한국어 발음 교정 및 음운/억양/운율 평가 전문가입니다.
 동봉된 오디오 음성과 블라인드 STT 결과, 음절 정밀 분석 결과를 종합 분석하여 채점 및 JSON 피드백을 작성하세요.
@@ -694,7 +715,7 @@ async function runScoring(
 
 3. 음운 변동 및 자음/모음 오류:
    - 연음([이어 읽기(연음)]), 비음화([닮은 소리(비음화)]), 유음화([부드러운 소리(유음화)]), 된소리되기([단단한 소리(경음화)]), 거센소리되기([합쳐진 소리(축약)]) 등 한국어 특유의 소리 변화를 오디오에서 정확히 반영했는지 채점하세요.
-
+${translationPromptBlock}
 ════════════════════════════════════════════════════════════════
 ### 1. 분류 체계 및 태그 정의 규칙 (엄격 준수)
 모든 오류(errors)는 반드시 아래의 대분류(category) 및 소분류(subCategory) 기준을 엄격히 준수해야 합니다.
@@ -726,6 +747,10 @@ async function runScoring(
     "intonation": 80
   },
   "summary": "${userNick}님, (자음/모음, 억양 및 어색한 휴지 유무를 포함한 종합 평가 1~2문장)",
+  "explanation": "${userNick}님, (자음/모음, 억양 및 어색한 휴지 유무를 포함한 종합 평가 1~2문장)",
+  "explanationTranslated": "학습자 모국어(${targetLangName || '해당 언어'})로 번역된 종합 평가",
+  "advice": "틀린 글자의 받침과 모음을 의식하며 천천히 또렷하게 발음해 보세요.",
+  "adviceTranslated": "학습자 모국어(${targetLangName || '해당 언어'})로 번역된 교정 조언",
   "errors": [
     {
       "id": "err-1",
@@ -765,7 +790,9 @@ async function runScoring(
     };
     summary?: string;
     explanation?: string;
+    explanationTranslated?: string;
     advice?: string;
+    adviceTranslated?: string;
     errors?: PronunciationErrorItem[];
     masteredTags?: string[];
     correct?: string;
@@ -836,7 +863,9 @@ async function runScoring(
     categoryScores: catScores,
     summary: summaryText,
     explanation: summaryText,
+    explanationTranslated: data.explanationTranslated?.trim() || undefined,
     advice: adviceText,
+    adviceTranslated: data.adviceTranslated?.trim() || undefined,
     errors: cleanErrors,
     masteredTags: mastered,
     correct: data.correct ?? standardPron,
@@ -857,6 +886,7 @@ export async function POST(req: Request): Promise<Response> {
     const speechFramesRaw     = formData.get("speechFrames")        as string | null;
     const context             = (formData.get("context")            as string | null) ?? "";
     const userNick            = (formData.get("userNick")           as string | null) ?? "학습자";
+    const lang                = (formData.get("lang")               as string | null) ?? "ko";
 
     if (!audioFile || !targetText) {
       return NextResponse.json({ error: "오디오 또는 목표 문장이 없습니다." }, { status: 400 });
@@ -946,7 +976,7 @@ export async function POST(req: Request): Promise<Response> {
     // ── 2단계: AI 멀티모달 오디오 청취 + 음운/억양/휴지 정밀 평가 ──
     let scored: ScoringResult;
     try {
-      scored = await runScoring(base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics, audioMimeType);
+      scored = await runScoring(base64Audio, recognized, targetText, targetPronunciation, context, userNick, metrics, audioMimeType, lang);
     } catch (e) {
       console.error("채점 실패:", e);
       const fallback = Math.max(15, Math.min(metrics.algoScore - liaisonPenalty, metrics.hardCeiling));
@@ -1008,7 +1038,9 @@ export async function POST(req: Request): Promise<Response> {
       categoryScores:  scored.categoryScores,
       summary:         finalExplanation,
       explanation:     finalExplanation,
+      explanationTranslated: scored.explanationTranslated,
       advice:          scored.advice,
+      adviceTranslated: scored.adviceTranslated,
       errors:          scored.errors,
       masteredTags:    scored.masteredTags,
       recognized,

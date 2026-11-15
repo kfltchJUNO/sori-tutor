@@ -115,6 +115,8 @@ export async function POST(req: NextRequest) {
         categoryScores: analyzeData.categoryScores || null,
         recognizedText: (analyzeData.recognized || analyzeData.transcription || analyzeData.recognized_text || "").trim(),
         feedback: (analyzeData.explanation || analyzeData.summary || analyzeData.feedback || "").trim(),
+        explanationTranslated: (analyzeData.explanationTranslated || "").trim(),
+        language: (formData.get("lang") as string) || "ko",
         isSilence: Boolean(analyzeData.is_silence || analyzeData.recognized === "(침묵)"),
         date: dateStr,
         createdAt: new Date(),

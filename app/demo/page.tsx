@@ -62,6 +62,7 @@ export default function DemoPage() {
 
   const t = DEMO_TEXTS[lang];
   const sT = SURVEY_TEXTS[lang];
+  const currentLangObj = SUPPORTED_LANGS.find((l) => l.code === lang);
 
   // 1. 기기 UUID 초기화, 로컬 설정 불러오기 및 동적 문장 조회
   useEffect(() => {
@@ -263,6 +264,7 @@ export default function DemoPage() {
       formData.append("targetPronunciation", currentSentence.pronunciation);
       formData.append("deviceId", deviceId);
       formData.append("userNick", "체험학습자");
+      formData.append("lang", lang);
 
       const res = await fetch("/api/demo/analyze", {
         method: "POST",
@@ -752,20 +754,55 @@ export default function DemoPage() {
               );
             })()}
 
-            {/* 구체적 교정 팁 */}
+            {/* 구체적 교정 팁 (한국어 + 설정 언어 동시 표기) */}
             {analysisResult.explanation && (
-              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl text-xs space-y-1">
-                <h4 className="font-black text-indigo-950 flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-indigo-600" />
-                  {t.feedbackTitle}
-                </h4>
-                <p className="text-slate-700 leading-relaxed whitespace-pre-line">
-                  {analysisResult.explanation}
-                </p>
-                {analysisResult.advice && (
-                  <p className="text-indigo-800 font-bold pt-1">
-                    💡 {analysisResult.advice}
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl text-xs space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-indigo-200/50">
+                  <h4 className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
+                    <Sparkles size={14} className="text-indigo-600" />
+                    {t.feedbackTitle}
+                  </h4>
+                  {lang !== "ko" && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-md flex items-center gap-1">
+                      <span>🇰🇷 한국어</span>
+                      <span>+</span>
+                      <span>{currentLangObj?.flag} {currentLangObj?.label} 번역</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* 1. 한국어 원문 피드백 */}
+                <div className="space-y-1">
+                  {lang !== "ko" && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                      🇰🇷 한국어 원문
+                    </span>
+                  )}
+                  <p className="text-slate-800 leading-relaxed whitespace-pre-line font-medium">
+                    {analysisResult.explanation}
                   </p>
+                  {analysisResult.advice && (
+                    <p className="text-indigo-900 font-bold pt-0.5">
+                      💡 {analysisResult.advice}
+                    </p>
+                  )}
+                </div>
+
+                {/* 2. 설정 언어 번역 피드백 (외국어 모드일 때 함께 표기) */}
+                {lang !== "ko" && (
+                  <div className="pt-2.5 border-t border-indigo-200/60 space-y-1">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-indigo-700 uppercase tracking-wider">
+                      {currentLangObj?.flag} {currentLangObj?.label} 번역
+                    </span>
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-line font-medium">
+                      {analysisResult.explanationTranslated || analysisResult.explanation}
+                    </p>
+                    {(analysisResult.adviceTranslated || analysisResult.advice) && (
+                      <p className="text-indigo-800 font-bold pt-0.5">
+                        💡 {analysisResult.adviceTranslated || analysisResult.advice}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
