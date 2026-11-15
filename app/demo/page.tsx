@@ -3,6 +3,7 @@
 // 로그인 없는 무설치 원클릭 한국어 발음 훈련 체험 페이지 (기기당 하루 5회 제한 & 6개 국어 지원 & 어드민 동적 문장 연동)
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import {
   Volume2, VolumeX, Mic, Square, Sparkles, AlertCircle, RefreshCw,
   CheckCircle2, Check, Languages, Loader2, MessageSquare, ChevronRight,
@@ -330,6 +331,16 @@ export default function DemoPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* 보이스봇 테스트실 이동 링크 */}
+            <Link
+              href="/demo/chat"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-xs transition shrink-0"
+              title="보이스봇(실전 회화 & 억양/기분 유추) 전용 테스트실로 이동"
+            >
+              <span>🎙️ 보이스봇</span>
+              <span className="hidden sm:inline">테스트실</span>
+            </Link>
+
             {/* 효과음 모드 토글 (목소리 부담 없는 모드 vs 음성 멘트) */}
             <button
               onClick={toggleSoundMode}

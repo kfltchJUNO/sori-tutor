@@ -3,6 +3,7 @@
 
 import ClassManagementSection from "./ClassManagementSection";
 import DemoSurveySection from "./DemoSurveySection";
+import VoiceBotAdminSection from "./VoiceBotAdminSection";
 import NotificationSenderModal from "./NotificationSenderModal";
 
 import { useEffect, useState, useRef } from "react";
@@ -49,7 +50,7 @@ interface CurriculumDoc {
 
 interface ParsedLine { role: string; text: string; }
 
-type Tab = "classes" | "surveys" | "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "users" | "charges" | "inquiries";
+type Tab = "classes" | "surveys" | "voicebot" | "curriculum" | "generate" | "drafts" | "audio" | "feedback" | "users" | "charges" | "inquiries";
 
 // ── 점수대 정보 ────────────────────────────────────────────
 const SCORE_TIERS = [
@@ -1482,7 +1483,8 @@ export default function AdminPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "classes",  label: "🏫 정규 반·선생님 관리" },
-    { id: "surveys",  label: "🧪 테스트·체험 관리" },
+    { id: "surveys",  label: "🧪 발음 분석 테스트 관리" },
+    { id: "voicebot", label: "🎙️ 보이스봇 관리 & 테스트" },
     { id: "generate", label: "✨ AI 생성" },
     { id: "drafts",   label: `📋 승인대기 (${drafts.length})` },
     { id: "audio",    label: "🎵 오디오" },
@@ -1527,6 +1529,11 @@ export default function AdminPage() {
         {/* ──── 체험 설문 응답 통계 ──── */}
         {activeTab === "surveys" && (
           <DemoSurveySection idToken={idToken} />
+        )}
+
+        {/* ──── 보이스봇 관리 & 실시간 테스트 ──── */}
+        {activeTab === "voicebot" && (
+          <VoiceBotAdminSection idToken={idToken} />
         )}
 
         {/* ──── AI 생성 ──── */}
