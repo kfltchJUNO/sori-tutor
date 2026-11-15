@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 import crypto from "crypto";
 
-const DAILY_LIMIT = 5;
+const DAILY_LIMIT = 10;
 
 // 한국 시간 기준 YYYY-MM-DD 생성
 function getTodayKST(): string {
@@ -59,12 +59,12 @@ export async function POST(req: NextRequest) {
 
     const currentUsed = snap.exists ? (snap.data()?.count || 0) : 0;
 
-    // 하루 5회 초과 시 차단
+    // 하루 10회 초과 시 차단
     if (currentUsed >= DAILY_LIMIT) {
       return NextResponse.json(
         {
           error: "LIMIT_EXCEEDED",
-          message: "오늘의 무료 체험 5회를 모두 사용하셨습니다. 내일 다시 이용해주세요!",
+          message: "무료 체험 10회를 모두 사용하셨습니다. 소리튜터 정식 출시를 기다려주세요! 🚀",
           remaining: 0,
           used: currentUsed,
         },
@@ -102,6 +102,26 @@ export async function POST(req: NextRequest) {
       },
       { merge: true }
     );
+
+    // 테스트 참여자 발음 평가 결과 영구 누적 저장 (관리자 대시보드 통계 및 결과 모니터링용)
+    try {
+      await adminDb.collection("sori_demo_evaluations").add({
+        deviceId,
+        clientIp: clientIp.replace(/\.\d+$/, ".xxx"),
+        targetText: (formData.get("targetText") as string) || "",
+        level: (formData.get("level") as string) || "1급",
+        score: Number(analyzeData.score) || 0,
+        phonemeScore: Number(analyzeData.phoneme_score) || 0,
+        recognizedText: (analyzeData.transcription || analyzeData.recognized_text || "").trim(),
+        feedback: (analyzeData.feedback || "").trim(),
+        isSilence: Boolean(analyzeData.is_silence),
+        date: dateStr,
+        createdAt: new Date(),
+        createdAtMs: Date.now(),
+      });
+    } catch (logErr) {
+      console.error("체험 평가 로그 저장 실패:", logErr);
+    }
 
     const remaining = Math.max(0, DAILY_LIMIT - newCount);
 

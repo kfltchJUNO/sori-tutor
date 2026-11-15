@@ -27,6 +27,25 @@ export interface DemoSurveyData {
   nationality?: string;
   studyPeriod?: string;
   weaknesses?: string[];
+  // 발음 채점 이상 결과 및 오류 보고
+  experiencedError?: boolean;
+  errorTypes?: string[];
+  errorDetail?: string;
+  createdAtMs: number;
+}
+
+export interface DemoEvaluationLog {
+  id: string;
+  deviceId: string;
+  clientIp: string;
+  targetText: string;
+  level: string;
+  score: number;
+  phonemeScore: number;
+  recognizedText: string;
+  feedback: string;
+  isSilence: boolean;
+  date: string;
   createdAtMs: number;
 }
 

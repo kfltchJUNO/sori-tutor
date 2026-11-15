@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Volume2, VolumeX, Mic, Square, Sparkles, AlertCircle, RefreshCw,
-  CheckCircle2, Languages, Loader2, MessageSquare, ChevronRight,
+  CheckCircle2, Check, Languages, Loader2, MessageSquare, ChevronRight,
   Award, Headphones, Info, X, Star, Globe, Clock, BookOpen, Layers
 } from "lucide-react";
 import {
@@ -33,9 +33,9 @@ export default function DemoPage() {
   // 사운드 피드백 모드 (음성+효과음 vs 효과음만)
   const [soundMode, setSoundMode] = useState<SoundFeedbackMode>("sfx_only");
 
-  // 횟수 제한 상태
+  // 횟수 제한 상태 (1인당 10회 제한)
   const [remainingTrials, setRemainingTrials] = useState<number | null>(null);
-  const [trialLimit, setTrialLimit] = useState(5);
+  const [trialLimit, setTrialLimit] = useState(10);
   const [loadingLimit, setLoadingLimit] = useState(true);
 
   // 오디오 녹음 및 분석 상태
@@ -48,8 +48,10 @@ export default function DemoPage() {
   // TTS 재생 상태
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
 
-  // 설문 모달 상태
+  // 설문 및 10회 완료 모달 상태
   const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [surveyDone, setSurveyDone] = useState(false);
+  const [showCompletedModal, setShowCompletedModal] = useState(false);
   const [trialCountThisSession, setTrialCountThisSession] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -75,6 +77,9 @@ export default function DemoPage() {
     }
 
     setSoundMode(getSoundFeedbackMode());
+
+    const isSurveyCompleted = localStorage.getItem("sori_demo_survey_done") === "true";
+    setSurveyDone(isSurveyCompleted);
 
     // 서버 잔여 횟수 조회 & 동적 문장 조회
     fetchLimit(devId);
@@ -103,7 +108,10 @@ export default function DemoPage() {
       const data = await res.json();
       if (res.ok) {
         setRemainingTrials(data.remaining);
-        setTrialLimit(data.limit || 5);
+        setTrialLimit(data.limit || 10);
+        if (data.remaining === 0) {
+          setShowCompletedModal(true);
+        }
       }
     } catch (e) {
       console.warn("잔여 횟수 조회 실패:", e);
@@ -253,7 +261,7 @@ export default function DemoPage() {
         if (res.status === 429) {
           setRemainingTrials(0);
           setErrorMsg(t.limitExceeded);
-          setShowSurveyModal(true);
+          setShowCompletedModal(true);
           return;
         }
         throw new Error(data.message || data.error || "분석에 실패했습니다.");
@@ -272,9 +280,17 @@ export default function DemoPage() {
       const nextCount = trialCountThisSession + 1;
       setTrialCountThisSession(nextCount);
 
-      // 3회차 연습 완료 시 피드백 설문 팝업 유도
-      if (nextCount === 3 || (data.demoRateLimit && data.demoRateLimit.remaining === 0)) {
-        setTimeout(() => setShowSurveyModal(true), 2500);
+      const totalUsed = data.demoRateLimit ? data.demoRateLimit.used : nextCount;
+      const isSurveyCompleted = typeof window !== "undefined" && localStorage.getItem("sori_demo_survey_done") === "true";
+
+      // 1. 5회차 연습 완료 시 1회 한정 설문조사 자동 유도
+      if (totalUsed === 5 && !isSurveyCompleted) {
+        setTimeout(() => setShowSurveyModal(true), 1500);
+      }
+
+      // 2. 10회차 한도 도달 시 정식 출시 대기 안내 모달 표출
+      if (data.demoRateLimit && data.demoRateLimit.remaining === 0) {
+        setTimeout(() => setShowCompletedModal(true), 2000);
       }
     } catch (e: any) {
       setErrorMsg(e.message);
@@ -489,11 +505,30 @@ export default function DemoPage() {
 
           <div>
             <p className="font-black text-sm text-slate-800">
-              {isRecording ? t.recordingBtn : analyzing ? t.analyzing : t.recordBtn}
+              {remainingTrials !== null && remainingTrials <= 0
+                ? "🔒 오늘의 10회 체험이 완료되었습니다"
+                : isRecording
+                ? t.recordingBtn
+                : analyzing
+                ? t.analyzing
+                : t.recordBtn}
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              마이크 버튼을 누르고 한국어로 소리 내어 말해보세요.
+              {remainingTrials !== null && remainingTrials <= 0
+                ? "소리튜터 정식 서비스 출시를 기대해 주세요!"
+                : "마이크 버튼을 누르고 한국어로 소리 내어 말해보세요."}
             </p>
+            {remainingTrials !== null && remainingTrials <= 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-xs shadow-xs transition cursor-pointer"
+                >
+                  <span>🚀 정식 출시 안내 보기</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -609,30 +644,109 @@ export default function DemoPage() {
         )}
 
         {/* 하단 1분 설문 유도 배너 */}
-        <div className="p-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-3xl shadow-sm flex items-center justify-between gap-3">
-          <div className="space-y-0.5">
-            <h4 className="font-black text-xs sm:text-sm">{t.surveyBannerTitle}</h4>
-            <p className="text-[10px] text-slate-300">
-              학습자 맞춤형 기능을 위해 국적 및 약점 설문에 참여해 주세요.
-            </p>
+        {surveyDone ? (
+          <div className="p-4 bg-slate-100 rounded-3xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-slate-700 font-bold">
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <span>{t.surveyDoneBadge} (설문 응답이 정상 기록되었습니다. 감사합니다!)</span>
+            </div>
+            {remainingTrials === 0 && (
+              <button
+                onClick={() => setShowCompletedModal(true)}
+                className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition shrink-0"
+              >
+                🚀 정식 출시 안내
+              </button>
+            )}
           </div>
-          <button
-            onClick={() => setShowSurveyModal(true)}
-            className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition text-xs shrink-0 cursor-pointer shadow"
-          >
-            {t.surveyBannerBtn}
-          </button>
-        </div>
+        ) : (
+          <div className="p-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-3xl shadow-sm flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <h4 className="font-black text-xs sm:text-sm">{t.surveyBannerTitle}</h4>
+              <p className="text-[10px] text-slate-300">
+                학습자 맞춤형 기능을 위해 국적, 약점 및 채점 오류 여부 설문에 참여해 주세요.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSurveyModal(true)}
+              className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition text-xs shrink-0 cursor-pointer shadow"
+            >
+              {t.surveyBannerBtn}
+            </button>
+          </div>
+        )}
       </main>
 
-      {/* 7. 1분 만족도 설문조사 모달 (국적, 급수, 학습기간, 약점 조사 추가) */}
+      {/* 7. 1분 만족도 설문조사 모달 (국적, 급수, 학습기간, 약점, 채점 오류 점검 추가) */}
       {showSurveyModal && (
         <DemoSurveyModal
           lang={lang}
           deviceId={deviceId}
           targetLevel={selectedLevel}
+          onSurveySubmitted={() => setSurveyDone(true)}
           onClose={() => setShowSurveyModal(false)}
         />
+      )}
+
+      {/* 8. 10회 체험 완료 & 정식 출시 대기 안내 모달 */}
+      {showCompletedModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-inner">
+              🚀
+            </div>
+
+            <div className="space-y-1">
+              <span className="inline-block px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-full">
+                {t.waitingLaunchBadge}
+              </span>
+              <h3 className="font-black text-slate-900 text-lg mt-2">
+                {t.completedModalTitle}
+              </h3>
+              <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed pt-1">
+                {t.completedModalDesc}
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2 text-left">
+              <div className="flex items-center gap-2 text-indigo-700 font-bold">
+                <Sparkles size={14} />
+                <span>소리튜터 정식 서비스 출시 예정 기능</span>
+              </div>
+              <ul className="text-[11px] text-slate-600 space-y-1 pl-4 list-disc">
+                <li>1급~6급 전 급수 커리큘럼 무제한 발음 훈련</li>
+                <li>학교·학원 반(Class) 및 선생님 실시간 연동</li>
+                <li>초성·중성·종성 정밀 음소 교정 및 억양 AI 리포트</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              {!surveyDone ? (
+                <button
+                  onClick={() => {
+                    setShowCompletedModal(false);
+                    setShowSurveyModal(true);
+                  }}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5"
+                >
+                  <span>{t.surveyPromptBtn}</span>
+                  <ChevronRight size={14} />
+                </button>
+              ) : (
+                <div className="py-2.5 px-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold">
+                  {t.surveyDoneBadge} (소중한 피드백 감사합니다!)
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowCompletedModal(false)}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
+              >
+                {sT.closeBtn}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -643,11 +757,13 @@ function DemoSurveyModal({
   lang,
   deviceId,
   targetLevel: initialTargetLevel,
+  onSurveySubmitted,
   onClose,
 }: {
   lang: SupportedLang;
   deviceId: string;
   targetLevel: string;
+  onSurveySubmitted?: () => void;
   onClose: () => void;
 }) {
   const sT = SURVEY_TEXTS[lang];
@@ -658,6 +774,11 @@ function DemoSurveyModal({
   const [targetLevel, setTargetLevel] = useState(initialTargetLevel || "1급");
   const [studyPeriod, setStudyPeriod] = useState("m1to3");
   const [weaknesses, setWeaknesses] = useState<string[]>(["speaking", "pronunciation"]);
+
+  // AI 채점 오류 및 이상 결과 보고 상태
+  const [experiencedError, setExperiencedError] = useState(false);
+  const [errorTypes, setErrorTypes] = useState<string[]>([]);
+  const [errorDetail, setErrorDetail] = useState("");
 
   // 4대 만족도 및 주관식
   const [q1Score, setQ1Score] = useState(5);
@@ -692,6 +813,9 @@ function DemoSurveyModal({
           targetLevel,
           studyPeriod: sT.studyPeriodOptions?.[studyPeriod] || studyPeriod,
           weaknesses: weaknesses.map((w) => sT.weaknessOptions?.[w] || w),
+          experiencedError,
+          errorTypes: experiencedError ? errorTypes.map((t) => sT.errorOptions?.[t] || t) : [],
+          errorDetail: experiencedError ? errorDetail.trim() : "",
           satisfaction: q1Score,
           feedbackClarity: q2Score,
           ttsQuality: q3Score,
@@ -699,6 +823,8 @@ function DemoSurveyModal({
           comment: q5Comment.trim(),
         }),
       });
+      localStorage.setItem("sori_demo_survey_done", "true");
+      onSurveySubmitted?.();
       setSubmitted(true);
     } catch (e) {
       console.error(e);
@@ -885,7 +1011,86 @@ function DemoSurveyModal({
               {renderRatingGroup(sT.q4, q4Score, setQ4Score)}
             </div>
 
-            {/* E. 주관식 의견 */}
+            {/* E. AI 채점 이상 결과 및 오류 보고 문항 */}
+            <div className="space-y-2.5 p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200">
+              <label className="block text-xs font-black text-amber-950 flex items-center gap-1.5">
+                <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                {sT.errorTitle}
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExperiencedError(false);
+                    setErrorTypes([]);
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition text-left flex items-center justify-between ${
+                    !experiencedError
+                      ? "bg-white text-emerald-800 border-emerald-400 shadow-xs font-black"
+                      : "bg-white/60 text-slate-600 border-slate-200 hover:bg-white"
+                  }`}
+                >
+                  <span>😊 {sT.errorNone}</span>
+                  {!experiencedError && <Check size={14} className="text-emerald-600 shrink-0" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setExperiencedError(true)}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition text-left flex items-center justify-between ${
+                    experiencedError
+                      ? "bg-amber-500 text-slate-950 border-amber-500 shadow-xs font-black"
+                      : "bg-white/60 text-slate-600 border-slate-200 hover:bg-white"
+                  }`}
+                >
+                  <span>⚠️ {sT.errorReportPrompt}</span>
+                  {experiencedError && <Check size={14} className="text-slate-950 shrink-0" />}
+                </button>
+              </div>
+
+              {experiencedError && (
+                <div className="space-y-2 pt-2 border-t border-amber-200 animate-in fade-in">
+                  <p className="text-[11px] font-bold text-amber-900">
+                    어떤 유형의 오류나 이상한 점이었나요? (복수 선택 가능)
+                  </p>
+                  <div className="space-y-1.5">
+                    {Object.keys(sT.errorOptions || {}).map((key) => {
+                      const selected = errorTypes.includes(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setErrorTypes((prev) =>
+                              prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                            );
+                          }}
+                          className={`w-full text-left py-2 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-between ${
+                            selected
+                              ? "bg-white text-amber-950 border-amber-400 shadow-xs"
+                              : "bg-white/50 text-slate-700 border-slate-200 hover:bg-white"
+                          }`}
+                        >
+                          <span className="text-[11px]">{sT.errorOptions[key]}</span>
+                          {selected ? <Check size={13} className="text-amber-600 shrink-0" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={errorDetail}
+                    onChange={(e) => setErrorDetail(e.target.value)}
+                    placeholder={sT.errorDetailPlaceholder}
+                    className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none placeholder:text-slate-400"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* F. 주관식 의견 */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-800">{sT.q5}</label>
               <textarea

@@ -3,7 +3,7 @@
 // 최고 관리자 전용: 테스트·체험 통합 관리 허브
 // 1. [🏫 테스트 반 & 체험 링크]: 공개 체험실(/demo) 및 테스트 반(Test Classes), QR코드, 학생 명단 원스톱 관리
 // 2. [📝 테스트 문장 & 음성 관리]: 1~6급 테스트 문장 CRUD 및 ElevenLabs 원어민 음성 자동 생성/재생
-// 3. [📊 설문 통계 & 응답]: 6개 국어 설문조사 통계 (만족도, 국적, 급수, 학습기간, 취약 영역) 및 엑셀 CSV 추출
+// 3. [📊 설문 통계 & 응답]: 10회 체험 누적 평가 기록, AI 채점 오류 보고 분석, 6개 국어 설문 통계 및 CSV 추출
 
 import { useState, useEffect, useRef } from "react";
 import { adminFetch } from "@/lib/firebase";
@@ -13,9 +13,9 @@ import {
   QrCode, ExternalLink, RotateCcw, Copy, Check, Printer,
   Volume2, Plus, Trash2, Edit2, Play, Square, Sparkles,
   Globe, BookOpen, Clock, Layers, CheckCircle2, X,
-  School, Users, User
+  School, Users, User, Activity, AlertTriangle
 } from "lucide-react";
-import type { DemoSurveyData, DemoSentenceDoc } from "@/lib/demoData";
+import type { DemoSurveyData, DemoSentenceDoc, DemoEvaluationLog } from "@/lib/demoData";
 import type { ClassData } from "@/app/api/admin/classes/route";
 import type { TeacherData } from "@/app/api/admin/teachers/route";
 import type { ClassStudentInfo } from "@/app/api/admin/classes/students/route";
@@ -84,7 +84,7 @@ export default function DemoSurveySection({ idToken }: Props) {
 
   const [copiedInviteCode, setCopiedInviteCode] = useState<string | null>(null);
 
-  // ── 2. 설문 및 체험 통계 상태 ──
+  // ── 2. 설문 및 누적 평가 기록 통계 상태 ──
   const [surveys, setSurveys] = useState<DemoSurveyData[]>([]);
   const [stats, setStats] = useState<any>({
     totalCount: 0,
@@ -92,10 +92,21 @@ export default function DemoSurveySection({ idToken }: Props) {
     avgClarity: "0.0",
     avgTts: "0.0",
     avgRevisit: "0.0",
+    errorReportCount: 0,
+    errorTypeCounts: {},
   });
   const [loadingSurveys, setLoadingSurveys] = useState(false);
   const [surveyError, setSurveyError] = useState<string | null>(null);
   const [selectedLang, setSelectedLang] = useState<string>("all");
+
+  // 테스트 참여자 평가 로그 (누적 결과)
+  const [evalLogs, setEvalLogs] = useState<DemoEvaluationLog[]>([]);
+  const [evalStats, setEvalStats] = useState({
+    totalCount: 0,
+    uniqueDeviceCount: 0,
+    avgScore: "0.0",
+  });
+  const [loadingEvalLogs, setLoadingEvalLogs] = useState(false);
 
   // 리셋 상태
   const [resetting, setResetting] = useState(false);
@@ -168,6 +179,27 @@ export default function DemoSurveySection({ idToken }: Props) {
     }
   };
 
+  // 참여자 발음 평가 누적 로그 불러오기
+  const loadEvalLogs = async () => {
+    setLoadingEvalLogs(true);
+    try {
+      const res = await adminFetch("/api/demo/logs", { method: "GET" }, idToken);
+      const data = await res.json();
+      if (res.ok) {
+        setEvalLogs(data.logs || []);
+        setEvalStats({
+          totalCount: data.totalCount || 0,
+          uniqueDeviceCount: data.uniqueDeviceCount || 0,
+          avgScore: data.avgScore || "0.0",
+        });
+      }
+    } catch (e) {
+      console.warn("평가 로그 조회 실패:", e);
+    } finally {
+      setLoadingEvalLogs(false);
+    }
+  };
+
   // 데모 문장 목록 불러오기
   const loadSentences = async () => {
     setLoadingSentences(true);
@@ -187,6 +219,7 @@ export default function DemoSurveySection({ idToken }: Props) {
   useEffect(() => {
     loadClasses();
     loadSurveys();
+    loadEvalLogs();
     loadSentences();
   }, [idToken]);
 
@@ -484,7 +517,7 @@ export default function DemoSurveySection({ idToken }: Props) {
     audio.play().catch(() => setPlayingAudioUrl(null));
   };
 
-  // 내 기기 5회 횟수 즉시 리셋 (관리자 테스트 재개용)
+  // 내 기기 10회 횟수 즉시 리셋 (관리자 테스트 재개용)
   const handleResetMyDevice = async () => {
     const devId = typeof window !== "undefined" ? localStorage.getItem("sori_demo_device_id") : null;
     setResetting(true);
@@ -501,7 +534,7 @@ export default function DemoSurveySection({ idToken }: Props) {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "초기화 실패");
-      setResetMessage("✅ 관리자 기기의 체험 횟수가 0회로 초기화되었습니다. 즉시 다시 5회 테스트하실 수 있습니다!");
+      setResetMessage("✅ 관리자 기기의 체험 횟수가 0회로 초기화되었습니다. 즉시 다시 10회 테스트하실 수 있습니다!");
       setTimeout(() => setResetMessage(null), 5000);
     } catch (e: any) {
       alert("오류: " + e.message);
@@ -512,7 +545,7 @@ export default function DemoSurveySection({ idToken }: Props) {
 
   // 전체 체험 기기 횟수 일괄 리셋
   const handleResetAllDevices = async () => {
-    if (!confirm("모든 기기의 일일 5회 체험 제한 기록을 초기화하시겠습니까? (모든 사용자가 다시 5회 이용 가능해집니다)")) return;
+    if (!confirm("모든 기기의 10회 체험 제한 기록을 초기화하시겠습니까? (모든 사용자가 다시 10회 이용 가능해집니다)")) return;
     setResetting(true);
     setResetMessage(null);
     try {
@@ -561,12 +594,13 @@ export default function DemoSurveySection({ idToken }: Props) {
     ? surveys
     : surveys.filter((s) => s.language === selectedLang);
 
-  // 설문조사 CSV 추출 (국적, 급수, 학습기간, 약점 컬럼 포함 + UTF-8 BOM)
+  // 설문조사 CSV 추출 (국적, 급수, 학습기간, 약점, 오류 보고 컬럼 포함 + UTF-8 BOM)
   const handleExportCSV = () => {
     if (filteredSurveys.length === 0) return;
 
     const headers = [
       "제출일시", "언어", "학습자국적", "목표/현재급수", "학습기간", "자신이생각하는약점",
+      "이상결과/오류경험여부", "오류유형목록", "오류상세설명",
       "Q1_사용편의성(1~5)", "Q2_피드백도움(1~5)", "Q3_AI음성만족(1~5)", "Q4_재이용의향(1~5)",
       "주관식학생의견", "기기식별ID"
     ];
@@ -578,6 +612,9 @@ export default function DemoSurveySection({ idToken }: Props) {
       `"${s.targetLevel || "미지정"}"`,
       `"${s.studyPeriod || "미지정"}"`,
       `"${(s.weaknesses || []).join(", ") || "없음"}"`,
+      s.experiencedError ? '"예 (오류 발생)"' : '"아니오 (정상)"',
+      `"${(s.errorTypes || []).join(" | ") || "없음"}"`,
+      `"${(s.errorDetail || "").replace(/"/g, '""').replace(/\n/g, " ")}"`,
       s.satisfaction,
       s.feedbackClarity,
       s.ttsQuality,
@@ -592,6 +629,37 @@ export default function DemoSurveySection({ idToken }: Props) {
     const a = document.createElement("a");
     a.href = url;
     a.download = `소리튜터_체험설문응답_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 실시간 발음 평가 로그 CSV 추출
+  const handleExportEvalLogsCSV = () => {
+    if (evalLogs.length === 0) return;
+
+    const headers = [
+      "평가일시", "날짜", "기기식별ID", "급수", "연습문장", "학생실제발화(STT)", "발음종합점수", "음소정확도", "무음감지여부", "피드백내용"
+    ];
+
+    const rows = evalLogs.map((log) => [
+      `"${formatDateTime(log.createdAtMs)}"`,
+      `"${log.date}"`,
+      `"${log.deviceId}"`,
+      `"${log.level}"`,
+      `"${(log.targetText || "").replace(/"/g, '""')}"`,
+      `"${(log.recognizedText || "").replace(/"/g, '""')}"`,
+      log.score,
+      log.phonemeScore,
+      log.isSilence ? '"무음 (침묵)"' : '"발화 감지"',
+      `"${(log.feedback || "").replace(/"/g, '""').replace(/\n/g, " ")}"`,
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `소리튜터_체험발음평가로그_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -636,8 +704,8 @@ export default function DemoSurveySection({ idToken }: Props) {
               : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
           }`}
         >
-          <MessageSquare size={14} />
-          <span>📊 설문 통계 & 응답 ({surveys.length})</span>
+          <Activity size={14} />
+          <span>📊 테스트 결과 & 설문 분석 ({evalStats.totalCount}회 / {surveys.length}건)</span>
         </button>
       </div>
 
@@ -656,12 +724,12 @@ export default function DemoSurveySection({ idToken }: Props) {
                   </span>
                   <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold rounded-full flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    실시간 운영 중 (하루 5회 기기 제한)
+                    실시간 운영 중 (1인당 10회 제한)
                   </span>
                   <h3 className="font-black text-lg">소리튜터 무설치 공개 발음 체험실</h3>
                 </div>
                 <p className="text-xs text-slate-300">
-                  학생들이 로그인이나 반 가입 없이 브라우저에서 바로 발음 검사를 체험하고 설문을 제출할 수 있는 공식 공개 링크입니다.
+                  학생들이 로그인이나 반 가입 없이 브라우저에서 바로 발음 검사를 체험(1인당 10회)하고 설문을 제출할 수 있는 공식 공개 링크입니다.
                 </p>
               </div>
 
@@ -697,8 +765,10 @@ export default function DemoSurveySection({ idToken }: Props) {
 
             {/* 🔄 기기 횟수 리셋 도구 및 누적 지표 */}
             <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3 flex-wrap text-xs">
-              <div className="flex items-center gap-4 text-slate-300">
-                <span>누적 설문 제출: <strong className="text-amber-300 font-bold">{surveys.length}건</strong></span>
+              <div className="flex items-center gap-4 text-slate-300 flex-wrap">
+                <span>총 테스트 실시: <strong className="text-amber-300 font-bold">{evalStats.totalCount}회</strong></span>
+                <span>참여 기기: <strong className="text-amber-300 font-bold">{evalStats.uniqueDeviceCount}대</strong></span>
+                <span>설문 제출: <strong className="text-amber-300 font-bold">{surveys.length}건</strong></span>
                 <span>평균 만족도: <strong className="text-amber-300 font-bold">{stats.avgSatisfaction || "5.0"}★</strong></span>
               </div>
 
@@ -707,17 +777,17 @@ export default function DemoSurveySection({ idToken }: Props) {
                   onClick={handleResetMyDevice}
                   disabled={resetting}
                   className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-amber-300 border border-amber-300/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-                  title="관리자 브라우저의 5회 횟수를 리셋하여 계속 체험 테스트 가능"
+                  title="관리자 브라우저의 10회 횟수를 리셋하여 계속 체험 테스트 가능"
                 >
                   <RotateCcw size={12} className={resetting ? "animate-spin" : ""} />
-                  <span>내 기기 횟수 초기화</span>
+                  <span>내 기기 10회 초기화</span>
                 </button>
 
                 <button
                   onClick={handleResetAllDevices}
                   disabled={resetting}
                   className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-400/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-                  title="모든 사용자 기기의 일일 횟수를 일괄 초기화"
+                  title="모든 사용자 기기의 10회 제한을 일괄 초기화"
                 >
                   <RotateCcw size={12} />
                   <span>전체 기기 일괄 리셋</span>
@@ -769,7 +839,6 @@ export default function DemoSurveySection({ idToken }: Props) {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {testClasses.map((cls) => {
-                  const joinUrl = `${origin}/join?code=${cls.inviteCode}`;
                   return (
                     <div
                       key={cls.id}
@@ -1029,43 +1098,223 @@ export default function DemoSurveySection({ idToken }: Props) {
       )}
 
       {/* ══════════════════════════════════════════════════════════
-          [서브탭 3] 다국어 설문 통계 & 응답 관제 패널
+          [서브탭 3] 테스트 참여자 누적 결과 & 설문 분석 패널
           ══════════════════════════════════════════════════════════ */}
       {activeSubTab === "surveys" && (
         <div className="space-y-6">
-          {/* 통계 요약 카드 4종 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-slate-500 text-xs font-bold">전체 응답 수</span>
-              <p className="text-2xl font-black text-slate-900 mt-1">{stats.totalCount ?? surveys.length}명</p>
-            </div>
+          {/* 핵심 KPI 카드 5종 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
-                <Star size={13} className="text-amber-500 fill-amber-500" /> 사용 편의성
+                <Activity size={13} className="text-indigo-600" /> 총 테스트 실시
               </span>
-              <p className="text-2xl font-black text-amber-600 mt-1">{stats.avgSatisfaction || "5.0"} / 5.0</p>
+              <p className="text-2xl font-black text-indigo-700 mt-1">{evalStats.totalCount}회</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">누적 발음 평가 횟수</p>
             </div>
+
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
-                <Star size={13} className="text-indigo-500 fill-indigo-500" /> 피드백 명확도
+                <Users size={13} className="text-blue-600" /> 참여 기기(학습자)
               </span>
-              <p className="text-2xl font-black text-indigo-600 mt-1">{stats.avgClarity || "5.0"} / 5.0</p>
+              <p className="text-2xl font-black text-blue-700 mt-1">{evalStats.uniqueDeviceCount}대</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">고유 기기 식별 집계</p>
             </div>
+
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
-                <Star size={13} className="text-emerald-500 fill-emerald-500" /> 재이용 의향
+                <Star size={13} className="text-amber-500 fill-amber-500" /> 평균 발음 점수
               </span>
-              <p className="text-2xl font-black text-emerald-600 mt-1">{stats.avgRevisit || "5.0"} / 5.0</p>
+              <p className="text-2xl font-black text-amber-600 mt-1">{evalStats.avgScore}점</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">100점 만점 기준</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
+                <MessageSquare size={13} className="text-emerald-600" /> 설문 제출자
+              </span>
+              <p className="text-2xl font-black text-emerald-700 mt-1">{surveys.length}명</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">중복 제출 자동 방지</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 text-xs font-bold flex items-center gap-1">
+                <Star size={13} className="text-purple-600 fill-purple-600" /> 전반적 만족도
+              </span>
+              <p className="text-2xl font-black text-purple-700 mt-1">{stats.avgSatisfaction || "5.0"}★</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">5.0 만점 기준</p>
             </div>
           </div>
 
-          {/* 설문 응답 목록 & 엑셀 추출 */}
+          {/* ⚠️ AI 채점 이상 결과 및 오류 보고 분석 카드 */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                  <AlertTriangle size={16} />
+                </div>
+                <div>
+                  <h4 className="font-black text-slate-900 text-sm">
+                    AI 발음 채점 이상 결과 및 오류 피드백 집계
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    참여자가 보고한 무음 점수 오류, 엉뚱한 말 고득점 오류 등 이상 징후 분석
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-full font-bold">
+                  오류 보고 건수: <strong>{stats.errorReportCount || 0}건</strong> / {surveys.length}건
+                </span>
+              </div>
+            </div>
+
+            {/* 오류 유형별 분포 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-500 block">🔇 무음 점수 오류</span>
+                <strong className="text-slate-900 font-black text-base mt-0.5 block">
+                  {stats.errorTypeCounts?.["🔇 아무 말도 안 했는데 점수가 나옴 (무음 점수 오류)"] || 0}건
+                </strong>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-500 block">❓ 엉뚱한 말 고득점</span>
+                <strong className="text-slate-900 font-black text-base mt-0.5 block">
+                  {stats.errorTypeCounts?.["❓ 엉뚱한 말을 했는데 높은 점수가 나옴"] || 0}건
+                </strong>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-500 block">📉 정확한 발음 저득점</span>
+                <strong className="text-slate-900 font-black text-base mt-0.5 block">
+                  {stats.errorTypeCounts?.["📉 정확하게 말했는데 너무 낮은 점수가 나옴"] || 0}건
+                </strong>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-500 block">🛑 음성 인식 먹통</span>
+                <strong className="text-slate-900 font-black text-base mt-0.5 block">
+                  {stats.errorTypeCounts?.["🛑 음성 인식이 잘 안 됨 / 무반응 먹통"] || 0}건
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* 🎧 1. 실시간 테스트 참여자 발음 평가 기록 테이블 (최신순) */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <Activity size={17} className="text-indigo-600" />
+                  실시간 테스트 참여자 발음 평가 기록 ({evalLogs.length}건)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  체험자가 실제로 소리 내어 말한 내용(STT), AI 평가 점수, 무음 감지 여부가 실시간 기록됩니다.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadEvalLogs}
+                  disabled={loadingEvalLogs}
+                  className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
+                  title="평가 로그 새로고침"
+                >
+                  <RefreshCw size={14} className={loadingEvalLogs ? "animate-spin" : ""} />
+                </button>
+
+                <button
+                  onClick={handleExportEvalLogsCSV}
+                  disabled={evalLogs.length === 0}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow transition disabled:opacity-50"
+                >
+                  <Download size={14} /> 평가 로그 CSV 다운로드
+                </button>
+              </div>
+            </div>
+
+            {loadingEvalLogs ? (
+              <div className="py-12 text-center text-slate-500 text-xs">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+                평가 로그를 불러오는 중...
+              </div>
+            ) : evalLogs.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                아직 기록된 발음 평가 결과가 없습니다.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">일시</th>
+                      <th className="py-2.5 px-3">기기 ID</th>
+                      <th className="py-2.5 px-3">급수</th>
+                      <th className="py-2.5 px-3">연습 문장</th>
+                      <th className="py-2.5 px-3">학생 발화(STT 인식)</th>
+                      <th className="py-2.5 px-3 text-right">점수</th>
+                      <th className="py-2.5 px-3 text-center">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {evalLogs.slice(0, 50).map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                          {formatDateTime(log.createdAtMs)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                          {log.deviceId.slice(0, 10)}...
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-bold text-[10px]">
+                            {log.level}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900 max-w-[160px] truncate">
+                          {log.targetText}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 font-mono max-w-[180px] truncate">
+                          {log.recognizedText ? `"${log.recognizedText}"` : <span className="text-slate-400 italic">(인식 없음)</span>}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] ${
+                              log.score >= 90
+                                ? "bg-emerald-100 text-emerald-800"
+                                : log.score >= 75
+                                ? "bg-indigo-100 text-indigo-800"
+                                : log.score >= 50
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-rose-100 text-rose-800"
+                            }`}
+                          >
+                            {log.score}점
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {log.isSilence ? (
+                            <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
+                              🔇 무음
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">
+                              발화 완료
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* 📋 2. 설문 응답 목록 & 엑셀 추출 */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-black text-slate-900 text-base">체험자 설문 피드백</h3>
-                <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
-                  {filteredSurveys.length}건
+                <h3 className="font-black text-slate-900 text-base">체험자 1분 설문 응답 ({filteredSurveys.length}건)</h3>
+                <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                  기기별 1회 한정 응답
                 </span>
               </div>
 
@@ -1102,7 +1351,7 @@ export default function DemoSurveySection({ idToken }: Props) {
                   disabled={filteredSurveys.length === 0}
                   className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition disabled:opacity-50"
                 >
-                  <Download size={14} /> 엑셀용 CSV 다운로드
+                  <Download size={14} /> 설문 응답 CSV 다운로드
                 </button>
               </div>
             </div>
@@ -1169,6 +1418,30 @@ export default function DemoSurveySection({ idToken }: Props) {
                             {w}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {/* ⚠️ 이상 결과 / 점수 오류 보고 박스 */}
+                    {sur.experiencedError && (
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-rose-900">
+                          <AlertCircle size={13} className="text-rose-600 shrink-0" />
+                          <span>⚠️ 발음 평가 중 이상 결과 및 점수 오류 보고</span>
+                        </div>
+                        {sur.errorTypes && sur.errorTypes.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {sur.errorTypes.map((type) => (
+                              <span key={type} className="px-2 py-0.5 bg-rose-100 text-rose-900 rounded font-medium text-[11px]">
+                                {type}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {sur.errorDetail && (
+                          <p className="text-[11px] text-rose-800 pt-0.5">
+                            상세 설명: <strong>{sur.errorDetail}</strong>
+                          </p>
+                        )}
                       </div>
                     )}
 

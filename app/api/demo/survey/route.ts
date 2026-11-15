@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
         nationality: d.nationality || "",
         studyPeriod: d.studyPeriod || "",
         weaknesses: Array.isArray(d.weaknesses) ? d.weaknesses : [],
+        experiencedError: Boolean(d.experiencedError),
+        errorTypes: Array.isArray(d.errorTypes) ? d.errorTypes : [],
+        errorDetail: d.errorDetail || "",
         createdAtMs: d.createdAt?.toMillis?.() ?? (d.createdAt?._seconds ? d.createdAt._seconds * 1000 : Date.now()),
       };
     });
@@ -39,6 +42,14 @@ export async function GET(req: NextRequest) {
     const avgTts = totalCount > 0 ? (surveys.reduce((a, s) => a + s.ttsQuality, 0) / totalCount).toFixed(1) : "0.0";
     const avgRevisit = totalCount > 0 ? (surveys.reduce((a, s) => a + s.revisitIntent, 0) / totalCount).toFixed(1) : "0.0";
 
+    const errorReports = surveys.filter(s => s.experiencedError);
+    const errorTypeCounts: Record<string, number> = {};
+    surveys.forEach(s => {
+      (s.errorTypes || []).forEach(t => {
+        errorTypeCounts[t] = (errorTypeCounts[t] || 0) + 1;
+      });
+    });
+
     return NextResponse.json({
       surveys,
       stats: {
@@ -47,6 +58,8 @@ export async function GET(req: NextRequest) {
         avgClarity,
         avgTts,
         avgRevisit,
+        errorReportCount: errorReports.length,
+        errorTypeCounts,
       },
     });
   } catch (e: any) {
@@ -70,8 +83,42 @@ export async function POST(req: NextRequest) {
     const nationality = (body.nationality || "").trim();
     const studyPeriod = (body.studyPeriod || "").trim();
     const weaknesses = Array.isArray(body.weaknesses) ? body.weaknesses.map((w: any) => String(w).trim()).filter(Boolean) : [];
+    const experiencedError = Boolean(body.experiencedError);
+    const errorTypes = Array.isArray(body.errorTypes) ? body.errorTypes.map((t: any) => String(t).trim()).filter(Boolean) : [];
+    const errorDetail = (body.errorDetail || "").trim();
 
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+    // 동일 기기 중복 설문 방지: 이미 제출한 기기인 경우 신규 생성 대신 업데이트하여 데이터 오염 방지
+    if (deviceId && deviceId !== "unknown") {
+      const existingSnap = await adminDb
+        .collection("sori_demo_surveys")
+        .where("deviceId", "==", deviceId)
+        .limit(1)
+        .get();
+
+      if (!existingSnap.empty) {
+        const existingDoc = existingSnap.docs[0];
+        await existingDoc.ref.update({
+          clientIp,
+          language,
+          satisfaction,
+          feedbackClarity,
+          ttsQuality,
+          revisitIntent,
+          comment,
+          targetLevel,
+          nationality,
+          studyPeriod,
+          weaknesses,
+          experiencedError,
+          errorTypes,
+          errorDetail,
+          updatedAt: new Date(),
+        });
+        return NextResponse.json({ success: true, id: existingDoc.id, updated: true });
+      }
+    }
 
     const docRef = await adminDb.collection("sori_demo_surveys").add({
       deviceId,
@@ -86,6 +133,9 @@ export async function POST(req: NextRequest) {
       nationality,
       studyPeriod,
       weaknesses,
+      experiencedError,
+      errorTypes,
+      errorDetail,
       createdAt: new Date(),
     });
 
