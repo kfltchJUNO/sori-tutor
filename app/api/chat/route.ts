@@ -383,6 +383,7 @@ Output JSON only (no markdown):
       const personaId   = formData.get("persona")     as string;
       const sharedMemory = (formData.get("sharedMemory") as string) || "";
       const audioFile   = formData.get("audio")       as Blob | null;
+      const isFinalTurn = formData.get("isFinalTurn") === "true";
 
       const history = JSON.parse(historyStr || "[]");
       let userText = (formData.get("userText") as string) || (formData.get("text") as string) || "";
@@ -475,7 +476,9 @@ Output JSON only (no markdown):
 3. Always use natural commas (,) after greetings or interjections and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
 4. If the learner accidentally uses casual speech (반말) or awkward honorifics, gently model the natural honorific expression while keeping the conversation flowing.
 5. If the user speech is inaudible or silent, gently ask them in polite Korean to repeat once more.
-6. Always ask exactly ONE polite, engaging follow-up question so the learner can continue practicing honorific Korean.
+${isFinalTurn
+  ? `6. [FINAL TURN NOTICE - CRITICAL]: This is the 5th and final turn of this free trial! Do NOT ask any follow-up question. Conclude warmly in 1~2 sentences by saying: "오늘 대화 즐거웠습니다! 아쉽지만 체험 대화는 여기까지예요. 더 풍성한 대화는 정식 서비스 오픈 때 꼭 다시 만나요!"`
+  : `6. Always ask exactly ONE polite, engaging follow-up question so the learner can continue practicing honorific Korean.`}
 7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 ${userMood?.mood ? `[Learner Voice & Mood]: The learner voice tone sounds "${userMood.mood}" (Intonation: ${userMood.intonation}). Naturally reflect and warmly acknowledge their mood/tone in your first sentence (e.g. if nervous, gently reassure them; if lively, match their bright energy; if tired, comfort them), focusing on encouraging their spoken Korean practice!` : ""}
 [User Memory]: ${sharedMemory}`
@@ -487,7 +490,9 @@ ${userMood?.mood ? `[Learner Voice & Mood]: The learner voice tone sounds "${use
 3. Always use natural commas (,) after interjections ("아, ", "응, ", "맞아, ") and clear sentence-ending punctuation (., ?, !) so TTS speaks with natural breathing pauses.
 4. If the learner speaks too formally ('-요', '-습니다'), playfully remind them that you are close friends and encourage them to speak comfortably in banmal (반말).
 5. If the user speech is inaudible or silent, playfully ask them in casual banmal to repeat once more.
-6. Always ask exactly ONE fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.
+${isFinalTurn
+  ? `6. [FINAL TURN NOTICE - CRITICAL]: This is the 5th and final turn of this free trial! Do NOT ask any follow-up question. Conclude warmly in 1~2 sentences by saying: "오늘 너랑 이야기해서 정말 즐거웠어! 아쉽지만 체험 대화는 여기까지야. 더 재밌는 수다는 정식 서비스 오픈 때 꼭 다시 나누자!"`
+  : `6. Always ask exactly ONE fun, natural follow-up question in banmal so the learner feels comfortable continuing the chat.`}
 7. Do NOT use markdown bold(**) or markdown symbols (your text goes directly to TTS).
 ${userMood?.mood ? `[Learner Voice & Mood]: The learner voice tone sounds "${userMood.mood}" (Intonation: ${userMood.intonation}). Naturally reflect and warmly acknowledge their mood/tone in your first sentence (e.g. if nervous, gently reassure them; if lively, match their bright energy; if tired, comfort them), focusing on encouraging their spoken Korean practice!` : ""}
 [User Memory]: ${sharedMemory}`;
@@ -534,7 +539,8 @@ ${userMood?.mood ? `[Learner Voice & Mood]: The learner voice tone sounds "${use
         aiText,
         audioContent,
         usedModel,
-        ended: false,
+        ended: isFinalTurn,
+        isFinalTurn,
         userMood,
       });
     }
