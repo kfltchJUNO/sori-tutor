@@ -42,6 +42,7 @@ export default function DemoPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzingStep, setAnalyzingStep] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -119,6 +120,18 @@ export default function DemoPage() {
       setLoadingLimit(false);
     }
   };
+
+  // 채점 중 3단계 분석 텍스트 롤링 타이머
+  useEffect(() => {
+    if (!analyzing) {
+      setAnalyzingStep(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setAnalyzingStep((prev) => (prev + 1) % 3);
+    }, 1300);
+    return () => clearInterval(interval);
+  }, [analyzing]);
 
   const handleLangChange = (newLang: SupportedLang) => {
     setLang(newLang);
@@ -532,6 +545,57 @@ export default function DemoPage() {
           </div>
         </div>
 
+        {/* 5-1. 채점 중 역동적 AI 분석 애니메이션 카드 */}
+        {analyzing && (
+          <div className="bg-white rounded-3xl p-6 border-2 border-indigo-500 shadow-xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-300">
+            {/* 상단 펄싱 배지 */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full text-xs font-black text-indigo-700 shadow-2xs">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-600"></span>
+              </span>
+              <span>{t.analyzingCardTitle}</span>
+            </div>
+
+            {/* 역동적 오디오 이퀄라이저 파형 애니메이션 */}
+            <div className="py-2 flex items-center justify-center gap-1.5 h-16">
+              {[38, 72, 98, 55, 88, 42, 82, 96, 68, 48, 86, 62, 92, 42, 74, 58].map((h, i) => (
+                <div
+                  key={i}
+                  className="w-1.5 bg-gradient-to-t from-indigo-600 via-indigo-500 to-indigo-300 rounded-full transition-all duration-300"
+                  style={{
+                    height: `${Math.max(10, (h * (((i + analyzingStep * 3) % 5) + 2)) / 5)}px`,
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* 3단계 분석 상태 텍스트 롤링 */}
+            <div className="space-y-1">
+              <p className="text-sm font-black text-slate-800 transition-all duration-300">
+                {analyzingStep === 0
+                  ? t.analyzingStep1
+                  : analyzingStep === 1
+                  ? t.analyzingStep2
+                  : t.analyzingStep3}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                AI가 음절 단위로 한국어 표준 발음과 억양을 정밀 대조하고 있습니다
+              </p>
+            </div>
+
+            {/* 단계별 프로그레스 바 */}
+            <div className="w-full max-w-xs mx-auto bg-slate-100 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200">
+              <div
+                className="bg-indigo-600 h-full rounded-full transition-all duration-700 ease-out"
+                style={{
+                  width: analyzingStep === 0 ? "35%" : analyzingStep === 1 ? "70%" : "95%",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* 6. AI 발음 분석 결과 카드 */}
         {analysisResult && (
           <div className="bg-white rounded-3xl p-6 border-2 border-indigo-500/80 shadow-md space-y-5 animate-in slide-in-from-bottom-3 duration-500">
@@ -595,33 +659,98 @@ export default function DemoPage() {
               </div>
             )}
 
-            {/* 4대 세부 지표 (자음, 모음, 규칙, 억양) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                <span className="text-slate-500 block text-[10px]">{t.catConsonant}</span>
-                <span className="font-black text-slate-800 text-sm">
-                  {analysisResult.consonantScore ?? "-"}점
-                </span>
-              </div>
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                <span className="text-slate-500 block text-[10px]">{t.catVowel}</span>
-                <span className="font-black text-slate-800 text-sm">
-                  {analysisResult.vowelScore ?? "-"}점
-                </span>
-              </div>
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                <span className="text-slate-500 block text-[10px]">{t.catRule}</span>
-                <span className="font-black text-slate-800 text-sm">
-                  {analysisResult.ruleScore ?? "-"}점
-                </span>
-              </div>
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                <span className="text-slate-500 block text-[10px]">{t.catIntonation}</span>
-                <span className="font-black text-slate-800 text-sm">
-                  {analysisResult.pitchScore ?? "-"}점
-                </span>
-              </div>
-            </div>
+            {/* 4대 세부 지표 (자음, 모음, 규칙, 억양/휴지) */}
+            {(() => {
+              const consonant =
+                analysisResult.categoryScores?.consonant ??
+                analysisResult.consonantScore ??
+                analysisResult.consonant ??
+                0;
+              const vowel =
+                analysisResult.categoryScores?.vowel ??
+                analysisResult.vowelScore ??
+                analysisResult.vowel ??
+                0;
+              const rule =
+                analysisResult.categoryScores?.rule ??
+                analysisResult.ruleScore ??
+                analysisResult.rule ??
+                0;
+              const intonation =
+                analysisResult.categoryScores?.intonation ??
+                analysisResult.pitchScore ??
+                analysisResult.intonation ??
+                0;
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs px-1">
+                    <span className="font-bold text-slate-700 flex items-center gap-1">
+                      <Sparkles size={12} className="text-indigo-600" />
+                      4대 발음 세부 정확도
+                    </span>
+                    <span className="text-[11px] text-slate-400">각 100점 만점 기준</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center text-xs">
+                    {/* 1. 자음 정확도 */}
+                    <div className="bg-blue-50/70 p-3 rounded-2xl border border-blue-200/80 shadow-2xs space-y-1.5 transition hover:shadow-xs">
+                      <span className="text-blue-700 block text-[11px] font-bold">{t.catConsonant}</span>
+                      <span className="font-black text-blue-950 text-base block">
+                        {consonant}점
+                      </span>
+                      <div className="w-full bg-blue-200/60 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min(100, Math.max(0, consonant))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 2. 모음 정확도 */}
+                    <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs space-y-1.5 transition hover:shadow-xs">
+                      <span className="text-emerald-700 block text-[11px] font-bold">{t.catVowel}</span>
+                      <span className="font-black text-emerald-950 text-base block">
+                        {vowel}점
+                      </span>
+                      <div className="w-full bg-emerald-200/60 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-emerald-600 h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min(100, Math.max(0, vowel))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. 음운 규칙 */}
+                    <div className="bg-amber-50/70 p-3 rounded-2xl border border-amber-200/80 shadow-2xs space-y-1.5 transition hover:shadow-xs">
+                      <span className="text-amber-800 block text-[11px] font-bold">{t.catRule}</span>
+                      <span className="font-black text-amber-950 text-base block">
+                        {rule}점
+                      </span>
+                      <div className="w-full bg-amber-200/60 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-amber-500 h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min(100, Math.max(0, rule))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4. 억양/휴지 */}
+                    <div className="bg-purple-50/70 p-3 rounded-2xl border border-purple-200/80 shadow-2xs space-y-1.5 transition hover:shadow-xs">
+                      <span className="text-purple-700 block text-[11px] font-bold">{t.catIntonation}</span>
+                      <span className="font-black text-purple-950 text-base block">
+                        {intonation}점
+                      </span>
+                      <div className="w-full bg-purple-200/60 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-purple-600 h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min(100, Math.max(0, intonation))}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 구체적 교정 팁 */}
             {analysisResult.explanation && (
