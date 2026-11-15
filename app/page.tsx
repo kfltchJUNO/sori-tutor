@@ -142,6 +142,7 @@ export default function Home() {
 
   // ── 회화 ──────────────────────────────
   const [chatStatus, setChatStatus] = useState<"select_persona" | "active" | "ended">("select_persona");
+  const [chatTextInput, setChatTextInput] = useState("");
   const [selectedPersona, setSelectedPersona] = useState("");
   const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [chatFeedback, setChatFeedback] = useState<any>(null);
@@ -642,7 +643,7 @@ export default function Home() {
     setLoading(true);
     const formData = new FormData();
     formData.append("action", "chat");
-    formData.append("audio", audioBlob);
+    formData.append("audio", audioBlob, "recording.webm");
     formData.append("history", JSON.stringify(chatHistory));
     formData.append("persona", selectedPersona);
     formData.append("sharedMemory", sharedMemory);
@@ -679,6 +680,60 @@ export default function Home() {
       if (data.ended) setChatStatus("ended");
       setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) { alert("통신 오류"); } finally { setLoading(false); setAudioUrl(null); setAudioBlob(null); }
+  };
+
+  // ── 회화 텍스트 즉시 전송 (STT 대기 없이 1초대 즉각 응답) ──
+  const handleChatTextSend = async (textToSend?: string) => {
+    const text = (textToSend || chatTextInput).trim();
+    if (!text || loading) return;
+    const currency = userRole === "guest" ? "heart" : "token";
+    if (userRole === "guest" && hearts < 1) return setShowPaymentModal(true);
+    if (userRole !== "guest" && tokens < 2) return setShowPaymentModal(true);
+
+    setChatTextInput("");
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("action", "chat");
+    formData.append("userText", text);
+    formData.append("history", JSON.stringify(chatHistory));
+    formData.append("persona", selectedPersona);
+    formData.append("sharedMemory", sharedMemory);
+
+    try {
+      const res = await fetch("/api/chat", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+
+      const spendRes = await spendToken("실전 회화 (1턴)", currency);
+      if (!spendRes.success) { alert(spendRes.error); return; }
+      if (currency === "heart") setHearts(p => p - 1);
+      else setTokens(spendRes.remaining ?? tokens - 2);
+
+      const audioMime = data.audioContent?.startsWith("UklGR") ? "audio/wav" : "audio/mp3";
+      const replyAudioSrc = data.audioContent ? `data:${audioMime};base64,${data.audioContent}` : null;
+      const newHistory = [
+        ...chatHistory,
+        { role: "user", text },
+        { role: "model", text: data.aiText, audio: replyAudioSrc },
+      ];
+      setChatHistory(newHistory);
+      if (replyAudioSrc) {
+        const audio = new Audio(replyAudioSrc);
+        audio.play().catch((err) => {
+          console.warn("오디오 자동 재생 제한 -> 브라우저 Web Speech로 대체:", err);
+          speakWithBrowserTTS(data.aiText, selectedPersona);
+        });
+      } else {
+        speakWithBrowserTTS(data.aiText, selectedPersona);
+      }
+      if (data.ended) setChatStatus("ended");
+      setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    } catch (e: any) {
+      console.error(e);
+      alert("전송 실패: " + (e?.message || "네트워크 오류"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── 메모리 동기화 ─────────────────────
@@ -1206,7 +1261,11 @@ export default function Home() {
       speechFramesRef.current += 1;
       if (silenceTimer.current) { clearTimeout(silenceTimer.current); silenceTimer.current = null; }
     } else {
-      if (!silenceTimer.current) { silenceTimer.current = setTimeout(stopRecording, 1500); }
+      // 발화가 실제로 감지되기 전(말하기 전 준비 시간)에는 녹음이 1.5초만에 자동 종료되지 않도록 방지
+      if (speechFramesRef.current >= 8 && !silenceTimer.current) {
+        const timeoutMs = viewMode === "freetalking" ? 3000 : 1800;
+        silenceTimer.current = setTimeout(stopRecording, timeoutMs);
+      }
     }
     animationFrameRef.current = requestAnimationFrame(detectSilence);
   };
@@ -1636,7 +1695,41 @@ export default function Home() {
             <div className="flex flex-col items-center gap-4">
               {loading && <div className="text-slate-500 animate-pulse font-bold text-sm">AI가 답변을 생각하고 있어요... 🤔</div>}
               {!recording && !audioUrl && !loading && (
-                <button onClick={startRecording} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition"><Mic size={32} /></button>
+                <div className="flex items-center gap-2 w-full">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={chatTextInput}
+                      onChange={(e) => setChatTextInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleChatTextSend();
+                        }
+                      }}
+                      placeholder="메시지 입력 또는 마이크로 말하기..."
+                      className="w-full py-3 pl-4 pr-10 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                    />
+                    {chatTextInput.trim() ? (
+                      <button
+                        type="button"
+                        onClick={() => handleChatTextSend()}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-xs"
+                        title="전송"
+                      >
+                        <Send size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="w-11 h-11 rounded-2xl bg-green-500 hover:bg-green-600 text-white shadow-md flex items-center justify-center shrink-0 hover:scale-105 transition"
+                    title="음성으로 말하기"
+                  >
+                    <Mic size={22} />
+                  </button>
+                </div>
               )}
               {recording && (
                 <div className="flex flex-col items-center gap-2">

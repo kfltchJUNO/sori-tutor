@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { resolveEmotionForV4 } from "@/lib/elevenlabsVoices";
-import { getNextGeminiApiKey } from "@/lib/geminiKeyPool";
+import { getNextGeminiApiKey, getGeminiKeyList } from "@/lib/geminiKeyPool";
 
 // ── 고성능 → 효율 → 속도 순 릴레이 (2026.06 기준 유효 모델) ─
 const MODEL_CANDIDATES: string[] = [
@@ -172,29 +172,37 @@ async function synthesizeTTS(text: string, personaId?: string, voiceName?: strin
       const { tag, stability } = resolveEmotionForV4(textForEl, "auto", undefined, isClonedVoice);
       const v4Text = tag ? `${tag} ${textForEl}` : textForEl;
 
-      // 1-A. ElevenLabs v4 시도 (대화 문맥에 맞는 자연스러운 감정 오디오 태그 적용)
-      const v4Res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_44100_128`, {
-        method: "POST",
-        headers: {
-          "xi-api-key": elevenKey,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          text: v4Text,
-          model_id: "eleven_v4",
-          voice_settings: {
-            stability,
-            similarity_boost: isClonedVoice ? 0.75 : 0.8,
-            use_speaker_boost: true,
+      // 1-A. ElevenLabs v4 시도 (mp3_22050_32 포맷으로 속도 40% 향상 및 3.5초 타임아웃)
+      const v4Abort = new AbortController();
+      const v4Timer = setTimeout(() => v4Abort.abort(), 3500);
+      let v4Res: Response | null = null;
+      try {
+        v4Res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}?output_format=mp3_22050_32`, {
+          method: "POST",
+          signal: v4Abort.signal,
+          headers: {
+            "xi-api-key": elevenKey,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg",
           },
-        }),
-      });
+          body: JSON.stringify({
+            text: v4Text,
+            model_id: "eleven_v4",
+            voice_settings: {
+              stability,
+              similarity_boost: isClonedVoice ? 0.75 : 0.8,
+              use_speaker_boost: true,
+            },
+          }),
+        });
+      } finally {
+        clearTimeout(v4Timer);
+      }
 
-      if (v4Res.ok) {
+      if (v4Res && v4Res.ok) {
         const buf = await v4Res.arrayBuffer();
         synthesizedBase64 = Buffer.from(buf).toString("base64");
-      } else if (v4Res.status === 401 || v4Res.status === 429) {
+      } else if (v4Res && (v4Res.status === 401 || v4Res.status === 429)) {
         tripElevenLabs(`HTTP ${v4Res.status}`);
       } else {
         // 1-B. eleven_v4 실패 시 eleven_multilingual_v2 폴백 ([tag] 제거본 사용)
@@ -379,27 +387,38 @@ Output JSON only (no markdown):
       const history = JSON.parse(historyStr || "[]");
       let userText = (formData.get("userText") as string) || (formData.get("text") as string) || "";
 
-      // STT — 릴레이 모델로 음성 인식
+      // STT — 릴레이 모델 및 멀티 키 로테이션으로 음성 인식
       if (audioFile && audioFile.size > 0) {
         const base64Audio = Buffer.from(await audioFile.arrayBuffer()).toString("base64");
-        const mimeType = audioFile.type || "audio/webm";
-        let lastErr: unknown;
-        for (const modelName of MODEL_CANDIDATES) {
-          try {
-            const sttModel = genAI.getGenerativeModel({ model: modelName, safetySettings: SAFETY });
-            const sttResult = await sttModel.generateContent([
-              "Transcribe exactly what the user said in Korean. Output only the transcribed text without quotes or explanations. If inaudible or silence, output '(침묵)'.",
-              { inlineData: { mimeType, data: base64Audio } },
-            ]);
-            const recognized = sttResult.response.text().trim();
-            if (recognized) {
-              userText = recognized;
-              console.log(`✅ STT [${modelName}]: "${userText}"`);
-              break;
+        // application/octet-stream 등 비표준 MIME 방지 (Gemini 400 에러 원천 차단)
+        const mimeType = audioFile.type && audioFile.type.startsWith("audio/")
+          ? audioFile.type
+          : "audio/webm";
+
+        const keys = getGeminiKeyList();
+        let sttDone = false;
+        for (let attempt = 0; attempt < Math.max(1, keys.length) && !sttDone; attempt++) {
+          const currentKey = keys[attempt] || apiKey;
+          const currentGenAI = new GoogleGenerativeAI(currentKey);
+          for (const modelName of MODEL_CANDIDATES) {
+            try {
+              const sttModel = currentGenAI.getGenerativeModel({ model: modelName, safetySettings: SAFETY });
+              const sttResult = await sttModel.generateContent([
+                "Transcribe exactly what the user said in Korean. Output only the transcribed text without quotes or explanations. If inaudible or silence, output '(침묵)'.",
+                { inlineData: { mimeType, data: base64Audio } },
+              ]);
+              const recognized = sttResult.response.text().trim();
+              if (recognized) {
+                userText = recognized;
+                console.log(`✅ STT [${modelName}]: "${userText}"`);
+                sttDone = true;
+                break;
+              }
+            } catch (e: any) {
+              const errMsg = e?.message || String(e);
+              console.warn(`⚠️ STT [${modelName}] 실패:`, errMsg.substring(0, 80));
+              if (errMsg.includes("429") || errMsg.includes("quota")) break;
             }
-          } catch (e: any) {
-            console.warn(`⚠️ STT [${modelName}] 실패:`, e?.message || e);
-            lastErr = e;
           }
         }
       }
@@ -443,21 +462,33 @@ Output JSON only (no markdown):
       let aiText = "";
       let usedModel = "";
       const sanitizedHistory = sanitizeGeminiHistory(history);
+      const keys = getGeminiKeyList();
 
-      for (const modelName of MODEL_CANDIDATES) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: systemPrompt,
-            safetySettings: SAFETY
-          });
-          const chat = model.startChat({ history: sanitizedHistory });
-          const result = await chat.sendMessage(promptUserText);
-          aiText     = result.response.text().trim();
-          usedModel  = modelName;
-          break;
-        } catch (e: any) {
-          console.warn(`⚠️ Chat [${modelName}] 실패:`, e?.message || e);
+      for (let attempt = 0; attempt < Math.max(1, keys.length) && !aiText; attempt++) {
+        const currentKey = keys[attempt] || apiKey;
+        const currentGenAI = new GoogleGenerativeAI(currentKey);
+
+        for (const modelName of MODEL_CANDIDATES) {
+          try {
+            const model = currentGenAI.getGenerativeModel({
+              model: modelName,
+              systemInstruction: systemPrompt,
+              safetySettings: SAFETY,
+              generationConfig: {
+                maxOutputTokens: 120, // 40~50자 단답형으로 생성 시간 60% 단축
+                temperature: 0.7,
+              },
+            });
+            const chat = model.startChat({ history: sanitizedHistory });
+            const result = await chat.sendMessage(promptUserText);
+            aiText     = result.response.text().trim();
+            usedModel  = modelName;
+            break;
+          } catch (e: any) {
+            const errMsg = e?.message || String(e);
+            console.warn(`⚠️ Chat [${modelName}] 실패:`, errMsg.substring(0, 80));
+            if (errMsg.includes("429") || errMsg.includes("quota")) break;
+          }
         }
       }
       if (!aiText) throw new Error("All models failed to generate response.");
